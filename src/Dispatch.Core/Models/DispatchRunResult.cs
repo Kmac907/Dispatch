@@ -4,6 +4,7 @@ public sealed record DispatchRunResult(
     string RunId,
     DateTimeOffset StartedAt,
     DateTimeOffset EndedAt,
+    string RequestedBy,
     TransportKind Transport,
     PayloadKind PayloadType,
     string PayloadName,

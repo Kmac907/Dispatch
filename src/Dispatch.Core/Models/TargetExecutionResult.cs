@@ -15,7 +15,7 @@ public sealed record TargetExecutionResult(
     string? FailureMessage,
     string? StdoutPath = null,
     string? StderrPath = null,
-    string? ResultPath = null,
+    string ResultPath = "",
     IReadOnlyList<string>? Artifacts = null,
     string? SecretHandoffStatus = null,
     string? CleanupStatus = null,

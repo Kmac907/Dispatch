@@ -18,6 +18,7 @@ public static class DispatchJson
         };
 
         options.Converters.Add(new TransportKindJsonConverter());
+        options.Converters.Add(new DispatchPayloadJsonConverter());
         options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
         return options;
     }

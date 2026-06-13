@@ -2,9 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace Dispatch.Core.Models;
 
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "payloadType")]
-[JsonDerivedType(typeof(ScriptPayload), "script")]
-[JsonDerivedType(typeof(CommandPayload), "command")]
 public abstract record DispatchPayload
 {
     [JsonIgnore]

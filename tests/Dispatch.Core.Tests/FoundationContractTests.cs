@@ -30,6 +30,7 @@ public sealed class FoundationContractTests
             RunId: "run-001",
             StartedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
             EndedAt: DateTimeOffset.Parse("2026-06-13T20:00:01Z"),
+            RequestedBy: "SCF\\Admin",
             Transport: TransportKind.PsExec,
             PayloadType: PayloadKind.Script,
             PayloadName: "Fix.ps1",
@@ -47,7 +48,8 @@ public sealed class FoundationContractTests
                     StartedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
                     EndedAt: DateTimeOffset.Parse("2026-06-13T20:00:01Z"),
                     FailureCategory: FailureCategory.None,
-                    FailureMessage: null)
+                    FailureMessage: null,
+                    ResultPath: "C:\\ProgramData\\Dispatch\\Runs\\run-001\\Targets\\PC001\\result.json")
             ],
             ResultPath: "C:\\ProgramData\\Dispatch\\Runs\\run-001\\Admin\\results.json");
 
@@ -56,6 +58,7 @@ public sealed class FoundationContractTests
 
         Assert.NotNull(roundTripped);
         Assert.Equal("run-001", roundTripped.RunId);
+        Assert.Equal("SCF\\Admin", roundTripped.RequestedBy);
         Assert.Equal(1, roundTripped.TargetCount);
         Assert.Equal(1, roundTripped.SuccessCount);
         Assert.Equal(TargetExecutionState.Succeeded, roundTripped.Targets[0].State);
