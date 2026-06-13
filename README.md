@@ -39,4 +39,12 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch is currently in planning state. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+
+## Development
+
+```powershell
+dotnet build .\Dispatch.sln
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet test .\Dispatch.sln
+```

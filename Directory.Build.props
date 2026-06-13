@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <Company>Endpoint Engineering</Company>
+    <Product>Dispatch</Product>
+    <RepositoryUrl>https://dev.azure.com/scfitops/Endpoint%20Engineering/_git/Dispatch</RepositoryUrl>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
