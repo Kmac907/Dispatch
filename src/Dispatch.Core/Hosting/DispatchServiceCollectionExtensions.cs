@@ -1,0 +1,32 @@
+using Dispatch.Core.Configuration;
+using Dispatch.Core.Execution;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Dispatch.Core.Hosting;
+
+public static class DispatchServiceCollectionExtensions
+{
+    public static IServiceCollection AddDispatchCore(this IServiceCollection services, IConfiguration configuration)
+    {
+        services
+            .AddOptions<DispatchOptions>()
+            .Bind(configuration.GetSection(DispatchOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (options.ExpectedExitCodes.Length == 0)
+                {
+                    options.ExpectedExitCodes = [0];
+                }
+            })
+            .Validate(options => !string.IsNullOrWhiteSpace(options.LocalRunRoot), "Local run root is required.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.RemoteRunRoot), "Remote run root is required.")
+            .Validate(options => options.Throttle > 0, "Throttle must be greater than zero.")
+            .Validate(options => options.ExpectedExitCodes.Length > 0, "At least one expected exit code is required.");
+
+        services.AddSingleton<IDispatchPlanner, NotImplementedDispatchPlanner>();
+        services.AddSingleton<IDispatchExecutor, NotImplementedDispatchExecutor>();
+
+        return services;
+    }
+}
