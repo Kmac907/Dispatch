@@ -280,7 +280,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public void CommandCenterRendererShowsPersistentMenuOptions()
+    public void CommandCenterRendererShowsPersistentLiveSurfaceOptions()
     {
         using var writer = new StringWriter();
         var console = AnsiConsole.Create(new AnsiConsoleSettings
@@ -288,15 +288,69 @@ public sealed class DispatchCliApplicationTests
             Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
             Interactive = InteractionSupport.No
         });
+        var commandCenter = new SpectreDispatchCommandCenter(
+            console,
+            new StaticDoctor(new DispatchDoctorReport([])),
+            static () => throw new InvalidOperationException("Render test must not read keys."));
 
-        DispatchConsoleRenderer.RenderInteractiveStart(console);
+        console.Write(commandCenter.Render());
         var output = writer.ToString();
 
-        Assert.Contains("Dispatch Interactive Command Center", output);
-        Assert.Contains("Start Script Run", output);
-        Assert.Contains("Doctor Diagnostics", output);
-        Assert.Contains("Command Help", output);
+        Assert.Contains("Dispatch Live Command Center", output);
+        Assert.Contains("Start script run", output);
+        Assert.Contains("Doctor diagnostics", output);
+        Assert.Contains("Command help", output);
         Assert.Contains("Exit", output);
+        Assert.Contains("F1 help", output);
+        Assert.Contains("F5 doctor", output);
+    }
+
+    [Fact]
+    public void CommandCenterKeyNavigationBuildsRunArguments()
+    {
+        using var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
+            Interactive = InteractionSupport.No
+        });
+        var commandCenter = new SpectreDispatchCommandCenter(
+            console,
+            new StaticDoctor(new DispatchDoctorReport([])),
+            static () => throw new InvalidOperationException("State-machine test must not read keys."));
+
+        var result = commandCenter.HandleKey(CreateKey(ConsoleKey.Enter));
+        Assert.Null(result);
+        foreach (var key in CreateTextKeys(@"C:\Scripts\Fix.ps1"))
+        {
+            result = commandCenter.HandleKey(key);
+            Assert.Null(result);
+        }
+
+        result = commandCenter.HandleKey(CreateKey(ConsoleKey.DownArrow));
+        Assert.Null(result);
+        foreach (var key in CreateTextKeys("PC001"))
+        {
+            result = commandCenter.HandleKey(key);
+            Assert.Null(result);
+        }
+
+        result = commandCenter.HandleKey(CreateKey(ConsoleKey.R, control: true));
+        Assert.NotNull(result);
+
+        console.Write(commandCenter.Render());
+        var output = writer.ToString();
+
+        Assert.Equal(CommandCenterExitKind.StartRun, result.Kind);
+        Assert.Contains("--dry-run", result.RunArguments);
+        Assert.Contains("--script", result.RunArguments);
+        Assert.Contains(@"C:\Scripts\Fix.ps1", result.RunArguments);
+        Assert.Contains("--computer-name", result.RunArguments);
+        Assert.Contains("PC001", result.RunArguments);
+        Assert.Contains("--transport", result.RunArguments);
+        Assert.Contains("psexec", result.RunArguments);
+        Assert.Contains("Dispatch Live Command Center", output);
+        Assert.Contains("Run Setup", output);
     }
 
     [Fact]
@@ -441,6 +495,44 @@ public sealed class DispatchCliApplicationTests
             Console.SetOut(originalOut);
             Console.SetError(originalError);
         }
+    }
+
+    private static IEnumerable<ConsoleKeyInfo> CreateTextKeys(string value)
+    {
+        foreach (var character in value)
+        {
+            yield return new ConsoleKeyInfo(character, GetConsoleKey(character), shift: false, alt: false, control: false);
+        }
+    }
+
+    private static ConsoleKeyInfo CreateKey(
+        ConsoleKey key,
+        char character = '\0',
+        bool control = false) =>
+        new(character, key, shift: false, alt: false, control);
+
+    private static ConsoleKey GetConsoleKey(char character)
+    {
+        if (char.IsLetter(character))
+        {
+            return Enum.Parse<ConsoleKey>(character.ToString().ToUpperInvariant());
+        }
+
+        if (char.IsDigit(character))
+        {
+            return Enum.Parse<ConsoleKey>($"D{character}");
+        }
+
+        return character switch
+        {
+            ':' => ConsoleKey.Oem1,
+            '\\' => ConsoleKey.Oem5,
+            '.' => ConsoleKey.OemPeriod,
+            '-' => ConsoleKey.OemMinus,
+            '_' => ConsoleKey.OemMinus,
+            ' ' => ConsoleKey.Spacebar,
+            _ => ConsoleKey.NoName
+        };
     }
 
     private sealed class CapturingPlanner : IDispatchPlanner

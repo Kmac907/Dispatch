@@ -70,58 +70,6 @@ internal static class DispatchConsoleRenderer
                     .BorderColor(Color.Grey))));
     }
 
-    public static void RenderInteractiveStart(IAnsiConsole console)
-    {
-        console.Write(CreateShell(
-            "[bold steelblue1]Dispatch Interactive Command Center[/]",
-            new Rows(
-                new Rule("[grey]Command Center[/]").RuleStyle("grey"),
-                CreateHeroGrid(),
-                CreateCommandCenterLayout(),
-                new Panel(new Markup("[grey]Use the menu to start a run, check diagnostics, review help, or exit.[/]"))
-                    .Header("[grey] Navigation [/]")
-                    .RoundedBorder()
-                    .BorderColor(Color.Grey))));
-    }
-
-    public static void RenderRunSetupStart(IAnsiConsole console)
-    {
-        console.Write(CreateShell(
-            "[bold steelblue1]Dispatch Run Setup[/]",
-            new Rows(
-                new Rule("[grey]Request Builder[/]").RuleStyle("grey"),
-                new Panel(new Markup("[grey]The prompts below build the same Dispatch request used by automation commands.[/]"))
-                    .Header("[grey] Guided Inputs [/]")
-                    .RoundedBorder()
-                    .BorderColor(Color.Grey))));
-    }
-
-    public static void RenderInteractiveReview(
-        IAnsiConsole console,
-        string scriptPath,
-        string computerNames,
-        string transport,
-        bool runAsSystem,
-        bool dryRun,
-        int? throttle,
-        string expectedExitCodes,
-        string artifactPaths)
-    {
-        var table = new Table().RoundedBorder().BorderColor(Color.SteelBlue1).Expand();
-        table.AddColumn("Setting");
-        table.AddColumn("Value");
-        table.AddRow("Script", Markup.Escape(scriptPath));
-        table.AddRow("Targets", Markup.Escape(computerNames));
-        table.AddRow("Transport", Markup.Escape(transport));
-        table.AddRow("Run as SYSTEM", runAsSystem ? "[yellow]yes[/]" : "[grey]no[/]");
-        table.AddRow("Dry run", dryRun ? "[green]yes[/]" : "[yellow]no[/]");
-        table.AddRow("Throttle", Markup.Escape(throttle?.ToString() ?? "Default"));
-        table.AddRow("Expected exit codes", Markup.Escape(expectedExitCodes));
-        table.AddRow("Artifacts", Markup.Escape(string.IsNullOrWhiteSpace(artifactPaths) ? "Default" : artifactPaths));
-
-        console.Write(CreateShell("[bold steelblue1]Dispatch Run Review[/]", table));
-    }
-
     public static void RenderError(IAnsiConsole console, string title, string message)
     {
         var table = new Table().NoBorder().HideHeaders();
@@ -263,36 +211,6 @@ internal static class DispatchConsoleRenderer
         table.AddRow("dispatch --version", "Show installed version.");
         return table;
     }
-
-    private static IRenderable CreateCommandCenterLayout()
-    {
-        var grid = new Grid().Expand();
-        grid.AddColumn();
-        grid.AddColumn();
-
-        grid.AddRow(
-            CreateMenuPanel(
-                "[steelblue1]Start Script Run[/]",
-                "Build, review, dry-run, or execute a PowerShell script job."),
-            CreateMenuPanel(
-                "[green]Doctor Diagnostics[/]",
-                "Validate local prerequisites before endpoint execution."));
-        grid.AddRow(
-            CreateMenuPanel(
-                "[yellow]Command Help[/]",
-                "Review command syntax, required options, and operator guardrails."),
-            CreateMenuPanel(
-                "[grey]Exit[/]",
-                "Leave the command center without starting endpoint work."));
-
-        return grid;
-    }
-
-    private static IRenderable CreateMenuPanel(string title, string detail) =>
-        new Panel(new Markup(Markup.Escape(detail)))
-            .Header($"[bold] {title} [/]")
-            .RoundedBorder()
-            .BorderColor(Color.Grey);
 
     private static IRenderable CreateCapabilityBreakdown() =>
         new BreakdownChart()

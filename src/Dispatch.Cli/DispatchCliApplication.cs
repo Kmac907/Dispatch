@@ -93,175 +93,18 @@ public sealed class DispatchCliApplication(
     private async Task<int> RunInteractiveAsync(CancellationToken cancellationToken)
     {
         var console = CreateOutputConsole(Console.Out);
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            DispatchConsoleRenderer.RenderInteractiveStart(console);
-            var action = console.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("[steelblue1]Command Center[/]")
-                    .PageSize(4)
-                    .MoreChoicesText("[grey]Move to select an action[/]")
-                    .AddChoices(
-                        "Start script run",
-                        "Run doctor diagnostics",
-                        "View command help",
-                        "Exit"));
-
-            switch (action)
-            {
-                case "Start script run":
-                    return await RunInteractiveJobAsync(console, cancellationToken).ConfigureAwait(false);
-                case "Run doctor diagnostics":
-                    DispatchConsoleRenderer.RenderDoctorReport(console, doctor.Run());
-                    WaitForMenuReturn(console);
-                    break;
-                case "View command help":
-                    DispatchConsoleRenderer.RenderRunHelp(console);
-                    DispatchConsoleRenderer.RenderDoctorHelp(console);
-                    WaitForMenuReturn(console);
-                    break;
-                case "Exit":
-                    return 0;
-            }
-        }
-
-        return 1;
-    }
-
-    private async Task<int> RunInteractiveJobAsync(IAnsiConsole console, CancellationToken cancellationToken)
-    {
-        DispatchConsoleRenderer.RenderRunSetupStart(console);
-
-        var scriptPath = PromptRequired(console, "Script path");
-        var computerNames = PromptRequired(console, "Computer name(s)");
-        var transport = console.Prompt(
-            new SelectionPrompt<string>()
-                .Title("Transport")
-                .AddChoices(PsExecTransportDescriptor.TransportName, "psrp", "winrm"));
-        var runAsSystem = console.Confirm("Run as local SYSTEM?", defaultValue: false);
-        var dryRun = console.Confirm("Dry run only?", defaultValue: true);
-        var throttle = PromptOptionalInt(console, "Throttle");
-        var expectedExitCodes = PromptOptional(console, "Expected exit code(s)", "0");
-        var artifactPaths = PromptOptional(console, "Artifact path(s)", string.Empty);
-        var outputRoot = PromptOptional(console, "Output root", string.Empty);
-        var remoteRoot = PromptOptional(console, "Remote root", string.Empty);
-        var scriptArgs = PromptOptional(console, "Script arguments", string.Empty);
-
-        DispatchConsoleRenderer.RenderInteractiveReview(
+        var commandCenter = new SpectreDispatchCommandCenter(
             console,
-            scriptPath,
-            computerNames,
-            transport,
-            runAsSystem,
-            dryRun,
-            throttle,
-            expectedExitCodes,
-            artifactPaths);
+            doctor,
+            static () => Console.ReadKey(intercept: true));
+        var result = await commandCenter.RunAsync(cancellationToken).ConfigureAwait(false);
 
-        if (!console.Confirm("Start Dispatch run?", defaultValue: dryRun))
+        return result.Kind switch
         {
-            DispatchConsoleRenderer.RenderError(
-                CreateErrorConsole(Console.Error),
-                "Dispatch Run Cancelled",
-                "The interactive run was cancelled before planning or endpoint work started.");
-            return 1;
-        }
-
-        var args = BuildInteractiveRunArguments(
-            dryRun,
-            scriptPath,
-            computerNames,
-            transport,
-            expectedExitCodes,
-            throttle,
-            runAsSystem,
-            outputRoot,
-            remoteRoot,
-            artifactPaths,
-            scriptArgs);
-
-        return await RunCommandAsync(args, cancellationToken).ConfigureAwait(false);
-    }
-
-    private static void WaitForMenuReturn(IAnsiConsole console) =>
-        console.Prompt(
-            new TextPrompt<string>("[grey]Press Enter to return to the command center[/]")
-                .AllowEmpty());
-
-    private static string PromptRequired(IAnsiConsole console, string title) =>
-        console.Prompt(
-            new TextPrompt<string>(title)
-                .Validate(static value => string.IsNullOrWhiteSpace(value)
-                    ? ValidationResult.Error("A value is required.")
-                    : ValidationResult.Success()));
-
-    private static string PromptOptional(IAnsiConsole console, string title, string defaultValue) =>
-        console.Prompt(
-            new TextPrompt<string>(title)
-                .DefaultValue(defaultValue)
-                .AllowEmpty());
-
-    private static int? PromptOptionalInt(IAnsiConsole console, string title)
-    {
-        var value = PromptOptional(console, title, string.Empty);
-        return int.TryParse(value, out var parsed) ? parsed : null;
-    }
-
-    private static string[] BuildInteractiveRunArguments(
-        bool dryRun,
-        string scriptPath,
-        string computerNames,
-        string transport,
-        string expectedExitCodes,
-        int? throttle,
-        bool runAsSystem,
-        string outputRoot,
-        string remoteRoot,
-        string artifactPaths,
-        string scriptArgs)
-    {
-        var args = new List<string>();
-        if (dryRun)
-        {
-            args.Add("--dry-run");
-        }
-
-        args.AddRange(["--script", scriptPath, "--computer-name", computerNames, "--transport", transport]);
-        AddOptionalPair(args, "--expected-exit-code", expectedExitCodes);
-        if (throttle.HasValue)
-        {
-            args.AddRange(["--throttle", throttle.Value.ToString()]);
-        }
-
-        if (runAsSystem)
-        {
-            args.Add("--run-as-system");
-        }
-
-        AddOptionalPair(args, "--output-root", outputRoot);
-        AddOptionalPair(args, "--remote-root", remoteRoot);
-        AddOptionalPair(args, "--artifact-path", artifactPaths);
-        AddScriptArgs(args, scriptArgs);
-        return [.. args];
-    }
-
-    private static void AddOptionalPair(List<string> args, string option, string value)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            args.AddRange([option, value]);
-        }
-    }
-
-    private static void AddScriptArgs(List<string> args, string scriptArgs)
-    {
-        if (string.IsNullOrWhiteSpace(scriptArgs))
-        {
-            return;
-        }
-
-        args.Add("--");
-        args.AddRange(scriptArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            CommandCenterExitKind.StartRun => await RunCommandAsync(result.RunArguments, cancellationToken)
+                .ConfigureAwait(false),
+            _ => 0
+        };
     }
 
     private async Task<DispatchRunResult> RunWithLiveDashboardAsync(
