@@ -180,11 +180,51 @@ public sealed class DispatchCliApplicationTests
         }
     }
 
-    private static DispatchCliApplication CreateApplication(CapturingPlanner planner, IDispatchDoctor? doctor = null) =>
+    [Fact]
+    public async Task RunWritesLiveStatusToErrorAndFinalJsonToOutput()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var executor = new SucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "--script",
+                    scriptPath,
+                    "--computer-name",
+                    "PC001",
+                    "--transport",
+                    "psexec"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Contains("\"runId\": \"run-test\"", output);
+            Assert.Contains("\"target\": \"PC001\"", output);
+            Assert.Contains("PC001: probing", error);
+            Assert.Contains("PC001: succeeded", error);
+            Assert.Contains("Dispatch run run-test: 1/1 succeeded", error);
+            Assert.DoesNotContain("PC001: probing", output);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    private static DispatchCliApplication CreateApplication(
+        CapturingPlanner planner,
+        IDispatchDoctor? doctor = null,
+        IDispatchExecutor? executor = null) =>
         new(
             Options.Create(new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
-            new ThrowingExecutor(),
+            executor ?? new ThrowingExecutor(),
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])));
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
@@ -215,6 +255,15 @@ public sealed class DispatchCliApplicationTests
         public Task<ExecutionPlan> CreatePlanAsync(DispatchRequest request, CancellationToken cancellationToken)
         {
             LastRequest = request;
+            var targets = request.Targets
+                .Select(target => new TargetExecution(
+                    "run-test",
+                    target,
+                    TargetExecutionState.Pending,
+                    Path.Combine(@"C:\Dispatch\Tests\run-test\Targets", target.Name),
+                    Path.Combine(@"C:\Dispatch\Tests\run-test\Targets", target.Name, "result.json"),
+                    Path.Combine(@"C:\ProgramData\Dispatch\Runs\run-test\script", Path.GetFileName(((ScriptPayload)request.Payload).ScriptPath))))
+                .ToArray();
             var job = new DispatchJob(
                 RunId: "run-test",
                 Targets: request.Targets,
@@ -232,9 +281,10 @@ public sealed class DispatchCliApplicationTests
                 RunId: "run-test",
                 CreatedAt: DateTimeOffset.UnixEpoch,
                 Job: job,
-                Targets: [],
+                Targets: targets,
                 DryRun: request.DryRun,
-                ThrottleLimit: request.Throttle ?? 0));
+                ThrottleLimit: request.Throttle ?? 0,
+                LocalResultsJsonPath: @"C:\Dispatch\Tests\run-test\Admin\results.json"));
         }
     }
 
@@ -242,6 +292,59 @@ public sealed class DispatchCliApplicationTests
     {
         public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The CLI surface test must not execute endpoint work.");
+
+        public Task<DispatchRunResult> ExecuteAsync(
+            ExecutionPlan plan,
+            IDispatchExecutionObserver observer,
+            CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("The CLI surface test must not execute endpoint work.");
+    }
+
+    private sealed class SucceedingExecutor : IDispatchExecutor
+    {
+        public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
+            ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken);
+
+        public async Task<DispatchRunResult> ExecuteAsync(
+            ExecutionPlan plan,
+            IDispatchExecutionObserver observer,
+            CancellationToken cancellationToken)
+        {
+            var target = Assert.Single(plan.Targets);
+            await observer.OnProgressAsync(
+                new DispatchExecutionProgress(plan.RunId, target.Target.Name, TargetExecutionState.Probing, DateTimeOffset.UnixEpoch),
+                cancellationToken);
+            await observer.OnProgressAsync(
+                new DispatchExecutionProgress(plan.RunId, target.Target.Name, TargetExecutionState.Succeeded, DateTimeOffset.UnixEpoch),
+                cancellationToken);
+
+            return new DispatchRunResult(
+                RunId: plan.RunId,
+                StartedAt: DateTimeOffset.UnixEpoch,
+                EndedAt: DateTimeOffset.UnixEpoch,
+                RequestedBy: "test",
+                Transport: plan.Job.Transport,
+                PayloadType: plan.Job.Payload.PayloadType,
+                PayloadName: plan.Job.Payload.DisplayName,
+                Targets:
+                [
+                    new TargetExecutionResult(
+                        RunId: plan.RunId,
+                        Target: target.Target.Name,
+                        Transport: plan.Job.Transport,
+                        PayloadType: plan.Job.Payload.PayloadType,
+                        PayloadName: plan.Job.Payload.DisplayName,
+                        State: TargetExecutionState.Succeeded,
+                        ExitCode: 0,
+                        ExpectedExitCodes: plan.Job.ExpectedExitCodes,
+                        StartedAt: DateTimeOffset.UnixEpoch,
+                        EndedAt: DateTimeOffset.UnixEpoch,
+                        FailureCategory: FailureCategory.None,
+                        FailureMessage: null,
+                        ResultPath: target.PlannedLocalResultPath ?? string.Empty)
+                ],
+                ResultPath: plan.LocalResultsJsonPath);
+        }
     }
 
     private sealed class StaticDoctor(DispatchDoctorReport report) : IDispatchDoctor

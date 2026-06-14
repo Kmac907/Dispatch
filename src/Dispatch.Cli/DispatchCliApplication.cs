@@ -110,7 +110,10 @@ public sealed class DispatchCliApplication(
                 return 0;
             }
 
-            var result = await executor.ExecuteAsync(plan, cancellationToken).ConfigureAwait(false);
+            var result = await executor.ExecuteAsync(
+                plan,
+                new ConsoleDispatchExecutionObserver(Console.Error),
+                cancellationToken).ConfigureAwait(false);
             Console.WriteLine(DispatchJson.Serialize(result));
             WriteResultSummary(result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;

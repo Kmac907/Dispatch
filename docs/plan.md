@@ -1040,7 +1040,7 @@ Dependencies:
 
 Definition of done:
 - `dispatch` guides the user through script, targets, transport, run context, throttle, dry-run, and confirmation.
-- `dispatch run` supports non-interactive automation for script execution and command execution.
+- `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
 
 #### 6.1 Operator Diagnostics

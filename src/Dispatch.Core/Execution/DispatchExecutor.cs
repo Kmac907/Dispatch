@@ -11,9 +11,16 @@ internal sealed class DispatchExecutor(
     IDispatchResultWriter resultWriter,
     ISystemClock clock) : IDispatchExecutor
 {
-    public async Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken)
+    public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
+        ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken);
+
+    public async Task<DispatchRunResult> ExecuteAsync(
+        ExecutionPlan plan,
+        IDispatchExecutionObserver observer,
+        CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(observer);
 
         if (plan.DryRun)
         {
@@ -26,15 +33,19 @@ internal sealed class DispatchExecutor(
         if (transportExecutor is null)
         {
             var unavailableEndedAt = clock.UtcNow;
-            var unavailableTargets = plan.Targets
-                .Select(target => CreateFailureResult(
+            var unavailableTargets = new List<TargetExecutionResult>();
+            foreach (var target in plan.Targets)
+            {
+                var failed = CreateFailureResult(
                     plan,
                     target,
                     startedAt,
                     unavailableEndedAt,
                     FailureCategory.TransportUnavailable,
-                    $"No executor is registered for transport '{plan.Job.Transport.ToDispatchString()}'."))
-                .ToArray();
+                    $"No executor is registered for transport '{plan.Job.Transport.ToDispatchString()}'.");
+                await NotifyTargetStateAsync(observer, failed, unavailableEndedAt, cancellationToken).ConfigureAwait(false);
+                unavailableTargets.Add(failed);
+            }
 
             var unavailableResult = new DispatchRunResult(
                 RunId: plan.RunId,
@@ -52,7 +63,7 @@ internal sealed class DispatchExecutor(
         }
 
         var endpointProbe = endpointProbes.SingleOrDefault(probe => probe.Kind == plan.Job.Transport);
-        var targetResults = await ExecuteTargetsAsync(plan, transportExecutor, endpointProbe, cancellationToken).ConfigureAwait(false);
+        var targetResults = await ExecuteTargetsAsync(plan, transportExecutor, endpointProbe, observer, cancellationToken).ConfigureAwait(false);
 
         var endedAt = clock.UtcNow;
         var result = new DispatchRunResult(
@@ -74,6 +85,7 @@ internal sealed class DispatchExecutor(
         ExecutionPlan plan,
         ITransportScriptExecutor transportExecutor,
         ITransportEndpointProbe? endpointProbe,
+        IDispatchExecutionObserver observer,
         CancellationToken cancellationToken)
     {
         var throttleLimit = Math.Max(1, plan.ThrottleLimit);
@@ -83,7 +95,7 @@ internal sealed class DispatchExecutor(
             await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var result = await ExecuteTargetAsync(plan, target, transportExecutor, endpointProbe, cancellationToken).ConfigureAwait(false);
+                var result = await ExecuteTargetAsync(plan, target, transportExecutor, endpointProbe, observer, cancellationToken).ConfigureAwait(false);
                 return (Index: index, Result: result);
             }
             finally
@@ -104,16 +116,18 @@ internal sealed class DispatchExecutor(
         TargetExecution target,
         ITransportScriptExecutor transportExecutor,
         ITransportEndpointProbe? endpointProbe,
+        IDispatchExecutionObserver observer,
         CancellationToken cancellationToken)
     {
         try
         {
             if (endpointProbe is not null)
             {
+                await NotifyTargetStateAsync(plan, target, TargetExecutionState.Probing, observer, cancellationToken).ConfigureAwait(false);
                 var probeResult = await endpointProbe.ProbeAsync(new TransportEndpointProbeRequest(plan, target), cancellationToken).ConfigureAwait(false);
                 if (!probeResult.Succeeded)
                 {
-                    return CreateFailureResult(
+                    var failure = CreateFailureResult(
                         plan,
                         target,
                         probeResult.StartedAt,
@@ -121,9 +135,12 @@ internal sealed class DispatchExecutor(
                         probeResult.FailureCategory,
                         probeResult.FailureMessage ?? $"Endpoint probe failed for target '{target.Target.Name}'.",
                         probeResult.Metadata);
+                    await NotifyTargetStateAsync(observer, failure, probeResult.EndedAt, cancellationToken).ConfigureAwait(false);
+                    return failure;
                 }
             }
 
+            await NotifyTargetStateAsync(plan, target, TargetExecutionState.PreparingScript, observer, cancellationToken).ConfigureAwait(false);
             var targetPlan = plan with { Targets = [target] };
             var preparation = await scriptPreparationService.PrepareAsync(targetPlan, cancellationToken).ConfigureAwait(false);
             var targetPreparation = preparation.Targets.SingleOrDefault(result =>
@@ -131,32 +148,41 @@ internal sealed class DispatchExecutor(
 
             if (targetPreparation is null)
             {
-                return CreateFailureResult(
+                var failure = CreateFailureResult(
                     plan,
                     target,
                     clock.UtcNow,
                     clock.UtcNow,
                     FailureCategory.PayloadPreparationFailed,
                     $"No script preparation result exists for target '{target.Target.Name}'.");
+                await NotifyTargetStateAsync(observer, failure, clock.UtcNow, cancellationToken).ConfigureAwait(false);
+                return failure;
             }
 
             if (!targetPreparation.Succeeded)
             {
-                return CreateFailureResult(
+                var failure = CreateFailureResult(
                     plan,
                     target,
                     clock.UtcNow,
                     clock.UtcNow,
                     targetPreparation.FailureCategory,
                     targetPreparation.FailureMessage ?? $"Script preparation failed for target '{target.Target.Name}'.");
+                await NotifyTargetStateAsync(observer, failure, clock.UtcNow, cancellationToken).ConfigureAwait(false);
+                return failure;
             }
 
+            await NotifyTargetStateAsync(plan, target, TargetExecutionState.Executing, observer, cancellationToken).ConfigureAwait(false);
             var execution = await transportExecutor.ExecuteScriptAsync(
                 new TransportScriptExecutionRequest(plan, target, targetPreparation),
                 cancellationToken).ConfigureAwait(false);
+
+            await NotifyTargetStateAsync(plan, target, TargetExecutionState.CollectingArtifacts, observer, cancellationToken).ConfigureAwait(false);
             var artifacts = await artifactCollector.CollectAsync(plan, target, cancellationToken).ConfigureAwait(false);
 
-            return await CreateExecutionResultAsync(plan, target, execution, artifacts, cancellationToken).ConfigureAwait(false);
+            var result = await CreateExecutionResultAsync(plan, target, execution, artifacts, cancellationToken).ConfigureAwait(false);
+            await NotifyTargetStateAsync(observer, result, result.EndedAt, cancellationToken).ConfigureAwait(false);
+            return result;
         }
         catch (OperationCanceledException)
         {
@@ -165,13 +191,66 @@ internal sealed class DispatchExecutor(
         catch (Exception exception)
         {
             var endedAt = clock.UtcNow;
-            return CreateFailureResult(
+            var failure = CreateFailureResult(
                 plan,
                 target,
                 endedAt,
                 endedAt,
                 FailureCategory.InternalError,
                 $"Target execution failed unexpectedly for '{target.Target.Name}': {exception.Message}");
+            await NotifyTargetStateAsync(observer, failure, endedAt, cancellationToken).ConfigureAwait(false);
+            return failure;
+        }
+    }
+
+    private static async Task NotifyTargetStateAsync(
+        ExecutionPlan plan,
+        TargetExecution target,
+        TargetExecutionState state,
+        IDispatchExecutionObserver observer,
+        CancellationToken cancellationToken)
+    {
+        await NotifyTargetStateAsync(
+            observer,
+            new DispatchExecutionProgress(
+                plan.RunId,
+                target.Target.Name,
+                state,
+                DateTimeOffset.UtcNow),
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private static Task NotifyTargetStateAsync(
+        IDispatchExecutionObserver observer,
+        TargetExecutionResult result,
+        DateTimeOffset timestamp,
+        CancellationToken cancellationToken) =>
+        NotifyTargetStateAsync(
+            observer,
+            new DispatchExecutionProgress(
+                result.RunId,
+                result.Target,
+                result.State,
+                timestamp,
+                result.FailureCategory,
+                result.FailureMessage),
+            cancellationToken);
+
+    private static async Task NotifyTargetStateAsync(
+        IDispatchExecutionObserver observer,
+        DispatchExecutionProgress progress,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await observer.OnProgressAsync(progress, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch
+        {
         }
     }
 

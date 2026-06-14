@@ -45,6 +45,10 @@ Dispatch has an initial .NET foundation, dry-run request planning, deterministic
 
 Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It reports Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
 
+## Run Output
+
+Real `dispatch run` executions write concise live target status to stderr and write the final result JSON to stdout. Automation should consume stdout for structured results and treat stderr as operator-facing progress and summary output.
+
 ## Script-Owned Payloads
 
 Dispatch v1 copies only the selected PowerShell script. Installer media, package payloads, Blob/HTTPS/SMB/Azure Files downloads, and payload-specific logging belong inside the script. Pass ordinary non-secret script arguments after `--`; do not pass credentials or SAS tokens on the command line. See `docs/script-owned-payloads.md`.

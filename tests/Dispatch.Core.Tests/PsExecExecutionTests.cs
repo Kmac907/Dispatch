@@ -78,6 +78,39 @@ public sealed class PsExecExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorReportsPerTargetStateTransitions()
+    {
+        using var script = TemporaryScript.Create("Install.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        using var provider = BuildProvider(outputRoot.Path, runner);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var observer = new RecordingExecutionObserver();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, observer, CancellationToken.None);
+
+        Assert.Equal(TargetExecutionState.Succeeded, Assert.Single(result.Targets).State);
+        Assert.Equal(
+            [
+                TargetExecutionState.Probing,
+                TargetExecutionState.PreparingScript,
+                TargetExecutionState.Executing,
+                TargetExecutionState.CollectingArtifacts,
+                TargetExecutionState.Succeeded
+            ],
+            observer.Progress.Select(static progress => progress.State));
+        Assert.All(observer.Progress, static progress => Assert.Equal("PC001", progress.Target));
+    }
+
+    [Fact]
     public async Task ExecutorSkipsScriptTransferWhenDnsProbeFails()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -513,6 +546,17 @@ public sealed class PsExecExecutionTests
             }
 
             return Task.FromResult<IReadOnlyList<string>>(copied);
+        }
+    }
+
+    private sealed class RecordingExecutionObserver : IDispatchExecutionObserver
+    {
+        public List<DispatchExecutionProgress> Progress { get; } = [];
+
+        public Task OnProgressAsync(DispatchExecutionProgress progress, CancellationToken cancellationToken)
+        {
+            Progress.Add(progress);
+            return Task.CompletedTask;
         }
     }
 
