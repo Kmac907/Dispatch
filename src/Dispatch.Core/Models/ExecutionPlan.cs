@@ -5,4 +5,10 @@ public sealed record ExecutionPlan(
     DateTimeOffset CreatedAt,
     DispatchJob Job,
     IReadOnlyList<TargetExecution> Targets,
-    bool DryRun);
+    bool DryRun,
+    int ThrottleLimit = 0,
+    string LocalRunRoot = "",
+    string RemoteRunRoot = "",
+    string LocalAdminRoot = "",
+    string LocalResultsJsonPath = "",
+    string LocalResultsCsvPath = "");

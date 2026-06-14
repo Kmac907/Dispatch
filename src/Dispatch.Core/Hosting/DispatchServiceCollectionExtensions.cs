@@ -24,7 +24,9 @@ public static class DispatchServiceCollectionExtensions
             .Validate(options => options.Throttle > 0, "Throttle must be greater than zero.")
             .Validate(options => options.ExpectedExitCodes.Length > 0, "At least one expected exit code is required.");
 
-        services.AddSingleton<IDispatchPlanner, NotImplementedDispatchPlanner>();
+        services.AddSingleton<IRunIdGenerator, DispatchRunIdGenerator>();
+        services.AddSingleton<ISystemClock, SystemClock>();
+        services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, NotImplementedDispatchExecutor>();
 
         return services;

@@ -1,0 +1,138 @@
+using Dispatch.Core.Configuration;
+using Dispatch.Core.Execution;
+using Dispatch.Core.Hosting;
+using Dispatch.Core.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Dispatch.Core.Tests;
+
+public sealed class RequestPlanningTests
+{
+    [Fact]
+    public async Task PlannerCreatesDryRunExecutionPlanWithLocalAndRemotePaths()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, ["-Mode", "Repair"]),
+            targets: [new TargetSpec("PC001", "computer-name")],
+            transport: TransportKind.PsExec,
+            expectedExitCodes: [0, 3010],
+            throttle: 4,
+            dryRun: true,
+            localRunRoot: @"D:\Dispatch\Runs",
+            remoteRunRoot: @"C:\ProgramData\Dispatch\Runs",
+            executionContext: new ExecutionContextOptions(RunAsSystem: true));
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var target = Assert.Single(plan.Targets);
+
+        Assert.Equal("run-001", plan.RunId);
+        Assert.True(plan.DryRun);
+        Assert.Equal(4, plan.ThrottleLimit);
+        Assert.Equal(new DateTimeOffset(2026, 06, 13, 12, 0, 0, TimeSpan.Zero), plan.CreatedAt);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001", plan.LocalRunRoot);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin", plan.LocalAdminRoot);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.json", plan.LocalResultsJsonPath);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.csv", plan.LocalResultsCsvPath);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001", plan.RemoteRunRoot);
+        Assert.Equal([0, 3010], plan.Job.ExpectedExitCodes);
+        Assert.True(plan.Job.ExecutionContext.RunAsSystem);
+
+        Assert.Equal("PC001", target.Target.Name);
+        Assert.Equal(TargetExecutionState.Pending, target.State);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Targets\PC001\result.json", target.PlannedLocalResultPath);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.PlannedRemoteScriptPath);
+        Assert.NotNull(target.PlannedCommand);
+        Assert.Equal("powershell.exe", target.PlannedCommand.Executable);
+        Assert.Equal(
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", "-Mode", "Repair"],
+            target.PlannedCommand.Arguments);
+    }
+
+    [Fact]
+    public async Task PlannerRejectsMissingLocalScriptBeforeEndpointWork()
+    {
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(@"C:\Does\Not\Exist.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true);
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "ScriptNotFound");
+    }
+
+    [Fact]
+    public async Task PlannerRejectsUnsupportedTransportPayloadBeforeEndpointWork()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: true);
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "UnsupportedTransportPayload");
+    }
+
+    [Fact]
+    public async Task PlannerRejectsRelativeRemoteRunRoot()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true,
+            remoteRunRoot: "Dispatch\\Runs");
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "InvalidRemoteRunRoot");
+    }
+
+    private static ServiceProvider BuildProvider()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Dispatch:LocalRunRoot"] = @"D:\Dispatch\Runs",
+                ["Dispatch:RemoteRunRoot"] = @"C:\ProgramData\Dispatch\Runs",
+                ["Dispatch:ExpectedExitCodes:0"] = "0"
+            })
+            .Build();
+
+        return new ServiceCollection()
+            .AddLogging()
+            .AddDispatchCore(configuration)
+            .AddSingleton<IRunIdGenerator>(new FixedRunIdGenerator("run-001"))
+            .AddSingleton<ISystemClock>(new FixedSystemClock(new DateTimeOffset(2026, 06, 13, 12, 0, 0, TimeSpan.Zero)))
+            .BuildServiceProvider(validateScopes: true);
+    }
+
+    private sealed class FixedRunIdGenerator(string runId) : IRunIdGenerator
+    {
+        public string CreateRunId() => runId;
+    }
+
+    private sealed class FixedSystemClock(DateTimeOffset utcNow) : ISystemClock
+    {
+        public DateTimeOffset UtcNow => utcNow;
+    }
+}

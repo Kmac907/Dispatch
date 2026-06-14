@@ -8,7 +8,10 @@ public sealed record DispatchRequest
         TransportKind transport,
         IReadOnlyList<int>? expectedExitCodes = null,
         int? throttle = null,
-        bool dryRun = false)
+        bool dryRun = false,
+        string? localRunRoot = null,
+        string? remoteRunRoot = null,
+        ExecutionContextOptions? executionContext = null)
     {
         Payload = payload;
         Targets = targets;
@@ -16,6 +19,9 @@ public sealed record DispatchRequest
         ExpectedExitCodes = expectedExitCodes ?? [0];
         Throttle = throttle;
         DryRun = dryRun;
+        LocalRunRoot = localRunRoot;
+        RemoteRunRoot = remoteRunRoot;
+        ExecutionContext = executionContext ?? new ExecutionContextOptions();
     }
 
     public DispatchPayload Payload { get; init; }
@@ -29,4 +35,10 @@ public sealed record DispatchRequest
     public int? Throttle { get; init; }
 
     public bool DryRun { get; init; }
+
+    public string? LocalRunRoot { get; init; }
+
+    public string? RemoteRunRoot { get; init; }
+
+    public ExecutionContextOptions ExecutionContext { get; init; }
 }

@@ -6,5 +6,6 @@ public sealed record TargetExecution(
     TargetExecutionState State,
     string? PlannedLocalResultPath,
     string? PlannedRemoteScriptPath,
+    DirectExecutionCommand? PlannedCommand = null,
     FailureCategory FailureCategory = FailureCategory.None,
     string? FailureMessage = null);

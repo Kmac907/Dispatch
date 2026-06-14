@@ -49,32 +49,22 @@ public sealed class ApplicationHostConfigurationTests
     }
 
     [Fact]
-    public async Task PlannerAndExecutorAreRegisteredButNotImplementedYet()
+    public async Task PlannerAndExecutorAreRegistered()
     {
         using var provider = BuildProvider(new Dictionary<string, string?>());
         var planner = provider.GetRequiredService<IDispatchPlanner>();
         var executor = provider.GetRequiredService<IDispatchExecutor>();
+        using var script = TemporaryScript.Create();
 
         var request = new DispatchRequest(
-            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            payload: new ScriptPayload(script.Path, []),
             targets: [new TargetSpec("PC001")],
             transport: TransportKind.PsExec);
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => planner.CreatePlanAsync(request, CancellationToken.None));
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
 
-        var job = new DispatchJob(
-            RunId: "run-001",
-            Targets: [new TargetSpec("PC001")],
-            Payload: request.Payload,
-            Transport: request.Transport,
-            ExecutionContext: new ExecutionContextOptions(),
-            ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs", true),
-            TimeoutPolicy: new TimeoutPolicy(),
-            RetryPolicy: new RetryPolicy(),
-            ExpectedExitCodes: [0],
-            ArtifactPolicy: new ArtifactPolicy(),
-            ResultPolicy: new ResultPolicy(@"C:\ProgramData\Dispatch\Runs"));
-        var plan = new ExecutionPlan("run-001", DateTimeOffset.UtcNow, job, [], DryRun: true);
+        Assert.NotEmpty(plan.RunId);
+        Assert.Single(plan.Targets);
 
         await Assert.ThrowsAsync<NotSupportedException>(() => executor.ExecuteAsync(plan, CancellationToken.None));
     }

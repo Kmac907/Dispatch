@@ -1,0 +1,210 @@
+using Dispatch.Core.Models;
+
+namespace Dispatch.Cli;
+
+internal sealed class DispatchRunCommandParser
+{
+    public static bool TryParse(
+        IReadOnlyList<string> args,
+        TransportKind defaultTransport,
+        IReadOnlyList<int> defaultExpectedExitCodes,
+        out DispatchRunCommand? command,
+        out string error)
+    {
+        command = null;
+        error = string.Empty;
+
+        var dryRun = false;
+        string? scriptPath = null;
+        string? target = null;
+        var transport = defaultTransport;
+        var expectedExitCodes = defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
+        int? throttle = null;
+        string? localRunRoot = null;
+        string? remoteRunRoot = null;
+        var runAsSystem = false;
+        var scriptArguments = new List<string>();
+
+        for (var index = 0; index < args.Count; index++)
+        {
+            var arg = args[index];
+            switch (arg)
+            {
+                case "--dry-run":
+                    dryRun = true;
+                    break;
+                case "--run-as-system":
+                    runAsSystem = true;
+                    break;
+                case "--script":
+                    if (!TryReadValue(args, ref index, arg, out scriptPath, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--computer-name":
+                    if (!TryReadValue(args, ref index, arg, out target, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--transport":
+                    if (!TryReadValue(args, ref index, arg, out var transportValue, out error))
+                    {
+                        return false;
+                    }
+
+                    if (!TryParseTransport(transportValue, out transport))
+                    {
+                        error = $"Unsupported transport '{transportValue}'.";
+                        return false;
+                    }
+
+                    break;
+                case "--expected-exit-code":
+                    if (!TryReadValue(args, ref index, arg, out var exitCodeValue, out error))
+                    {
+                        return false;
+                    }
+
+                    if (!TryParseExpectedExitCodes(exitCodeValue, out expectedExitCodes))
+                    {
+                        error = $"Expected exit codes must be integers: '{exitCodeValue}'.";
+                        return false;
+                    }
+
+                    break;
+                case "--throttle":
+                    if (!TryReadValue(args, ref index, arg, out var throttleValue, out error))
+                    {
+                        return false;
+                    }
+
+                    if (!int.TryParse(throttleValue, out var parsedThrottle))
+                    {
+                        error = $"Throttle must be an integer: '{throttleValue}'.";
+                        return false;
+                    }
+
+                    throttle = parsedThrottle;
+                    break;
+                case "--output-root":
+                    if (!TryReadValue(args, ref index, arg, out localRunRoot, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--remote-root":
+                    if (!TryReadValue(args, ref index, arg, out remoteRunRoot, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--target-file":
+                    error = "--target-file belongs to the target resolution slice and is not implemented yet.";
+                    return false;
+                case "--":
+                    scriptArguments.AddRange(args.Skip(index + 1));
+                    index = args.Count;
+                    break;
+                default:
+                    if (arg.StartsWith("--", StringComparison.Ordinal))
+                    {
+                        error = $"Unknown option '{arg}'.";
+                        return false;
+                    }
+
+                    scriptArguments.Add(arg);
+                    break;
+            }
+        }
+
+        if (!dryRun)
+        {
+            error = "Only 'dispatch run --dry-run' is implemented in this slice.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(scriptPath))
+        {
+            error = "--script is required.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            error = "--computer-name is required.";
+            return false;
+        }
+
+        command = new DispatchRunCommand(
+            DryRun: dryRun,
+            ScriptPath: scriptPath,
+            ScriptArguments: scriptArguments,
+            Target: new TargetSpec(target, "computer-name"),
+            Transport: transport,
+            ExpectedExitCodes: expectedExitCodes,
+            Throttle: throttle,
+            LocalRunRoot: localRunRoot,
+            RemoteRunRoot: remoteRunRoot,
+            RunAsSystem: runAsSystem);
+        return true;
+    }
+
+    private static bool TryReadValue(
+        IReadOnlyList<string> args,
+        ref int index,
+        string option,
+        out string value,
+        out string error)
+    {
+        value = string.Empty;
+        error = string.Empty;
+
+        if (index + 1 >= args.Count)
+        {
+            error = $"{option} requires a value.";
+            return false;
+        }
+
+        value = args[++index];
+        return true;
+    }
+
+    private static bool TryParseTransport(string value, out TransportKind transport)
+    {
+        transport = value.ToLowerInvariant() switch
+        {
+            "psexec" => TransportKind.PsExec,
+            "psrp" => TransportKind.Psrp,
+            "winrm" => TransportKind.WinRm,
+            _ => default
+        };
+
+        return value.Equals("psexec", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("psrp", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("winrm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseExpectedExitCodes(string value, out IReadOnlyList<int> exitCodes)
+    {
+        var parsed = new List<int>();
+        foreach (var item in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!int.TryParse(item, out var exitCode))
+            {
+                exitCodes = [];
+                return false;
+            }
+
+            parsed.Add(exitCode);
+        }
+
+        exitCodes = parsed;
+        return parsed.Count > 0;
+    }
+}
