@@ -32,9 +32,10 @@ Windows-native script orchestration for endpoint administrators.
 Usage:
   dispatch [--help]
   dispatch --version
-  dispatch run --dry-run --script <path> --computer-name <name> [options] [-- <script-args>]
+  dispatch run --dry-run --script <path> --computer-name <name[,name]> [options] [-- <script-args>]
 
 Run options:
+  --target-file <path>
   --transport <psexec|psrp|winrm>
   --expected-exit-code <code[,code]>
   --throttle <count>

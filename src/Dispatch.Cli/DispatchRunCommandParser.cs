@@ -1,4 +1,5 @@
 using Dispatch.Core.Models;
+using Dispatch.Core.Targeting;
 
 namespace Dispatch.Cli;
 
@@ -16,7 +17,8 @@ internal sealed class DispatchRunCommandParser
 
         var dryRun = false;
         string? scriptPath = null;
-        string? target = null;
+        var computerNameValues = new List<string>();
+        string? targetFile = null;
         var transport = defaultTransport;
         var expectedExitCodes = defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
         int? throttle = null;
@@ -44,11 +46,12 @@ internal sealed class DispatchRunCommandParser
 
                     break;
                 case "--computer-name":
-                    if (!TryReadValue(args, ref index, arg, out target, out error))
+                    if (!TryReadValue(args, ref index, arg, out var computerNameValue, out error))
                     {
                         return false;
                     }
 
+                    computerNameValues.Add(computerNameValue);
                     break;
                 case "--transport":
                     if (!TryReadValue(args, ref index, arg, out var transportValue, out error))
@@ -105,8 +108,12 @@ internal sealed class DispatchRunCommandParser
 
                     break;
                 case "--target-file":
-                    error = "--target-file belongs to the target resolution slice and is not implemented yet.";
-                    return false;
+                    if (!TryReadValue(args, ref index, arg, out targetFile, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
                 case "--":
                     scriptArguments.AddRange(args.Skip(index + 1));
                     index = args.Count;
@@ -135,9 +142,10 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(target))
+        var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(computerNameValues, targetFile));
+        if (!targetResolution.IsValid)
         {
-            error = "--computer-name is required.";
+            error = string.Join(Environment.NewLine, targetResolution.Errors.Select(static resolutionError => $"{resolutionError.Code}: {resolutionError.Message}"));
             return false;
         }
 
@@ -145,7 +153,7 @@ internal sealed class DispatchRunCommandParser
             DryRun: dryRun,
             ScriptPath: scriptPath,
             ScriptArguments: scriptArguments,
-            Target: new TargetSpec(target, "computer-name"),
+            Targets: targetResolution.Targets,
             Transport: transport,
             ExpectedExitCodes: expectedExitCodes,
             Throttle: throttle,

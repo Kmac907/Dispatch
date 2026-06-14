@@ -6,7 +6,7 @@ internal sealed record DispatchRunCommand(
     bool DryRun,
     string ScriptPath,
     IReadOnlyList<string> ScriptArguments,
-    TargetSpec Target,
+    IReadOnlyList<TargetSpec> Targets,
     TransportKind Transport,
     IReadOnlyList<int> ExpectedExitCodes,
     int? Throttle,
@@ -17,7 +17,7 @@ internal sealed record DispatchRunCommand(
     public DispatchRequest ToRequest() =>
         new(
             payload: new ScriptPayload(ScriptPath, ScriptArguments),
-            targets: [Target],
+            targets: Targets,
             transport: Transport,
             expectedExitCodes: ExpectedExitCodes,
             throttle: Throttle,

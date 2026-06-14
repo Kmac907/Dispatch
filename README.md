@@ -39,13 +39,13 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation and dry-run request planning. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, and deterministic target resolution. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Development
 
 ```powershell
 dotnet build .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
-dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run --dry-run --script .\path\to\script.ps1 --computer-name PC001
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run --dry-run --script .\path\to\script.ps1 --computer-name PC001,PC002
 dotnet test .\Dispatch.sln
 ```
