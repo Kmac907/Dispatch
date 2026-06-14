@@ -16,4 +16,6 @@ public sealed class DispatchOptions
     public int Throttle { get; set; } = DispatchDefaults.DefaultThrottle;
 
     public int[] ExpectedExitCodes { get; set; } = [];
+
+    public string PsExecPath { get; set; } = "psexec.exe";
 }

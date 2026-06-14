@@ -91,6 +91,24 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerRejectsLikelySecretScriptArgumentsBeforeDryRunRendering()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, ["-SasToken", "sv=2024-01-01&se=2026-01-01&sp=r&sig=abc123"]),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true);
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "CommandLineSecretNotSupported");
+    }
+
+    [Fact]
     public async Task PlannerRejectsRelativeRemoteRunRoot()
     {
         using var script = TemporaryScript.Create("Fix.ps1");

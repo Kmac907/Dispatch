@@ -22,6 +22,7 @@ public sealed class ApplicationHostConfigurationTests
         Assert.Equal(TransportKind.PsExec, options.DefaultTransport);
         Assert.Equal(8, options.Throttle);
         Assert.Equal([0], options.ExpectedExitCodes);
+        Assert.Equal("psexec.exe", options.PsExecPath);
         Assert.NotNull(provider.GetRequiredService<IDispatchPlanner>());
         Assert.NotNull(provider.GetRequiredService<IDispatchExecutor>());
     }
@@ -35,6 +36,7 @@ public sealed class ApplicationHostConfigurationTests
             ["Dispatch:RemoteRunRoot"] = "D:\\RemoteDispatch",
             ["Dispatch:DefaultTransport"] = "PsExec",
             ["Dispatch:Throttle"] = "16",
+            ["Dispatch:PsExecPath"] = "C:\\Tools\\PsExec.exe",
             ["Dispatch:ExpectedExitCodes:0"] = "0",
             ["Dispatch:ExpectedExitCodes:1"] = "3010"
         });
@@ -45,6 +47,7 @@ public sealed class ApplicationHostConfigurationTests
         Assert.Equal("D:\\RemoteDispatch", options.RemoteRunRoot);
         Assert.Equal(TransportKind.PsExec, options.DefaultTransport);
         Assert.Equal(16, options.Throttle);
+        Assert.Equal("C:\\Tools\\PsExec.exe", options.PsExecPath);
         Assert.Equal([0, 3010], options.ExpectedExitCodes);
     }
 
@@ -66,7 +69,11 @@ public sealed class ApplicationHostConfigurationTests
         Assert.NotEmpty(plan.RunId);
         Assert.Single(plan.Targets);
 
-        await Assert.ThrowsAsync<NotSupportedException>(() => executor.ExecuteAsync(plan, CancellationToken.None));
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+        var target = Assert.Single(result.Targets);
+
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.TransportUnavailable, target.FailureCategory);
     }
 
     private static ServiceProvider BuildProvider(IReadOnlyDictionary<string, string?> values)

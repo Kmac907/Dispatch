@@ -130,12 +130,6 @@ internal sealed class DispatchRunCommandParser
             }
         }
 
-        if (!dryRun)
-        {
-            error = "Only 'dispatch run --dry-run' is implemented in this slice.";
-            return false;
-        }
-
         if (string.IsNullOrWhiteSpace(scriptPath))
         {
             error = "--script is required.";

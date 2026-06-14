@@ -14,8 +14,6 @@ public sealed class DispatchCliApplication(
 {
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
-        _ = executor;
-
         if (args.Any(static arg => arg is "--version" or "-v"))
         {
             Console.WriteLine(DispatchProduct.Version);
@@ -32,7 +30,7 @@ Windows-native script orchestration for endpoint administrators.
 Usage:
   dispatch [--help]
   dispatch --version
-  dispatch run --dry-run --script <path> --computer-name <name[,name]> [options] [-- <script-args>]
+  dispatch run [--dry-run] --script <path> --computer-name <name[,name]> [options] [-- <script-args>]
 
 Run options:
   --target-file <path>
@@ -50,22 +48,20 @@ Payload boundary:
   Dispatch prepares only the selected script. Scripts own Blob, HTTPS, SMB, Azure Files,
   MSI, ZIP, and other external payload retrieval through ordinary non-secret script args.
   Do not pass credentials or SAS tokens on the command line.
-
-Only dry-run planning is implemented in this slice.
 """);
             return 0;
         }
 
         if (args[0].Equals("run", StringComparison.OrdinalIgnoreCase))
         {
-            return await RunDryRunAsync(args.Skip(1).ToArray(), cancellationToken).ConfigureAwait(false);
+            return await RunCommandAsync(args.Skip(1).ToArray(), cancellationToken).ConfigureAwait(false);
         }
 
         Console.Error.WriteLine("Unknown arguments. Run 'dispatch --help' for usage.");
         return 1;
     }
 
-    private async Task<int> RunDryRunAsync(string[] args, CancellationToken cancellationToken)
+    private async Task<int> RunCommandAsync(string[] args, CancellationToken cancellationToken)
     {
         if (!DispatchRunCommandParser.TryParse(
                 args,
@@ -81,8 +77,15 @@ Only dry-run planning is implemented in this slice.
         try
         {
             var plan = await planner.CreatePlanAsync(command!.ToRequest(), cancellationToken).ConfigureAwait(false);
-            Console.WriteLine(DispatchJson.Serialize(plan));
-            return 0;
+            if (command.DryRun)
+            {
+                Console.WriteLine(DispatchJson.Serialize(plan));
+                return 0;
+            }
+
+            var result = await executor.ExecuteAsync(plan, cancellationToken).ConfigureAwait(false);
+            Console.WriteLine(DispatchJson.Serialize(result));
+            return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)
         {

@@ -30,7 +30,7 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IEndpointFileSystem, EndpointFileSystem>();
         services.AddSingleton<IScriptPreparationService, ScriptPreparationService>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
-        services.AddSingleton<IDispatchExecutor, NotImplementedDispatchExecutor>();
+        services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
 
         return services;
     }
