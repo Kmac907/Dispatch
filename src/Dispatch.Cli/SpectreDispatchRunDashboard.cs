@@ -55,6 +55,7 @@ internal sealed class SpectreDispatchRunDashboard
     {
         var rows = new Rows(
             CreateRunHeader(),
+            CreateRunCharts(),
             CreateSummaryTable(),
             CreateTargetTable(),
             CreateActivityPanel(),
@@ -101,6 +102,40 @@ internal sealed class SpectreDispatchRunDashboard
                 : plan.LocalResultsJsonPath));
 
         return table;
+    }
+
+    private IRenderable CreateRunCharts()
+    {
+        var values = targets.Values.ToArray();
+        var terminalCount = values.Count(static target => target.State is
+            TargetExecutionState.Succeeded or
+            TargetExecutionState.Failed or
+            TargetExecutionState.TimedOut or
+            TargetExecutionState.Cancelled);
+        var activeCount = values.Count(static target => target.IsActive);
+        var pendingCount = values.Length - terminalCount - activeCount;
+
+        var grid = new Grid().Expand();
+        grid.AddColumn();
+        grid.AddColumn();
+
+        var phaseChart = new BreakdownChart()
+            .Width(60)
+            .AddItem("Complete", Math.Max(terminalCount, 0), terminalCount == 0 ? Color.Grey : Color.Green)
+            .AddItem("Active", Math.Max(activeCount, 0), activeCount == 0 ? Color.Grey : Color.SteelBlue1)
+            .AddItem("Queued", Math.Max(pendingCount, 0), pendingCount == 0 ? Color.Grey : Color.Yellow);
+
+        var outcomeChart = new BarChart()
+            .Width(60)
+            .Label("[grey]Outcome[/]")
+            .CenterLabel();
+        outcomeChart.AddItem("Succeeded", values.Count(static target => target.State == TargetExecutionState.Succeeded), Color.Green);
+        outcomeChart.AddItem("Failed", values.Count(static target => target.State == TargetExecutionState.Failed), Color.Red);
+        outcomeChart.AddItem("Timed Out", values.Count(static target => target.State == TargetExecutionState.TimedOut), Color.Yellow);
+        outcomeChart.AddItem("Cancelled", values.Count(static target => target.State == TargetExecutionState.Cancelled), Color.Grey);
+
+        grid.AddRow(phaseChart, outcomeChart);
+        return grid;
     }
 
     private IRenderable CreateSummaryTable()

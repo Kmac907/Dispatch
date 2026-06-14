@@ -28,7 +28,7 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 
 - Dry-run planning output for all local inputs.
 - `dispatch doctor` / `Test-Dispatch` prerequisite checks.
-- Enterprise-grade Spectre.Console live run UI for interactive terminals, with non-interactive append-only fallback output.
+- Enterprise-grade Spectre.Console command service UI across every CLI path, including help, errors, dry run, doctor, interactive setup, static fallback progress, live progress, and final run summaries.
 - Basic artifact copy-back rules.
 - Release ZIP packaging as a convenience artifact.
 
@@ -77,8 +77,9 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 - Platform: .NET.
 - Initial runtime identifier: `win-x64`.
 - Packaging target: single-file, self-contained Windows executable.
-- CLI parser: `System.CommandLine`.
-- Interactive console UX: `Spectre.Console`.
+- CLI parser/routing: internal command parser backed by the shared request model; default parser help must not be exposed as the user-facing console UX.
+- Console UX: `Spectre.Console` for all command-service rendering.
+- Required console widgets: `Panel`, `Table`, `Grid`, `Rule`, `BarChart`, `BreakdownChart`, `Progress`, `Status`, and `LiveDisplay` where appropriate to the command path.
 - Application host: `Microsoft.Extensions.Hosting`.
 - Configuration: `Microsoft.Extensions.Configuration.Json`.
 - Logging: `Microsoft.Extensions.Logging.Console` in the CLI and `Microsoft.Extensions.Logging.Abstractions` in core libraries.
@@ -182,7 +183,7 @@ Cancelled
 
 ### Result schema
 
-Result JSON is the durable contract for the CLI, PowerShell module, automation, and later package feeds. CSV is a flattened operator-friendly subset.
+Result JSON is the durable file contract for the CLI, PowerShell module, automation, and later package feeds. CSV is a flattened operator-friendly subset. Console output is an operator UI contract, not a raw JSON contract; automation should read explicit result files rather than parse terminal rendering.
 
 Minimum per-run fields:
 
@@ -979,7 +980,7 @@ Scope:
 - Maintain per-target state transitions.
 - Collect stdout/stderr and endpoint artifacts where available.
 - Write `dispatch.log`, `results.csv`, `results.json`, and per-target `result.json`.
-- Print concise terminal summary.
+- Render an enterprise-grade Spectre.Console terminal summary.
 
 Non-goals:
 - No retry policy.
@@ -1026,18 +1027,20 @@ Scope:
 - Implement `dispatch run`.
 - Implement `dispatch doctor`.
 - Run active interactive CLI when no arguments are supplied.
-- Use `System.CommandLine` for command parsing/help.
-- Use `Spectre.Console` for prompts, confirmations, tables, live progress/status output, and readable terminal summaries.
-- For real interactive runs, render an enterprise-grade live run dashboard using Spectre.Console. The dashboard should be useful for repeated operator use, not merely decorative.
-- The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, and a concise recent-event/failure area.
+- Render the entire command service through Spectre.Console: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, static fallback progress, live progress, and final run summaries.
+- Do not emit raw JSON, default parser help, or plain status lines as the console UX for any command path.
+- Use actual Spectre.Console widgets intentionally, including panels, tables, grids, rules, bar charts, breakdown charts, progress bars, status spinners, live display, prompts, confirmations, and styled markup.
+- For real runs, render an enterprise-grade live run dashboard using Spectre.Console. The dashboard should be useful for repeated operator use, not merely decorative.
+- The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, and a concise recent-event/failure area.
 - The live dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
-- Keep final machine-readable result JSON on stdout. Interactive status, fallback status, warnings, and summaries must not contaminate stdout.
-- Fall back to simple append-only stderr output when interactive rendering is unavailable, redirected, unsupported, or explicitly disabled.
+- Dry-run and final run summaries must render as Spectre.Console operator views; durable JSON/CSV remains in the run folder for automation and module wrappers.
+- Fall back to static Spectre.Console progress cards when live rendering is unavailable, redirected, unsupported, or explicitly disabled.
 
 Non-goals:
 - No GUI.
-- No full-screen terminal application.
+- No separate GUI outside the terminal.
 - No separate interactive execution engine.
+- No raw stdout JSON console contract; structured results are durable result files.
 
 Dependencies:
 - 5.1.
@@ -1046,8 +1049,10 @@ Definition of done:
 - `dispatch` guides the user through script, targets, transport, run context, throttle, dry-run, and confirmation.
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
-- Interactive real runs render a polished Spectre.Console live dashboard with per-target phase visibility, aggregate counters, elapsed time, and failure summaries.
-- Non-interactive runs preserve append-only stderr status and final JSON on stdout.
+- Every command path renders through the Dispatch Spectre.Console renderer rather than default parser output, raw JSON, or plain text status lines.
+- Dry-run output renders a Spectre.Console execution-plan view and still records durable plan/result data through the shared model when appropriate.
+- Real runs render either the live Spectre.Console dashboard or static Spectre.Console progress cards with per-target phase visibility, aggregate counters, elapsed time, charts, result-file paths, and failure summaries.
+- Tests cover help, errors, doctor, dry-run, static fallback progress, live dashboard rendering, and final summaries as Spectre-rendered command-service output.
 
 #### 6.1 Operator Diagnostics
 
@@ -1082,7 +1087,7 @@ Scope:
 - Bundle `dispatch.exe` under `bin\win-x64`.
 - Implement `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 - Ensure `Start-Dispatch` passes no arguments.
-- Prefer explicit JSON result path for automation functions rather than parsing live console output.
+- Prefer explicit JSON result path for automation functions rather than parsing Spectre.Console operator output.
 
 Non-goals:
 - No binary cmdlets in MVP.

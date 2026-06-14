@@ -5,10 +5,6 @@ using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
-using System.CommandLine;
-using System.CommandLine.Builder;
-using System.CommandLine.Invocation;
-using System.CommandLine.Parsing;
 
 namespace Dispatch.Cli;
 
@@ -24,71 +20,32 @@ public sealed class DispatchCliApplication(
     {
         if (args.Any(static arg => arg is "--version" or "-v"))
         {
-            Console.WriteLine(DispatchProduct.Version);
+            DispatchConsoleRenderer.RenderVersion(CreateOutputConsole(Console.Out));
             return 0;
         }
 
         if (args.Length == 0)
         {
             return Console.IsInputRedirected
-                ? await BuildParser(cancellationToken).InvokeAsync(["--help"]).ConfigureAwait(false)
+                ? RenderRootHelp()
                 : await RunInteractiveAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        return await BuildParser(cancellationToken).InvokeAsync(args).ConfigureAwait(false);
-    }
-
-    private Parser BuildParser(CancellationToken cancellationToken)
-    {
-        var rootCommand = new RootCommand("Windows-native script orchestration for endpoint administrators.");
-        rootCommand.AddCommand(BuildRunCommand(cancellationToken));
-        rootCommand.AddCommand(BuildDoctorCommand());
-
-        return new CommandLineBuilder(rootCommand)
-            .UseDefaults()
-            .Build();
-    }
-
-    private Command BuildRunCommand(CancellationToken cancellationToken)
-    {
-        var runCommand = new Command("run", "Run a PowerShell script across one or more Windows targets.");
-        runCommand.AddOption(new Option<bool>("--dry-run", "Plan the run and print JSON without touching endpoints."));
-        runCommand.AddOption(new Option<string>("--script", "Path to the PowerShell script to run."));
-        runCommand.AddOption(new Option<string>("--computer-name", "Target name or comma-separated target names."));
-        runCommand.AddOption(new Option<string>("--target-file", "Path to a target file."));
-        runCommand.AddOption(new Option<string>("--transport", "Transport to use: psexec, psrp, or winrm."));
-        runCommand.AddOption(new Option<string>("--expected-exit-code", "Expected exit code or comma-separated exit codes."));
-        runCommand.AddOption(new Option<int?>("--throttle", "Maximum concurrent target executions."));
-        runCommand.AddOption(new Option<bool>("--run-as-system", "Run the remote process as local SYSTEM when supported by the transport."));
-        runCommand.AddOption(new Option<string>("--output-root", "Local root for Dispatch run results."));
-        runCommand.AddOption(new Option<string>("--remote-root", "Remote Dispatch root for prepared scripts and outputs."));
-        runCommand.AddOption(new Option<string>("--artifact-path", "Relative artifact path or comma-separated artifact paths to copy back."));
-        runCommand.AddOption(new Option<bool>("--no-dashboard", "Use append-only stderr progress instead of the interactive live dashboard."));
-        runCommand.AddArgument(new Argument<string[]>("script-args", () => [], "Arguments passed through to the script.")
+        if (IsRootHelpRequest(args))
         {
-            Arity = ArgumentArity.ZeroOrMore
-        });
-        runCommand.Description += Environment.NewLine + Environment.NewLine + PayloadBoundaryHelp;
-        runCommand.TreatUnmatchedTokensAsErrors = false;
-        runCommand.SetHandler(async context =>
-        {
-            var runArgs = RebuildRunArguments(context);
-            context.ExitCode = await RunCommandAsync(runArgs, cancellationToken).ConfigureAwait(false);
-        });
+            return RenderRootHelp();
+        }
 
-        return runCommand;
-    }
-
-    private Command BuildDoctorCommand()
-    {
-        var doctorCommand = new Command("doctor", "Check local Dispatch prerequisites.");
-        doctorCommand.SetHandler(context =>
+        return args[0].ToLowerInvariant() switch
         {
-            var report = doctor.Run();
-            RenderDoctorReport(report);
-            context.ExitCode = report.Succeeded ? 0 : 1;
-        });
-        return doctorCommand;
+            "run" => IsExplicitHelpRequest(args.Skip(1).ToArray())
+                ? RenderRunHelp()
+                : await RunCommandAsync(args[1..], cancellationToken).ConfigureAwait(false),
+            "doctor" => IsExplicitHelpRequest(args.Skip(1).ToArray())
+                ? RenderDoctorHelp()
+                : RunDoctorCommand(),
+            _ => RenderUnknownCommand(args[0])
+        };
     }
 
     private async Task<int> RunCommandAsync(string[] args, CancellationToken cancellationToken)
@@ -100,16 +57,19 @@ public sealed class DispatchCliApplication(
                 out var command,
                 out var error))
         {
-            Console.Error.WriteLine(error);
+            DispatchConsoleRenderer.RenderError(CreateErrorConsole(Console.Error), "Invalid Dispatch Command", error);
             return 1;
         }
 
         try
         {
-            var plan = await planner.CreatePlanAsync(command!.ToRequest(), cancellationToken).ConfigureAwait(false);
+            var plan = await CreatePlanWithStatusAsync(command!.ToRequest(), cancellationToken).ConfigureAwait(false);
             if (command.DryRun)
             {
-                Console.WriteLine(DispatchJson.Serialize(plan));
+                await DispatchConsoleRenderer.RenderPlanningProgressAsync(
+                    CreateOutputConsole(Console.Out),
+                    cancellationToken).ConfigureAwait(false);
+                DispatchConsoleRenderer.RenderDryRunPlan(CreateOutputConsole(Console.Out), plan);
                 return 0;
             }
 
@@ -117,18 +77,17 @@ public sealed class DispatchCliApplication(
                 ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
                 : await executor.ExecuteAsync(
                     plan,
-                    new ConsoleDispatchExecutionObserver(Console.Error),
+                    new SpectreStaticDispatchExecutionObserver(CreateErrorConsole(Console.Error)),
                     cancellationToken).ConfigureAwait(false);
-            Console.WriteLine(DispatchJson.Serialize(result));
-            WriteResultSummary(result);
+            DispatchConsoleRenderer.RenderRunResult(CreateOutputConsole(Console.Out), result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)
         {
-            foreach (var validationError in exception.Errors)
-            {
-                Console.Error.WriteLine($"{validationError.Code}: {validationError.Message}");
-            }
+            var message = string.Join(
+                Environment.NewLine,
+                exception.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
+            DispatchConsoleRenderer.RenderError(CreateErrorConsole(Console.Error), "Dispatch Planning Failed", message);
 
             return 1;
         }
@@ -136,40 +95,41 @@ public sealed class DispatchCliApplication(
 
     private async Task<int> RunInteractiveAsync(CancellationToken cancellationToken)
     {
-        AnsiConsole.MarkupLine($"[bold]Dispatch {Markup.Escape(DispatchProduct.Version)}[/]");
-        AnsiConsole.WriteLine("Windows-native script orchestration for endpoint administrators.");
+        var console = CreateOutputConsole(Console.Out);
+        DispatchConsoleRenderer.RenderInteractiveStart(console);
 
-        var scriptPath = PromptRequired("Script path");
-        var computerNames = PromptRequired("Computer name(s)");
-        var transport = AnsiConsole.Prompt(
+        var scriptPath = PromptRequired(console, "Script path");
+        var computerNames = PromptRequired(console, "Computer name(s)");
+        var transport = console.Prompt(
             new SelectionPrompt<string>()
                 .Title("Transport")
                 .AddChoices(PsExecTransportDescriptor.TransportName, "psrp", "winrm"));
-        var runAsSystem = AnsiConsole.Confirm("Run as local SYSTEM?", defaultValue: false);
-        var dryRun = AnsiConsole.Confirm("Dry run only?", defaultValue: true);
-        var throttle = PromptOptionalInt("Throttle");
-        var expectedExitCodes = PromptOptional("Expected exit code(s)", "0");
-        var artifactPaths = PromptOptional("Artifact path(s)", string.Empty);
-        var outputRoot = PromptOptional("Output root", string.Empty);
-        var remoteRoot = PromptOptional("Remote root", string.Empty);
-        var scriptArgs = PromptOptional("Script arguments", string.Empty);
+        var runAsSystem = console.Confirm("Run as local SYSTEM?", defaultValue: false);
+        var dryRun = console.Confirm("Dry run only?", defaultValue: true);
+        var throttle = PromptOptionalInt(console, "Throttle");
+        var expectedExitCodes = PromptOptional(console, "Expected exit code(s)", "0");
+        var artifactPaths = PromptOptional(console, "Artifact path(s)", string.Empty);
+        var outputRoot = PromptOptional(console, "Output root", string.Empty);
+        var remoteRoot = PromptOptional(console, "Remote root", string.Empty);
+        var scriptArgs = PromptOptional(console, "Script arguments", string.Empty);
 
-        var table = new Table().RoundedBorder();
-        table.AddColumn("Setting");
-        table.AddColumn("Value");
-        table.AddRow("Script", scriptPath);
-        table.AddRow("Targets", computerNames);
-        table.AddRow("Transport", transport);
-        table.AddRow("Run as SYSTEM", runAsSystem ? "yes" : "no");
-        table.AddRow("Dry run", dryRun ? "yes" : "no");
-        table.AddRow("Throttle", throttle?.ToString() ?? "(default)");
-        table.AddRow("Expected exit codes", expectedExitCodes);
-        table.AddRow("Artifacts", string.IsNullOrWhiteSpace(artifactPaths) ? "(default)" : artifactPaths);
-        AnsiConsole.Write(table);
+        DispatchConsoleRenderer.RenderInteractiveReview(
+            console,
+            scriptPath,
+            computerNames,
+            transport,
+            runAsSystem,
+            dryRun,
+            throttle,
+            expectedExitCodes,
+            artifactPaths);
 
-        if (!AnsiConsole.Confirm("Start Dispatch run?", defaultValue: dryRun))
+        if (!console.Confirm("Start Dispatch run?", defaultValue: dryRun))
         {
-            Console.Error.WriteLine("Dispatch run cancelled.");
+            DispatchConsoleRenderer.RenderError(
+                CreateErrorConsole(Console.Error),
+                "Dispatch Run Cancelled",
+                "The interactive run was cancelled before planning or endpoint work started.");
             return 1;
         }
 
@@ -189,22 +149,22 @@ public sealed class DispatchCliApplication(
         return await RunCommandAsync(args, cancellationToken).ConfigureAwait(false);
     }
 
-    private static string PromptRequired(string title) =>
-        AnsiConsole.Prompt(
+    private static string PromptRequired(IAnsiConsole console, string title) =>
+        console.Prompt(
             new TextPrompt<string>(title)
                 .Validate(static value => string.IsNullOrWhiteSpace(value)
                     ? ValidationResult.Error("A value is required.")
                     : ValidationResult.Success()));
 
-    private static string PromptOptional(string title, string defaultValue) =>
-        AnsiConsole.Prompt(
+    private static string PromptOptional(IAnsiConsole console, string title, string defaultValue) =>
+        console.Prompt(
             new TextPrompt<string>(title)
                 .DefaultValue(defaultValue)
                 .AllowEmpty());
 
-    private static int? PromptOptionalInt(string title)
+    private static int? PromptOptionalInt(IAnsiConsole console, string title)
     {
-        var value = PromptOptional(title, string.Empty);
+        var value = PromptOptional(console, title, string.Empty);
         return int.TryParse(value, out var parsed) ? parsed : null;
     }
 
@@ -246,17 +206,6 @@ public sealed class DispatchCliApplication(
         return [.. args];
     }
 
-    private static string[] RebuildRunArguments(InvocationContext context)
-    {
-        var tokens = context.ParseResult.Tokens
-            .Select(static token => token.Value)
-            .ToArray();
-
-        return tokens.Length > 0 && tokens[0].Equals("run", StringComparison.OrdinalIgnoreCase)
-            ? tokens[1..]
-            : tokens;
-    }
-
     private static void AddOptionalPair(List<string> args, string option, string value)
     {
         if (!string.IsNullOrWhiteSpace(value))
@@ -274,12 +223,6 @@ public sealed class DispatchCliApplication(
 
         args.Add("--");
         args.AddRange(scriptArgs.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-    }
-
-    private static void WriteResultSummary(DispatchRunResult result)
-    {
-        Console.Error.WriteLine(
-            $"Dispatch run {result.RunId}: {result.SuccessCount}/{result.TargetCount} succeeded, {result.FailedCount} failed, {result.TimedOutCount} timed out, {result.CancelledCount} cancelled. Results: {result.ResultPath}");
     }
 
     private async Task<DispatchRunResult> RunWithLiveDashboardAsync(
@@ -330,13 +273,33 @@ public sealed class DispatchCliApplication(
         }
         catch (IOException exception) when (displayMode == DispatchRunDisplayMode.Auto)
         {
-            Console.Error.WriteLine(
-                $"Dispatch live dashboard unavailable; falling back to append-only status. {exception.Message}");
+            DispatchConsoleRenderer.RenderError(
+                CreateErrorConsole(Console.Error),
+                "Live Dashboard Unavailable",
+                $"Dispatch is using static Spectre progress cards for this run. {exception.Message}");
             return await executor.ExecuteAsync(
                 plan,
-                new ConsoleDispatchExecutionObserver(Console.Error),
+                new SpectreStaticDispatchExecutionObserver(CreateErrorConsole(Console.Error)),
                 cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async Task<ExecutionPlan> CreatePlanWithStatusAsync(
+        DispatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            return await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await CreateOutputConsole(Console.Out)
+            .Status()
+            .Spinner(Spinner.Known.Dots)
+            .SpinnerStyle(Style.Parse("steelblue1"))
+            .StartAsync("Building Dispatch execution plan", async _ =>
+                await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false))
+            .ConfigureAwait(false);
     }
 
     private bool ShouldUseLiveDashboard(bool noDashboard) =>
@@ -377,54 +340,57 @@ public sealed class DispatchCliApplication(
             Interactive = InteractionSupport.Yes
         });
 
-    private static void RenderDoctorReport(DispatchDoctorReport report)
+    private static IAnsiConsole CreateOutputConsole(TextWriter writer) =>
+        AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new DispatchAnsiConsoleOutput(writer, !Console.IsOutputRedirected),
+            Interactive = InteractionSupport.Detect
+        });
+
+    private static IAnsiConsole CreateErrorConsole(TextWriter writer) =>
+        AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new DispatchAnsiConsoleOutput(writer, !Console.IsErrorRedirected),
+            Interactive = InteractionSupport.Detect
+        });
+
+    private static bool IsRootHelpRequest(IReadOnlyList<string> args) =>
+        args.Count == 1 && args[0] is "--help" or "-h" or "-?";
+
+    private static bool IsExplicitHelpRequest(IReadOnlyList<string> args) =>
+        args.Any(static arg => arg is "--help" or "-h" or "-?");
+
+    private static int RenderRootHelp()
     {
-        if (Console.IsOutputRedirected)
-        {
-            Console.WriteLine(report.Succeeded ? "Dispatch doctor: passed" : "Dispatch doctor: failed");
-            foreach (var check in report.Checks)
-            {
-                Console.WriteLine($"{FormatStatus(check.Status)} {check.Name}: {check.Message}");
-                if (!string.IsNullOrWhiteSpace(check.Detail))
-                {
-                    Console.WriteLine($"  {check.Detail}");
-                }
-            }
-
-            return;
-        }
-
-        var table = new Table().RoundedBorder();
-        table.AddColumn("Status");
-        table.AddColumn("Check");
-        table.AddColumn("Result");
-        foreach (var check in report.Checks)
-        {
-            table.AddRow(
-                FormatStatus(check.Status),
-                Markup.Escape(check.Name),
-                Markup.Escape(string.IsNullOrWhiteSpace(check.Detail)
-                    ? check.Message
-                    : $"{check.Message} {check.Detail}"));
-        }
-
-        AnsiConsole.Write(table);
-        AnsiConsole.MarkupLine(report.Succeeded ? "[green]Dispatch doctor passed.[/]" : "[red]Dispatch doctor failed.[/]");
+        DispatchConsoleRenderer.RenderRootHelp(CreateOutputConsole(Console.Out));
+        return 0;
     }
 
-    private static string FormatStatus(DispatchDoctorStatus status) =>
-        status switch
-        {
-            DispatchDoctorStatus.Pass => "PASS",
-            DispatchDoctorStatus.Warning => "WARN",
-            DispatchDoctorStatus.Fail => "FAIL",
-            _ => status.ToString().ToUpperInvariant()
-        };
+    private static int RenderRunHelp()
+    {
+        DispatchConsoleRenderer.RenderRunHelp(CreateOutputConsole(Console.Out));
+        return 0;
+    }
 
-    private const string PayloadBoundaryHelp = """
-Payload boundary:
-  Dispatch prepares only the selected script. Scripts own Blob, HTTPS, SMB, Azure Files,
-  MSI, ZIP, and other external payload retrieval through ordinary non-secret script args.
-  Do not pass credentials or SAS tokens on the command line.
-""";
+    private static int RenderDoctorHelp()
+    {
+        DispatchConsoleRenderer.RenderDoctorHelp(CreateOutputConsole(Console.Out));
+        return 0;
+    }
+
+    private int RunDoctorCommand()
+    {
+        var report = doctor.Run();
+        DispatchConsoleRenderer.RenderDoctorReport(CreateOutputConsole(Console.Out), report);
+        return report.Succeeded ? 0 : 1;
+    }
+
+    private static int RenderUnknownCommand(string command)
+    {
+        DispatchConsoleRenderer.RenderError(
+            CreateErrorConsole(Console.Error),
+            "Unknown Dispatch Command",
+            $"'{command}' is not a Dispatch command.");
+        return 1;
+    }
 }

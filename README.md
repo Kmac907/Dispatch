@@ -39,15 +39,17 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, the CLI product surface, and local operator diagnostics. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, a Spectre.Console command service, and local operator diagnostics. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Operator Diagnostics
 
-Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It reports Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
+Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It renders a Spectre.Console diagnostic report for Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
 
 ## Run Output
 
-Real interactive `dispatch run` executions render a Spectre.Console live dashboard on stderr with run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, recent activity, and failure summaries. When interactive rendering is unavailable, output is redirected, or `--no-dashboard` is passed, Dispatch falls back to append-only stderr status lines. The final result JSON stays on stdout in both modes, so automation should consume stdout for structured results and treat stderr as operator-facing progress and summary output.
+Every command-service path is operator-facing Spectre.Console UI: root help, command help, version, validation errors, dry-run plans, doctor reports, interactive setup, progress, live dashboard, static fallback progress, and final run summaries. Dispatch does not use raw JSON, default parser help, or plain status lines as the console UX.
+
+Real `dispatch run` executions render a Spectre.Console live dashboard with run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, charts, recent activity, and failure summaries. When live rendering is unavailable, output is redirected, or `--no-dashboard` is passed, Dispatch uses static Spectre.Console progress cards instead of line-only status. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
 
 ## Script-Owned Payloads
 
