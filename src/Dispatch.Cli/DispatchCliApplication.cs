@@ -75,10 +75,7 @@ public sealed class DispatchCliApplication(
 
             var result = ShouldUseLiveDashboard(command.NoDashboard)
                 ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
-                : await executor.ExecuteAsync(
-                    plan,
-                    new SpectreStaticDispatchExecutionObserver(CreateErrorConsole(Console.Error)),
-                    cancellationToken).ConfigureAwait(false);
+                : await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
             DispatchConsoleRenderer.RenderRunResult(CreateOutputConsole(Console.Out), result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
@@ -96,7 +93,44 @@ public sealed class DispatchCliApplication(
     private async Task<int> RunInteractiveAsync(CancellationToken cancellationToken)
     {
         var console = CreateOutputConsole(Console.Out);
-        DispatchConsoleRenderer.RenderInteractiveStart(console);
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            DispatchConsoleRenderer.RenderInteractiveStart(console);
+            var action = console.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("[steelblue1]Command Center[/]")
+                    .PageSize(4)
+                    .MoreChoicesText("[grey]Move to select an action[/]")
+                    .AddChoices(
+                        "Start script run",
+                        "Run doctor diagnostics",
+                        "View command help",
+                        "Exit"));
+
+            switch (action)
+            {
+                case "Start script run":
+                    return await RunInteractiveJobAsync(console, cancellationToken).ConfigureAwait(false);
+                case "Run doctor diagnostics":
+                    DispatchConsoleRenderer.RenderDoctorReport(console, doctor.Run());
+                    WaitForMenuReturn(console);
+                    break;
+                case "View command help":
+                    DispatchConsoleRenderer.RenderRunHelp(console);
+                    DispatchConsoleRenderer.RenderDoctorHelp(console);
+                    WaitForMenuReturn(console);
+                    break;
+                case "Exit":
+                    return 0;
+            }
+        }
+
+        return 1;
+    }
+
+    private async Task<int> RunInteractiveJobAsync(IAnsiConsole console, CancellationToken cancellationToken)
+    {
+        DispatchConsoleRenderer.RenderRunSetupStart(console);
 
         var scriptPath = PromptRequired(console, "Script path");
         var computerNames = PromptRequired(console, "Computer name(s)");
@@ -148,6 +182,11 @@ public sealed class DispatchCliApplication(
 
         return await RunCommandAsync(args, cancellationToken).ConfigureAwait(false);
     }
+
+    private static void WaitForMenuReturn(IAnsiConsole console) =>
+        console.Prompt(
+            new TextPrompt<string>("[grey]Press Enter to return to the command center[/]")
+                .AllowEmpty());
 
     private static string PromptRequired(IAnsiConsole console, string title) =>
         console.Prompt(
@@ -276,12 +315,24 @@ public sealed class DispatchCliApplication(
             DispatchConsoleRenderer.RenderError(
                 CreateErrorConsole(Console.Error),
                 "Live Dashboard Unavailable",
-                $"Dispatch is using static Spectre progress cards for this run. {exception.Message}");
-            return await executor.ExecuteAsync(
-                plan,
-                new SpectreStaticDispatchExecutionObserver(CreateErrorConsole(Console.Error)),
-                cancellationToken).ConfigureAwait(false);
+                $"Dispatch is using compact live progress for this run. {exception.Message}");
+            return await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private async Task<DispatchRunResult> RunWithCompactProgressAsync(
+        ExecutionPlan plan,
+        CancellationToken cancellationToken)
+    {
+        if (Console.IsErrorRedirected && statusConsole is null)
+        {
+            return await executor.ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        var console = statusConsole ?? CreateStatusConsole(Console.Error);
+        var progress = new SpectreCompactDispatchProgress(plan, executor, console);
+        return await progress.ExecuteAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ExecutionPlan> CreatePlanWithStatusAsync(

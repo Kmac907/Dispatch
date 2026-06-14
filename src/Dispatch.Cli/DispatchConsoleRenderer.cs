@@ -42,7 +42,7 @@ internal static class DispatchConsoleRenderer
         options.AddRow("--target-file", "Target file path.");
         options.AddRow("--transport", "Transport: psexec, psrp, or winrm.");
         options.AddRow("--dry-run", "Render the execution plan without endpoint work.");
-        options.AddRow("--no-dashboard", "Use static Spectre progress cards instead of the live dashboard.");
+        options.AddRow("--no-dashboard", "Use compact live progress bars instead of the full live dashboard.");
         options.AddRow("--expected-exit-code", "Expected code or comma-separated codes.");
         options.AddRow("--throttle", "Maximum concurrent target executions.");
         options.AddRow("--artifact-path", "Relative artifact path or comma-separated paths.");
@@ -73,12 +73,25 @@ internal static class DispatchConsoleRenderer
     public static void RenderInteractiveStart(IAnsiConsole console)
     {
         console.Write(CreateShell(
-            "[bold steelblue1]Dispatch Interactive Console[/]",
+            "[bold steelblue1]Dispatch Interactive Command Center[/]",
             new Rows(
-                new Rule("[grey]Guided Run Setup[/]").RuleStyle("grey"),
+                new Rule("[grey]Command Center[/]").RuleStyle("grey"),
                 CreateHeroGrid(),
+                CreateCommandCenterLayout(),
+                new Panel(new Markup("[grey]Use the menu to start a run, check diagnostics, review help, or exit.[/]"))
+                    .Header("[grey] Navigation [/]")
+                    .RoundedBorder()
+                    .BorderColor(Color.Grey))));
+    }
+
+    public static void RenderRunSetupStart(IAnsiConsole console)
+    {
+        console.Write(CreateShell(
+            "[bold steelblue1]Dispatch Run Setup[/]",
+            new Rows(
+                new Rule("[grey]Request Builder[/]").RuleStyle("grey"),
                 new Panel(new Markup("[grey]The prompts below build the same Dispatch request used by automation commands.[/]"))
-                    .Header("[grey] Request Builder [/]")
+                    .Header("[grey] Guided Inputs [/]")
                     .RoundedBorder()
                     .BorderColor(Color.Grey))));
     }
@@ -250,6 +263,36 @@ internal static class DispatchConsoleRenderer
         table.AddRow("dispatch --version", "Show installed version.");
         return table;
     }
+
+    private static IRenderable CreateCommandCenterLayout()
+    {
+        var grid = new Grid().Expand();
+        grid.AddColumn();
+        grid.AddColumn();
+
+        grid.AddRow(
+            CreateMenuPanel(
+                "[steelblue1]Start Script Run[/]",
+                "Build, review, dry-run, or execute a PowerShell script job."),
+            CreateMenuPanel(
+                "[green]Doctor Diagnostics[/]",
+                "Validate local prerequisites before endpoint execution."));
+        grid.AddRow(
+            CreateMenuPanel(
+                "[yellow]Command Help[/]",
+                "Review command syntax, required options, and operator guardrails."),
+            CreateMenuPanel(
+                "[grey]Exit[/]",
+                "Leave the command center without starting endpoint work."));
+
+        return grid;
+    }
+
+    private static IRenderable CreateMenuPanel(string title, string detail) =>
+        new Panel(new Markup(Markup.Escape(detail)))
+            .Header($"[bold] {title} [/]")
+            .RoundedBorder()
+            .BorderColor(Color.Grey);
 
     private static IRenderable CreateCapabilityBreakdown() =>
         new BreakdownChart()

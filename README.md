@@ -47,9 +47,11 @@ Run `dispatch doctor` to check local prerequisites before executing endpoint job
 
 ## Run Output
 
-Every command-service path is operator-facing Spectre.Console UI: root help, command help, version, validation errors, dry-run plans, doctor reports, interactive setup, progress, live dashboard, static fallback progress, and final run summaries. Dispatch does not use raw JSON, default parser help, or plain status lines as the console UX.
+Every command-service path is operator-facing Spectre.Console UI: root help, command help, version, validation errors, dry-run plans, doctor reports, interactive setup, progress, live dashboard, compact live progress, and final run summaries. Dispatch does not use raw JSON, default parser help, or plain status lines as the console UX.
 
-Real `dispatch run` executions render a Spectre.Console live dashboard with run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, charts, recent activity, and failure summaries. When live rendering is unavailable, output is redirected, or `--no-dashboard` is passed, Dispatch uses static Spectre.Console progress cards instead of line-only status. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
+Running `dispatch` with no arguments opens the interactive command center: a menu-driven console surface for starting a run, checking doctor diagnostics, viewing command help, or exiting. Run setup uses guided prompts, review panels, and confirmation before endpoint work starts.
+
+Real `dispatch run` executions render a Spectre.Console live dashboard with run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, status symbols, charts, recent activity, and failure summaries. When the full dashboard is disabled with `--no-dashboard`, Dispatch uses compact live progress bars and status columns in terminal sessions instead of repeatedly printing static progress panels. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
 
 ## Script-Owned Payloads
 

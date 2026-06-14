@@ -191,7 +191,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task RunWritesSpectreProgressAndFinalSummary()
+    public async Task RedirectedCompactModeDoesNotReprintProgressPanels()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
@@ -217,9 +217,9 @@ public sealed class DispatchCliApplicationTests
             Assert.Contains("Dispatch Run Complete", output);
             Assert.Contains("run-test", output);
             Assert.Contains("PC001", output);
-            Assert.Contains("Target Progress", error);
-            Assert.Contains("Probing", error);
-            Assert.Contains("Succeeded", error);
+            Assert.DoesNotContain("Target Progress", error);
+            Assert.DoesNotContain("Probing", error);
+            Assert.DoesNotContain("Succeeded", error);
             Assert.DoesNotContain("\"runId\": \"run-test\"", output);
             Assert.DoesNotContain("PC001: probing", error);
         }
@@ -230,13 +230,23 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task NoDashboardForcesStaticSpectreProgress()
+    public async Task NoDashboardUsesCompactLiveProgressWhenConsoleIsAvailable()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         var planner = new CapturingPlanner();
         var executor = new SucceedingExecutor();
-        var application = CreateApplication(planner, executor: executor, displayMode: DispatchRunDisplayMode.Auto);
+        using var progressWriter = new StringWriter();
+        var statusConsole = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new DispatchAnsiConsoleOutput(progressWriter, isTerminal: true),
+            Interactive = InteractionSupport.Yes
+        });
+        var application = CreateApplication(
+            planner,
+            executor: executor,
+            displayMode: DispatchRunDisplayMode.Auto,
+            statusConsole: statusConsole);
 
         try
         {
@@ -255,16 +265,38 @@ public sealed class DispatchCliApplicationTests
 
             Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
             Assert.Contains("Dispatch Run Complete", output);
-            Assert.Contains("Target Progress", error);
-            Assert.Contains("Probing", error);
-            Assert.Contains("Succeeded", error);
+            var progress = progressWriter.ToString();
+            Assert.Contains("PC001", progress);
+            Assert.Contains("Complete", progress);
+            Assert.Contains("100%", progress);
             Assert.DoesNotContain("\"runId\": \"run-test\"", output);
-            Assert.DoesNotContain("PC001: probing", error);
+            Assert.DoesNotContain("Target Progress", progress);
+            Assert.DoesNotContain("PC001: probing", progress);
         }
         finally
         {
             File.Delete(scriptPath);
         }
+    }
+
+    [Fact]
+    public void CommandCenterRendererShowsPersistentMenuOptions()
+    {
+        using var writer = new StringWriter();
+        var console = AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
+            Interactive = InteractionSupport.No
+        });
+
+        DispatchConsoleRenderer.RenderInteractiveStart(console);
+        var output = writer.ToString();
+
+        Assert.Contains("Dispatch Interactive Command Center", output);
+        Assert.Contains("Start Script Run", output);
+        Assert.Contains("Doctor Diagnostics", output);
+        Assert.Contains("Command Help", output);
+        Assert.Contains("Exit", output);
     }
 
     [Fact]
@@ -380,13 +412,15 @@ public sealed class DispatchCliApplicationTests
         CapturingPlanner planner,
         IDispatchDoctor? doctor = null,
         IDispatchExecutor? executor = null,
-        DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto) =>
+        DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
+        IAnsiConsole? statusConsole = null) =>
         new(
             Options.Create(new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
             executor ?? new ThrowingExecutor(),
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
-            displayMode);
+            displayMode,
+            statusConsole);
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {

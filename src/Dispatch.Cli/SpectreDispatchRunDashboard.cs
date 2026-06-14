@@ -172,15 +172,17 @@ internal sealed class SpectreDispatchRunDashboard
             .BorderColor(Color.Grey)
             .Expand();
         table.AddColumn("Target");
+        table.AddColumn("Status");
         table.AddColumn("Phase");
         table.AddColumn("Exit");
         table.AddColumn("Duration");
-        table.AddColumn("Status");
+        table.AddColumn("Detail");
 
         foreach (var target in targets.Values.OrderBy(static target => target.Name, StringComparer.OrdinalIgnoreCase))
         {
             table.AddRow(
                 Markup.Escape(target.Name),
+                FormatStatusSymbol(target.State),
                 FormatState(target.State),
                 target.ExitCode?.ToString() ?? "-",
                 target.DurationMs.HasValue ? FormatDuration(TimeSpan.FromMilliseconds(target.DurationMs.Value)) : "-",
@@ -255,7 +257,7 @@ internal sealed class SpectreDispatchRunDashboard
             : string.Empty;
 
         recentEvents.Enqueue(
-            $"[grey]{progress.Timestamp:HH:mm:ss}[/] {Markup.Escape(progress.Target)} [{color}]{Markup.Escape(FormatStateText(progress.State))}[/]{Markup.Escape(message)}");
+            $"[grey]{progress.Timestamp:HH:mm:ss}[/] {FormatStatusSymbol(progress.State)} {Markup.Escape(progress.Target)} [{color}]{Markup.Escape(FormatStateText(progress.State))}[/]{Markup.Escape(message)}");
         while (recentEvents.Count > RecentEventLimit)
         {
             recentEvents.Dequeue();
@@ -288,6 +290,17 @@ internal sealed class SpectreDispatchRunDashboard
             TargetExecutionState.Executing => "[steelblue1]Running script[/]",
             TargetExecutionState.CollectingArtifacts => "[steelblue1]Collecting artifacts[/]",
             _ => Markup.Escape(target.State.ToString())
+        };
+
+    private static string FormatStatusSymbol(TargetExecutionState state) =>
+        state switch
+        {
+            TargetExecutionState.Succeeded => "[green]✓[/]",
+            TargetExecutionState.Failed => "[red]×[/]",
+            TargetExecutionState.TimedOut => "[yellow]![/]",
+            TargetExecutionState.Cancelled => "[grey]−[/]",
+            TargetExecutionState.Pending => "[grey]○[/]",
+            _ => "[steelblue1]●[/]"
         };
 
     private static string FormatState(TargetExecutionState state)

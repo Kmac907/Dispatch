@@ -28,7 +28,7 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 
 - Dry-run planning output for all local inputs.
 - `dispatch doctor` / `Test-Dispatch` prerequisite checks.
-- Enterprise-grade Spectre.Console command service UI across every CLI path, including help, errors, dry run, doctor, interactive setup, static fallback progress, live progress, and final run summaries.
+- Enterprise-grade Spectre.Console command service UI across every CLI path, including help, errors, dry run, doctor, interactive setup, a live interactive command center, live progress/status display, and final run summaries.
 - Basic artifact copy-back rules.
 - Release ZIP packaging as a convenience artifact.
 
@@ -79,7 +79,7 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 - Packaging target: single-file, self-contained Windows executable.
 - CLI parser/routing: internal command parser backed by the shared request model; default parser help must not be exposed as the user-facing console UX.
 - Console UX: `Spectre.Console` for all command-service rendering.
-- Required console widgets: `Panel`, `Table`, `Grid`, `Rule`, `BarChart`, `BreakdownChart`, `Progress`, `Status`, and `LiveDisplay` where appropriate to the command path.
+- Required console widgets: `Panel`, `Table`, `Grid`, `Rule`, `BarChart`, `BreakdownChart`, `Progress`, `Status`, `LiveDisplay`, `SelectionPrompt`, `TextPrompt`, and `ConfirmationPrompt` where appropriate to the command path.
 - Application host: `Microsoft.Extensions.Hosting`.
 - Configuration: `Microsoft.Extensions.Configuration.Json`.
 - Logging: `Microsoft.Extensions.Logging.Console` in the CLI and `Microsoft.Extensions.Logging.Abstractions` in core libraries.
@@ -1026,15 +1026,18 @@ Provide both automation and interactive command surfaces over the same core requ
 Scope:
 - Implement `dispatch run`.
 - Implement `dispatch doctor`.
-- Run active interactive CLI when no arguments are supplied.
-- Render the entire command service through Spectre.Console: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, static fallback progress, live progress, and final run summaries.
+- Run a live interactive command center when no arguments are supplied.
+- The command center must provide a persistent operator menu for run setup, doctor diagnostics, command help, and exit.
+- The command center must use live-updated Spectre.Console regions for dashboards, progress bars, and status summaries instead of repeatedly printing static panels during terminal runs.
+- Render the entire command service through Spectre.Console: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact live progress, full live dashboard progress, and final run summaries.
 - Do not emit raw JSON, default parser help, or plain status lines as the console UX for any command path.
 - Use actual Spectre.Console widgets intentionally, including panels, tables, grids, rules, bar charts, breakdown charts, progress bars, status spinners, live display, prompts, confirmations, and styled markup.
 - For real runs, render an enterprise-grade live run dashboard using Spectre.Console. The dashboard should be useful for repeated operator use, not merely decorative.
-- The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, and a concise recent-event/failure area.
+- The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, status symbols, and a concise recent-event/failure area.
 - The live dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
+- Compact execution mode must use live progress bars and status columns for terminal runs; redirected/non-interactive execution must avoid repeated static progress cards and emit only durable files plus final Spectre summaries.
 - Dry-run and final run summaries must render as Spectre.Console operator views; durable JSON/CSV remains in the run folder for automation and module wrappers.
-- Fall back to static Spectre.Console progress cards when live rendering is unavailable, redirected, unsupported, or explicitly disabled.
+- Fall back to final Spectre.Console summaries when live rendering is unavailable, redirected, unsupported, or explicitly disabled.
 
 Non-goals:
 - No GUI.
@@ -1046,13 +1049,14 @@ Dependencies:
 - 5.1.
 
 Definition of done:
-- `dispatch` guides the user through script, targets, transport, run context, throttle, dry-run, and confirmation.
+- `dispatch` opens a live interactive command center with menus for run setup, diagnostics, help, and exit.
+- The run setup menu guides the user through script, targets, transport, run context, throttle, dry-run, and confirmation.
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
 - Every command path renders through the Dispatch Spectre.Console renderer rather than default parser output, raw JSON, or plain text status lines.
 - Dry-run output renders a Spectre.Console execution-plan view and still records durable plan/result data through the shared model when appropriate.
-- Real runs render either the live Spectre.Console dashboard or static Spectre.Console progress cards with per-target phase visibility, aggregate counters, elapsed time, charts, result-file paths, and failure summaries.
-- Tests cover help, errors, doctor, dry-run, static fallback progress, live dashboard rendering, and final summaries as Spectre-rendered command-service output.
+- Real terminal runs render either the full live Spectre.Console dashboard or compact live Spectre.Console progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, charts, result-file paths, and failure summaries.
+- Tests cover help, errors, doctor, dry-run, compact live progress rendering, live dashboard rendering, command-center menu surfaces, and final summaries as Spectre-rendered command-service output.
 
 #### 6.1 Operator Diagnostics
 
