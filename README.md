@@ -39,19 +39,19 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, a Spectre.Console command service, and local operator diagnostics. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, a Terminal.Gui command service, and local operator diagnostics. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Operator Diagnostics
 
-Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It renders a Spectre.Console diagnostic report for Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
+Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It renders a Terminal.Gui diagnostic report for Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
 
 ## Run Output
 
-Every command-service path is operator-facing Spectre.Console UI: root help, command help, version, validation errors, dry-run plans, doctor reports, interactive setup, progress, live dashboard, compact live progress, and final run summaries. Dispatch does not use raw JSON, default parser help, or plain status lines as the console UX.
+Every command-service path is operator-facing Terminal.Gui UI: root help, command help, version, validation errors, dry-run plans, doctor reports, interactive setup, progress, retained dashboard, compact progress, and final run summaries. Dispatch does not use raw JSON, default parser help, or plain status lines as the console UX.
 
-Running `dispatch` with no arguments opens the interactive command center as a Spectre.Console `LiveDisplay` surface. It is not a chain of prompts: menu navigation, doctor diagnostics, command help, and run setup stay inside one live in-place console app. Run setup uses editable fields, keyboard navigation, and `Ctrl+R` to launch the shared Dispatch run path.
+Running `dispatch` with no arguments opens the interactive command center as a Terminal.Gui retained terminal app. It is not a chain of prompts: menu navigation, doctor diagnostics, command help, and run setup stay inside one in-place console application with menu/status bars, windows, list views, form rows, progress bars, keyboard navigation, and `Ctrl+R` to launch the shared Dispatch run path.
 
-Spectre.Console live primitives have separate roles. `LiveDisplay` owns the command center and full run dashboard. `Status` owns indeterminate prerequisite work. `Progress` owns dry-run planning progress and measurable per-target execution progress when the full dashboard is disabled with `--no-dashboard`. Dry-run renders visible progress bars before the execution-plan view; non-live or redirected sessions get one designed progress snapshot instead of silently dropping progress. Real `dispatch run` executions render run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, status symbols, charts, recent activity, and failure summaries. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
+Terminal.Gui view roles are explicit. The application shell owns command-center navigation. Menu and status bars own global actions. Windows/frames own dashboard sections. List views own target, plan, and result rows. Progress bars own dry-run and per-target execution progress. Dry-run renders visible progress before the execution-plan view; non-live or redirected sessions get one designed Terminal.Gui-compatible snapshot instead of repeated output. Real `dispatch run` executions render run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, status symbols, recent activity, and failure summaries. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
 
 ## Script-Owned Payloads
 

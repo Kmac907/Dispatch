@@ -4,7 +4,6 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Options;
-using Spectre.Console;
 
 namespace Dispatch.Cli.Tests;
 
@@ -241,16 +240,11 @@ public sealed class DispatchCliApplicationTests
         var planner = new CapturingPlanner();
         var executor = new SucceedingExecutor();
         using var progressWriter = new StringWriter();
-        var statusConsole = AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new DispatchAnsiConsoleOutput(progressWriter, isTerminal: true),
-            Interactive = InteractionSupport.Yes
-        });
         var application = CreateApplication(
             planner,
             executor: executor,
             displayMode: DispatchRunDisplayMode.Auto,
-            statusConsole: statusConsole);
+            statusWriter: progressWriter);
 
         try
         {
@@ -286,19 +280,11 @@ public sealed class DispatchCliApplicationTests
     [Fact]
     public void CommandCenterRendererShowsPersistentLiveSurfaceOptions()
     {
-        using var writer = new StringWriter();
-        var console = AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
-            Interactive = InteractionSupport.No
-        });
-        var commandCenter = new SpectreDispatchCommandCenter(
-            console,
+        var commandCenter = new TerminalGuiDispatchCommandCenter(
             new StaticDoctor(new DispatchDoctorReport([])),
             static () => throw new InvalidOperationException("Render test must not read keys."));
 
-        console.Write(commandCenter.Render());
-        var output = writer.ToString();
+        var output = commandCenter.RenderSnapshot();
 
         Assert.Contains("Dispatch Live Command Center", output);
         Assert.Contains("Start script run", output);
@@ -312,14 +298,7 @@ public sealed class DispatchCliApplicationTests
     [Fact]
     public void CommandCenterKeyNavigationBuildsRunArguments()
     {
-        using var writer = new StringWriter();
-        var console = AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
-            Interactive = InteractionSupport.No
-        });
-        var commandCenter = new SpectreDispatchCommandCenter(
-            console,
+        var commandCenter = new TerminalGuiDispatchCommandCenter(
             new StaticDoctor(new DispatchDoctorReport([])),
             static () => throw new InvalidOperationException("State-machine test must not read keys."));
 
@@ -342,8 +321,7 @@ public sealed class DispatchCliApplicationTests
         result = commandCenter.HandleKey(CreateKey(ConsoleKey.R, control: true));
         Assert.NotNull(result);
 
-        console.Write(commandCenter.Render());
-        var output = writer.ToString();
+        var output = commandCenter.RenderSnapshot();
 
         Assert.Equal(CommandCenterExitKind.StartRun, result.Kind);
         Assert.Contains("--dry-run", result.RunArguments);
@@ -384,7 +362,7 @@ public sealed class DispatchCliApplicationTests
             Assert.True(exitCode == 0, $"Dry-run planning failed. {error}");
 
             var plan = Assert.IsType<ExecutionPlan>(planner.LastPlan);
-            var dashboard = new SpectreDispatchRunDashboard(plan, DateTimeOffset.UnixEpoch);
+            var dashboard = new TerminalGuiDispatchRunDashboard(plan, DateTimeOffset.UnixEpoch);
             dashboard.Update(new DispatchExecutionProgress(
                 plan.RunId,
                 "PC001",
@@ -398,15 +376,7 @@ public sealed class DispatchCliApplicationTests
                 FailureCategory.ExecutionFailed,
                 "Installer returned 1603."));
 
-            using var writer = new StringWriter();
-            var console = AnsiConsole.Create(new AnsiConsoleSettings
-            {
-                Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
-                Interactive = InteractionSupport.No
-            });
-
-            console.Write(dashboard.Render());
-            var output = writer.ToString();
+            var output = dashboard.RenderSnapshot();
 
             Assert.Contains("Dispatch Run", output);
             Assert.Contains("Run ID", output);
@@ -426,7 +396,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task RunHelpUsesDispatchSpectreHelp()
+    public async Task RunHelpUsesDispatchTerminalGuiHelp()
     {
         var application = CreateApplication(new CapturingPlanner());
 
@@ -440,7 +410,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task InvalidCommandUsesDispatchSpectreError()
+    public async Task InvalidCommandUsesDispatchTerminalGuiError()
     {
         var application = CreateApplication(new CapturingPlanner());
 
@@ -452,7 +422,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task RunValidationFailureUsesDispatchSpectreError()
+    public async Task RunValidationFailureUsesDispatchTerminalGuiError()
     {
         var application = CreateApplication(new CapturingPlanner());
 
@@ -471,14 +441,14 @@ public sealed class DispatchCliApplicationTests
         IDispatchDoctor? doctor = null,
         IDispatchExecutor? executor = null,
         DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
-        IAnsiConsole? statusConsole = null) =>
+        TextWriter? statusWriter = null) =>
         new(
             Options.Create(new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
             executor ?? new ThrowingExecutor(),
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
             displayMode,
-            statusConsole);
+            statusWriter);
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {

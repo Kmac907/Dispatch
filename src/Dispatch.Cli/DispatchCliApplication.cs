@@ -4,7 +4,7 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
 using Microsoft.Extensions.Options;
-using Spectre.Console;
+using Terminal.Gui;
 
 namespace Dispatch.Cli;
 
@@ -14,13 +14,13 @@ public sealed class DispatchCliApplication(
     IDispatchExecutor executor,
     IDispatchDoctor doctor,
     DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
-    IAnsiConsole? statusConsole = null)
+    TextWriter? statusWriter = null)
 {
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
         if (args.Any(static arg => arg is "--version" or "-v"))
         {
-            DispatchConsoleRenderer.RenderVersion(CreateOutputConsole(Console.Out));
+            TerminalGuiConsoleRenderer.RenderVersion(Console.Out);
             return 0;
         }
 
@@ -57,7 +57,7 @@ public sealed class DispatchCliApplication(
                 out var command,
                 out var error))
         {
-            DispatchConsoleRenderer.RenderError(CreateErrorConsole(Console.Error), "Invalid Dispatch Command", error);
+            TerminalGuiConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error);
             return 1;
         }
 
@@ -67,7 +67,7 @@ public sealed class DispatchCliApplication(
             if (command.DryRun)
             {
                 var dryRunPlan = await CreatePlanWithDryRunProgressAsync(request, cancellationToken).ConfigureAwait(false);
-                DispatchConsoleRenderer.RenderDryRunPlan(CreateOutputConsole(Console.Out), dryRunPlan);
+                TerminalGuiConsoleRenderer.RenderDryRunPlan(Console.Out, dryRunPlan);
                 return 0;
             }
 
@@ -75,7 +75,7 @@ public sealed class DispatchCliApplication(
             var result = ShouldUseLiveDashboard(command.NoDashboard)
                 ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
                 : await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
-            DispatchConsoleRenderer.RenderRunResult(CreateOutputConsole(Console.Out), result);
+            TerminalGuiConsoleRenderer.RenderRunResult(Console.Out, result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)
@@ -83,7 +83,7 @@ public sealed class DispatchCliApplication(
             var message = string.Join(
                 Environment.NewLine,
                 exception.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
-            DispatchConsoleRenderer.RenderError(CreateErrorConsole(Console.Error), "Dispatch Planning Failed", message);
+            TerminalGuiConsoleRenderer.RenderError(Console.Error, "Dispatch Planning Failed", message);
 
             return 1;
         }
@@ -91,9 +91,7 @@ public sealed class DispatchCliApplication(
 
     private async Task<int> RunInteractiveAsync(CancellationToken cancellationToken)
     {
-        var console = CreateOutputConsole(Console.Out);
-        var commandCenter = new SpectreDispatchCommandCenter(
-            console,
+        var commandCenter = new TerminalGuiDispatchCommandCenter(
             doctor,
             static () => Console.ReadKey(intercept: true));
         var result = await commandCenter.RunAsync(cancellationToken).ConfigureAwait(false);
@@ -110,54 +108,69 @@ public sealed class DispatchCliApplication(
         ExecutionPlan plan,
         CancellationToken cancellationToken)
     {
-        var dashboard = new SpectreDispatchRunDashboard(plan, DateTimeOffset.UtcNow);
-        var console = statusConsole ?? CreateStatusConsole(Console.Error);
+        var dashboard = new TerminalGuiDispatchRunDashboard(plan, DateTimeOffset.UtcNow);
+        var writer = statusWriter ?? Console.Error;
 
         try
         {
-            return await console
-                .Live(dashboard.Render())
-                .AutoClear(false)
-                .Overflow(VerticalOverflow.Ellipsis)
-                .Cropping(VerticalOverflowCropping.Bottom)
-                .StartAsync(async context =>
+            if (Console.IsErrorRedirected)
+            {
+                var redirectedResult = await executor.ExecuteAsync(
+                        plan,
+                        new TerminalGuiDispatchExecutionObserver(dashboard, static () => { }),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                dashboard.Complete(redirectedResult);
+                writer.Write(dashboard.RenderSnapshot());
+                return redirectedResult;
+            }
+
+            Application.Init();
+            try
+            {
+                var top = Application.Top;
+                top.RemoveAll();
+                var root = dashboard.BuildView();
+                top.Add(root);
+                Application.Refresh();
+
+                void Refresh()
                 {
-                    using var refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-                    using var refreshCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                    var refreshGate = new object();
-                    var refreshTask = RefreshDashboardPeriodicallyAsync(
-                        dashboard,
-                        context,
-                        refreshGate,
-                        refreshTimer,
-                        refreshCancellation.Token);
-                    var observer = new SpectreDispatchExecutionObserver(dashboard, context, refreshGate);
+                    root.RemoveAll();
+                    root.Add(dashboard.BuildView().Subviews.ToArray());
+                    Application.Refresh();
+                }
 
-                    try
-                    {
-                        var result = await executor.ExecuteAsync(plan, observer, cancellationToken).ConfigureAwait(false);
-                        dashboard.Complete(result);
-                        lock (refreshGate)
-                        {
-                            context.UpdateTarget(dashboard.Render());
-                            context.Refresh();
-                        }
+                using var refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                using var refreshCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var refreshTask = RefreshDashboardPeriodicallyAsync(Refresh, refreshTimer, refreshCancellation.Token);
+                var observer = new TerminalGuiDispatchExecutionObserver(dashboard, Refresh);
 
-                        return result;
-                    }
-                    finally
-                    {
-                        await refreshCancellation.CancelAsync().ConfigureAwait(false);
-                        await refreshTask.ConfigureAwait(false);
-                    }
-                }).ConfigureAwait(false);
+                try
+                {
+                    var result = await executor.ExecuteAsync(plan, observer, cancellationToken).ConfigureAwait(false);
+                    dashboard.Complete(result);
+                    Refresh();
+                    return result;
+                }
+                finally
+                {
+                    await refreshCancellation.CancelAsync().ConfigureAwait(false);
+                    await refreshTask.ConfigureAwait(false);
+                    writer.Write(dashboard.RenderSnapshot());
+                }
+            }
+            finally
+            {
+                Application.Shutdown();
+            }
         }
         catch (IOException exception) when (displayMode == DispatchRunDisplayMode.Auto)
         {
-            DispatchConsoleRenderer.RenderError(
-                CreateErrorConsole(Console.Error),
+            TerminalGuiConsoleRenderer.RenderError(
+                Console.Error,
                 "Live Dashboard Unavailable",
-                $"Dispatch is using compact live progress for this run. {exception.Message}");
+                $"Dispatch is using compact Terminal.Gui progress for this run. {exception.Message}");
             return await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -166,14 +179,13 @@ public sealed class DispatchCliApplication(
         ExecutionPlan plan,
         CancellationToken cancellationToken)
     {
-        if (Console.IsErrorRedirected && statusConsole is null)
+        if (Console.IsErrorRedirected && statusWriter is null)
         {
             return await executor.ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        var console = statusConsole ?? CreateStatusConsole(Console.Error);
-        var progress = new SpectreCompactDispatchProgress(plan, executor, console);
+        var progress = new TerminalGuiCompactDispatchProgress(plan, executor, statusWriter ?? Console.Error);
         return await progress.ExecuteAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -181,71 +193,18 @@ public sealed class DispatchCliApplication(
         DispatchRequest request,
         CancellationToken cancellationToken)
     {
-        if (Console.IsOutputRedirected)
-        {
-            return await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-        }
-
-        return await CreateOutputConsole(Console.Out)
-            .Status()
-            .Spinner(Spinner.Known.Dots)
-            .SpinnerStyle(Style.Parse("steelblue1"))
-            .StartAsync("Building Dispatch execution plan", async _ =>
-                await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false))
-            .ConfigureAwait(false);
+        TerminalGuiConsoleRenderer.RenderPlanningStatus(Console.Out);
+        return await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<ExecutionPlan> CreatePlanWithDryRunProgressAsync(
         DispatchRequest request,
         CancellationToken cancellationToken)
     {
-        if (Console.IsOutputRedirected)
-        {
-            var redirectedPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-            DispatchConsoleRenderer.RenderDryRunProgressSummary(CreateOutputConsole(Console.Out));
-            return redirectedPlan;
-        }
-
-        var plan = await CreateOutputConsole(Console.Out)
-            .Progress()
-            .AutoClear(false)
-            .HideCompleted(false)
-            .Columns(
-            [
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new PercentageColumn(),
-                new SpinnerColumn(Spinner.Known.Dots)
-            ])
-            .StartAsync(async context =>
-            {
-                var validate = context.AddTask("[steelblue1]Validate dry-run request[/]");
-                validate.Increment(100);
-                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
-
-                var planTask = context.AddTask("[steelblue1]Build execution plan[/]");
-                planTask.Increment(15);
-                var plan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-                planTask.Increment(85);
-                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
-
-                var targetTask = context.AddTask("[steelblue1]Resolve target layout[/]");
-                targetTask.Increment(100);
-                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
-
-                var renderTask = context.AddTask("[steelblue1]Prepare dry-run view[/]");
-                renderTask.Increment(100);
-                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
-
-                return plan;
-            })
-            .ConfigureAwait(false);
-        DispatchConsoleRenderer.RenderDryRunProgressSummary(CreateOutputConsole(Console.Out));
+        var plan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+        TerminalGuiConsoleRenderer.RenderDryRunProgressSummary(Console.Out);
         return plan;
     }
-
-    private static async Task HoldProgressFrameAsync(CancellationToken cancellationToken) =>
-        await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken).ConfigureAwait(false);
 
     private bool ShouldUseLiveDashboard(bool noDashboard) =>
         displayMode switch
@@ -256,9 +215,7 @@ public sealed class DispatchCliApplication(
         };
 
     private static async Task RefreshDashboardPeriodicallyAsync(
-        SpectreDispatchRunDashboard dashboard,
-        LiveDisplayContext context,
-        object gate,
+        Action refresh,
         PeriodicTimer refreshTimer,
         CancellationToken cancellationToken)
     {
@@ -266,38 +223,13 @@ public sealed class DispatchCliApplication(
         {
             while (await refreshTimer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                lock (gate)
-                {
-                    context.UpdateTarget(dashboard.Render());
-                    context.Refresh();
-                }
+                refresh();
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
         }
     }
-
-    private static IAnsiConsole CreateStatusConsole(TextWriter writer) =>
-        AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new DispatchAnsiConsoleOutput(writer, isTerminal: true),
-            Interactive = InteractionSupport.Yes
-        });
-
-    private static IAnsiConsole CreateOutputConsole(TextWriter writer) =>
-        AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new DispatchAnsiConsoleOutput(writer, !Console.IsOutputRedirected),
-            Interactive = InteractionSupport.Detect
-        });
-
-    private static IAnsiConsole CreateErrorConsole(TextWriter writer) =>
-        AnsiConsole.Create(new AnsiConsoleSettings
-        {
-            Out = new DispatchAnsiConsoleOutput(writer, !Console.IsErrorRedirected),
-            Interactive = InteractionSupport.Detect
-        });
 
     private static bool IsRootHelpRequest(IReadOnlyList<string> args) =>
         args.Count == 1 && args[0] is "--help" or "-h" or "-?";
@@ -307,33 +239,33 @@ public sealed class DispatchCliApplication(
 
     private static int RenderRootHelp()
     {
-        DispatchConsoleRenderer.RenderRootHelp(CreateOutputConsole(Console.Out));
+        TerminalGuiConsoleRenderer.RenderRootHelp(Console.Out);
         return 0;
     }
 
     private static int RenderRunHelp()
     {
-        DispatchConsoleRenderer.RenderRunHelp(CreateOutputConsole(Console.Out));
+        TerminalGuiConsoleRenderer.RenderRunHelp(Console.Out);
         return 0;
     }
 
     private static int RenderDoctorHelp()
     {
-        DispatchConsoleRenderer.RenderDoctorHelp(CreateOutputConsole(Console.Out));
+        TerminalGuiConsoleRenderer.RenderDoctorHelp(Console.Out);
         return 0;
     }
 
     private int RunDoctorCommand()
     {
         var report = doctor.Run();
-        DispatchConsoleRenderer.RenderDoctorReport(CreateOutputConsole(Console.Out), report);
+        TerminalGuiConsoleRenderer.RenderDoctorReport(Console.Out, report);
         return report.Succeeded ? 0 : 1;
     }
 
     private static int RenderUnknownCommand(string command)
     {
-        DispatchConsoleRenderer.RenderError(
-            CreateErrorConsole(Console.Error),
+        TerminalGuiConsoleRenderer.RenderError(
+            Console.Error,
             "Unknown Dispatch Command",
             $"'{command}' is not a Dispatch command.");
         return 1;

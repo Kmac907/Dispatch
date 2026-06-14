@@ -28,7 +28,7 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 
 - Dry-run planning output for all local inputs.
 - `dispatch doctor` / `Test-Dispatch` prerequisite checks.
-- Enterprise-grade Spectre.Console command service UI across every CLI path, including help, errors, dry run, doctor, interactive setup, a live interactive command center, live progress/status display, and final run summaries.
+- Enterprise-grade Terminal.Gui command service UI across every CLI path, including help, errors, dry run, doctor, interactive setup, a live interactive command center, retained progress/status display, and final run summaries.
 - Basic artifact copy-back rules.
 - Release ZIP packaging as a convenience artifact.
 
@@ -78,8 +78,8 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 - Initial runtime identifier: `win-x64`.
 - Packaging target: single-file, self-contained Windows executable.
 - CLI parser/routing: internal command parser backed by the shared request model; default parser help must not be exposed as the user-facing console UX.
-- Console UX: `Spectre.Console` for all command-service rendering.
-- Required console widgets: `Panel`, `Table`, `Grid`, `Rule`, `BarChart`, `BreakdownChart`, `Progress`, `Status`, and `LiveDisplay`; prompts may be used only where they do not replace the persistent command-center app surface.
+- Console UX: `Terminal.Gui` for all command-service rendering.
+- Required console views: application/top-level shell, menu bar, status bar, windows/frames, labels, buttons, list views, text fields, check boxes, combo/drop-down choices, tables/lists, progress bars, keyboard focus, and mouse handling. Prompt-style flows must not replace the persistent command-center app surface.
 - Application host: `Microsoft.Extensions.Hosting`.
 - Configuration: `Microsoft.Extensions.Configuration.Json`.
 - Logging: `Microsoft.Extensions.Logging.Console` in the CLI and `Microsoft.Extensions.Logging.Abstractions` in core libraries.
@@ -980,7 +980,7 @@ Scope:
 - Maintain per-target state transitions.
 - Collect stdout/stderr and endpoint artifacts where available.
 - Write `dispatch.log`, `results.csv`, `results.json`, and per-target `result.json`.
-- Render an enterprise-grade Spectre.Console terminal summary.
+- Render an enterprise-grade Terminal.Gui terminal summary.
 
 Non-goals:
 - No retry policy.
@@ -1028,19 +1028,19 @@ Scope:
 - Implement `dispatch doctor`.
 - Run a live interactive command center when no arguments are supplied.
 - The command center must provide a persistent operator menu for run setup, doctor diagnostics, command help, and exit.
-- The command center must be a full live console app surface hosted by Spectre.Console `LiveDisplay`; a chain of `SelectionPrompt`, `TextPrompt`, or `ConfirmationPrompt` screens does not satisfy this requirement.
+- The command center must be a full retained terminal app surface hosted by Terminal.Gui; prompt-by-prompt flows do not satisfy this requirement.
 - The command center must update in place without scrolling repeated menu panels or repeated static output down the terminal.
-- Spectre.Console live primitives have defined roles: `LiveDisplay` owns the command center and run dashboard, `Status` owns indeterminate prerequisite work, and `Progress` owns dry-run planning progress plus measurable per-target execution progress when the full dashboard is disabled.
-- Render the entire command service through Spectre.Console: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact live progress, full live dashboard progress, and final run summaries.
-- Do not emit raw JSON, default parser help, or plain status lines as the console UX for any command path.
-- Use actual Spectre.Console widgets intentionally, including panels, tables, grids, rules, bar charts, breakdown charts, progress bars, status spinners, live display, prompts, confirmations, and styled markup.
-- For real runs, render an enterprise-grade live run dashboard using Spectre.Console. The dashboard should be useful for repeated operator use, not merely decorative.
+- Terminal.Gui view roles are defined: the application/top-level shell owns command-center navigation, menu/status bars own global actions and state, windows/frames own dashboard sections, tables/lists own target/plan/result rows, progress bars own dry-run and measurable target progress, and forms own run setup.
+- Render the entire command service through Terminal.Gui: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact progress, full dashboard progress, and final run summaries.
+- Do not emit raw JSON, default parser help, Spectre.Console output, or plain status lines as the console UX for any command path.
+- Use actual Terminal.Gui views intentionally, including top-level application surfaces, menu bars, status bars, windows, frames, labels, buttons, list views, text fields, check boxes, combo/drop-down choices, tables/lists, progress bars, keyboard shortcuts, and mouse-aware focus handling.
+- For real runs, render an enterprise-grade retained run dashboard using Terminal.Gui. The dashboard should be useful for repeated operator use, not merely decorative.
 - The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, status symbols, and a concise recent-event/failure area.
-- The live dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
-- Compact execution mode must use live progress bars and status columns for terminal runs; redirected/non-interactive execution must avoid repeated static progress cards and emit only durable files plus final Spectre summaries.
-- Dry-run planning must show Spectre.Console progress bars before the execution-plan view; terminal sessions should use live `Progress`, while redirected or non-live sessions must render one designed progress snapshot rather than silently dropping progress or repeatedly printing updates.
-- Dry-run and final run summaries must render as Spectre.Console operator views; durable JSON/CSV remains in the run folder for automation and module wrappers.
-- Fall back to final Spectre.Console summaries when live rendering is unavailable, redirected, unsupported, or explicitly disabled.
+- The retained dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
+- Compact execution mode must use Terminal.Gui progress bars and status columns for terminal runs; redirected/non-interactive execution must avoid repeated static progress output and emit only durable files plus a single designed Terminal.Gui-compatible snapshot summary.
+- Dry-run planning must show Terminal.Gui progress before the execution-plan view; redirected or non-live sessions must render one designed progress snapshot rather than silently dropping progress or repeatedly printing updates.
+- Dry-run and final run summaries must render as Terminal.Gui operator views; durable JSON/CSV remains in the run folder for automation and module wrappers.
+- Fall back to single Terminal.Gui-compatible snapshot summaries when retained rendering is unavailable, redirected, unsupported, or explicitly disabled.
 
 Non-goals:
 - No GUI.
@@ -1052,14 +1052,14 @@ Dependencies:
 - 5.1.
 
 Definition of done:
-- `dispatch` opens a Spectre.Console `LiveDisplay` command center with in-place menus for run setup, diagnostics, help, and exit.
-- The run setup view guides the user through script, targets, transport, run context, throttle, dry-run, and launch without leaving the live command-center app surface.
+- `dispatch` opens a Terminal.Gui command center with retained menus for run setup, diagnostics, help, and exit.
+- The run setup view guides the user through script, targets, transport, run context, throttle, dry-run, and launch without leaving the command-center app surface.
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
-- Every command path renders through the Dispatch Spectre.Console renderer rather than default parser output, raw JSON, or plain text status lines.
-- Dry-run output renders visible Spectre.Console progress bars followed by a Spectre.Console execution-plan view, and still records durable plan/result data through the shared model when appropriate.
-- Real terminal runs render either the full live Spectre.Console dashboard or compact live Spectre.Console progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, charts, result-file paths, and failure summaries.
-- Tests cover help, errors, doctor, dry-run, compact live progress rendering, live dashboard rendering, command-center live surface/key navigation, and final summaries as Spectre-rendered command-service output.
+- Every command path renders through the Dispatch Terminal.Gui renderer rather than default parser output, raw JSON, Spectre.Console, or plain text status lines.
+- Dry-run output renders visible Terminal.Gui progress followed by a Terminal.Gui execution-plan view, and still records durable plan/result data through the shared model when appropriate.
+- Real terminal runs render either the full retained Terminal.Gui dashboard or compact Terminal.Gui progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, result-file paths, and failure summaries.
+- Tests cover help, errors, doctor, dry-run, compact progress rendering, dashboard rendering, command-center surface/key navigation, and final summaries as Terminal.Gui command-service output.
 
 #### 6.1 Operator Diagnostics
 
@@ -1094,7 +1094,7 @@ Scope:
 - Bundle `dispatch.exe` under `bin\win-x64`.
 - Implement `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 - Ensure `Start-Dispatch` passes no arguments.
-- Prefer explicit JSON result path for automation functions rather than parsing Spectre.Console operator output.
+- Prefer explicit JSON result path for automation functions rather than parsing Terminal.Gui operator output.
 
 Non-goals:
 - No binary cmdlets in MVP.

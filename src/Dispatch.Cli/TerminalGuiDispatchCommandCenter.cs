@@ -1,12 +1,10 @@
 using Dispatch.Core;
 using Dispatch.Transports.PsExec;
-using Spectre.Console;
-using Spectre.Console.Rendering;
+using Terminal.Gui;
 
 namespace Dispatch.Cli;
 
-internal sealed class SpectreDispatchCommandCenter(
-    IAnsiConsole console,
+internal sealed class TerminalGuiDispatchCommandCenter(
     IDispatchDoctor doctor,
     Func<ConsoleKeyInfo> readKey)
 {
@@ -27,36 +25,58 @@ internal sealed class SpectreDispatchCommandCenter(
 
     private readonly CommandCenterState state = new();
 
-    public async Task<CommandCenterResult> RunAsync(CancellationToken cancellationToken)
+    public Task<CommandCenterResult> RunAsync(CancellationToken cancellationToken)
     {
-        return await console
-            .Live(Render())
-            .AutoClear(false)
-            .Overflow(VerticalOverflow.Ellipsis)
-            .Cropping(VerticalOverflowCropping.Bottom)
-            .StartAsync(context =>
+        if (Console.IsInputRedirected || Console.IsOutputRedirected)
+        {
+            Console.Out.Write(RenderSnapshot());
+            return Task.FromResult(CommandCenterResult.Exit);
+        }
+
+        Application.Init();
+        try
+        {
+            ApplyColorSchemes();
+            var top = Application.Top;
+            top.RemoveAll();
+            var root = BuildRootView();
+            top.Add(root);
+            Application.Refresh();
+
+            while (!cancellationToken.IsCancellationRequested)
             {
-                while (!cancellationToken.IsCancellationRequested)
+                var result = HandleKey(readKey());
+                RefreshRoot(root);
+                Application.Refresh();
+
+                if (result is not null)
                 {
-                    context.UpdateTarget(Render());
-                    context.Refresh();
-
-                    var result = HandleKey(readKey());
-                    if (result is not null)
-                    {
-                        context.UpdateTarget(Render());
-                        context.Refresh();
-                        return Task.FromResult(result);
-                    }
+                    return Task.FromResult(result);
                 }
+            }
 
-                state.Message = "Cancellation requested.";
-                return Task.FromResult(CommandCenterResult.Exit);
-            })
-            .ConfigureAwait(false);
+            state.Message = "Cancellation requested.";
+            return Task.FromResult(CommandCenterResult.Exit);
+        }
+        finally
+        {
+            Application.Shutdown();
+        }
     }
 
-    internal IRenderable Render() => CreateFrame(state);
+    internal string RenderSnapshot()
+    {
+        var lines = state.View switch
+        {
+            CommandCenterView.Home => RenderHomeSnapshot(),
+            CommandCenterView.RunSetup => RenderRunSetupSnapshot(),
+            CommandCenterView.Doctor => RenderDoctorSnapshot(),
+            CommandCenterView.Help => RenderHelpSnapshot(),
+            _ => RenderHomeSnapshot()
+        };
+
+        return TerminalGuiConsoleRenderer.BuildShellSnapshot("Dispatch Live Command Center", lines);
+    }
 
     internal CommandCenterResult? HandleKey(ConsoleKeyInfo key)
     {
@@ -85,6 +105,336 @@ internal sealed class SpectreDispatchCommandCenter(
             CommandCenterView.Help => HandleSimpleViewKey(key),
             _ => null
         };
+    }
+
+    private static void ApplyColorSchemes()
+    {
+        Colors.Base.Normal = Application.Driver.MakeAttribute(Color.White, Color.Black);
+        Colors.Base.Focus = Application.Driver.MakeAttribute(Color.Black, Color.Cyan);
+        Colors.Base.HotNormal = Application.Driver.MakeAttribute(Color.BrightCyan, Color.Black);
+        Colors.Base.HotFocus = Application.Driver.MakeAttribute(Color.Black, Color.BrightCyan);
+        Colors.Dialog.Normal = Application.Driver.MakeAttribute(Color.White, Color.Blue);
+        Colors.Menu.Normal = Application.Driver.MakeAttribute(Color.White, Color.Blue);
+        Colors.Menu.Focus = Application.Driver.MakeAttribute(Color.Black, Color.Cyan);
+    }
+
+    private Window BuildRootView()
+    {
+        var root = new Window("Dispatch Command Center")
+        {
+            X = 0,
+            Y = 1,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(1)
+        };
+
+        var menu = new MenuBar(new[]
+        {
+            new MenuBarItem("_Dispatch", new[]
+            {
+                new MenuItem("_Run", "Open run setup", () => { state.View = CommandCenterView.RunSetup; }),
+                new MenuItem("_Doctor", "Run diagnostics", () =>
+                {
+                    state.DoctorReport = doctor.Run();
+                    state.View = CommandCenterView.Doctor;
+                }),
+                new MenuItem("_Help", "Show command help", () => { state.View = CommandCenterView.Help; }),
+                new MenuItem("_Quit", "Exit Dispatch", () => { state.Message = "Exiting Dispatch."; })
+            })
+        });
+        Application.Top.Add(menu);
+
+        var status = new StatusBar(new[]
+        {
+            new StatusItem(Key.F1, "~F1~ Help", () => { state.View = CommandCenterView.Help; }),
+            new StatusItem(Key.F5, "~F5~ Doctor", () =>
+            {
+                state.DoctorReport = doctor.Run();
+                state.View = CommandCenterView.Doctor;
+            }),
+            new StatusItem(Key.CtrlMask | Key.R, "~Ctrl+R~ Run", () => { _ = TryStartRun(); }),
+            new StatusItem(Key.Esc, "~Esc~ Back", () => { state.View = CommandCenterView.Home; })
+        });
+        Application.Top.Add(status);
+
+        RefreshRoot(root);
+        return root;
+    }
+
+    private void RefreshRoot(View root)
+    {
+        root.RemoveAll();
+        root.Add(CreateHeader());
+        root.Add(state.View switch
+        {
+            CommandCenterView.Home => CreateHomeView(),
+            CommandCenterView.RunSetup => CreateRunSetupView(),
+            CommandCenterView.Doctor => CreateDoctorView(),
+            CommandCenterView.Help => CreateHelpView(),
+            _ => CreateHomeView()
+        });
+        root.Add(CreateFooter());
+    }
+
+    private View CreateHeader()
+    {
+        var frame = new FrameView("Status")
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = 5
+        };
+        frame.Add(new Label($"View: {GetViewName(state.View)}")
+        {
+            X = 1,
+            Y = 0
+        });
+        frame.Add(new Label($"Version: {DispatchProduct.Version}")
+        {
+            X = 30,
+            Y = 0
+        });
+        frame.Add(new Label(state.Message)
+        {
+            X = 1,
+            Y = 2,
+            Width = Dim.Fill(2)
+        });
+        return frame;
+    }
+
+    private View CreateHomeView()
+    {
+        var menuFrame = new FrameView("Menu")
+        {
+            X = 0,
+            Y = 5,
+            Width = Dim.Percent(45),
+            Height = Dim.Fill(4)
+        };
+        var list = new ListView(MainActions)
+        {
+            X = 1,
+            Y = 1,
+            Width = Dim.Fill(2),
+            Height = Dim.Fill(2),
+            SelectedItem = state.SelectedAction
+        };
+        menuFrame.Add(list);
+
+        var dashboard = new FrameView("Command Surface")
+        {
+            X = Pos.Right(menuFrame),
+            Y = 5,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(4)
+        };
+        dashboard.Add(new Label("Windows-native script orchestration")
+        {
+            X = 1,
+            Y = 1
+        });
+        dashboard.Add(new Label("Plan  [##########]  Execute [##########]")
+        {
+            X = 1,
+            Y = 3
+        });
+        dashboard.Add(new Label("Diagnose [##########] Report  [##########]")
+        {
+            X = 1,
+            Y = 4
+        });
+        dashboard.Add(new Label("Use arrow keys, number keys, Enter, F1, F5, or Esc.")
+        {
+            X = 1,
+            Y = 6
+        });
+
+        return new View
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
+        }
+        .AddChained(menuFrame, dashboard);
+    }
+
+    private View CreateRunSetupView()
+    {
+        var form = new FrameView("Run Setup")
+        {
+            X = 0,
+            Y = 5,
+            Width = Dim.Percent(70),
+            Height = Dim.Fill(4)
+        };
+
+        AddTextField(form, RunSetupField.ScriptPath, "Script path", state.ScriptPath, 0);
+        AddTextField(form, RunSetupField.ComputerNames, "Targets", state.ComputerNames, 2);
+        form.Add(new Label($"{SelectionMarker(RunSetupField.Transport)} Transport")
+        {
+            X = 1,
+            Y = 4
+        });
+        form.Add(new ListView(TransportChoices)
+        {
+            X = 24,
+            Y = 4,
+            Width = 18,
+            Height = 3,
+            SelectedItem = state.TransportIndex
+        });
+        form.Add(new CheckBox("Run as SYSTEM", state.RunAsSystem)
+        {
+            X = 1,
+            Y = 8
+        });
+        form.Add(new CheckBox("Dry run", state.DryRun)
+        {
+            X = 24,
+            Y = 8
+        });
+        AddTextField(form, RunSetupField.Throttle, "Throttle", state.Throttle, 10);
+        AddTextField(form, RunSetupField.ExpectedExitCodes, "Expected exits", state.ExpectedExitCodes, 12);
+        AddTextField(form, RunSetupField.ArtifactPaths, "Artifact paths", state.ArtifactPaths, 14);
+        AddTextField(form, RunSetupField.OutputRoot, "Output root", state.OutputRoot, 16);
+        AddTextField(form, RunSetupField.RemoteRoot, "Remote root", state.RemoteRoot, 18);
+        AddTextField(form, RunSetupField.ScriptArguments, "Script args", state.ScriptArguments, 20);
+
+        var summary = new FrameView("Launch")
+        {
+            X = Pos.Right(form),
+            Y = 5,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(4)
+        };
+        var ready = !string.IsNullOrWhiteSpace(state.ScriptPath) && !string.IsNullOrWhiteSpace(state.ComputerNames);
+        var progress = new ProgressBar
+        {
+            X = 1,
+            Y = 6,
+            Width = Dim.Fill(2),
+            Fraction = ready ? 1 : 0.5f
+        };
+        summary.Add(new Label($"Ready: {(ready ? "yes" : "missing required fields")}") { X = 1, Y = 1 });
+        summary.Add(new Label($"Mode: {(state.DryRun ? "dry run" : "execute")}") { X = 1, Y = 2 });
+        summary.Add(new Label($"Transport: {TransportChoices[state.TransportIndex]}") { X = 1, Y = 3 });
+        summary.Add(new Label("Ctrl+R launches the shared run path.") { X = 1, Y = 5 });
+        summary.Add(progress);
+        summary.Add(new Button("Launch")
+        {
+            X = 1,
+            Y = 8
+        });
+        summary.Add(new Button("Back")
+        {
+            X = 14,
+            Y = 8
+        });
+
+        return new View
+        {
+            X = 0,
+            Y = 0,
+            Width = Dim.Fill(),
+            Height = Dim.Fill()
+        }
+        .AddChained(form, summary);
+    }
+
+    private void AddTextField(View parent, int field, string label, string value, int y)
+    {
+        parent.Add(new Label($"{SelectionMarker(field)} {label}")
+        {
+            X = 1,
+            Y = y
+        });
+        parent.Add(new TextField(value)
+        {
+            X = 24,
+            Y = y,
+            Width = Dim.Fill(2)
+        });
+    }
+
+    private string SelectionMarker(int field) =>
+        state.SelectedField == field ? ">" : " ";
+
+    private View CreateDoctorView()
+    {
+        var frame = new FrameView("Doctor")
+        {
+            X = 0,
+            Y = 5,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(4)
+        };
+
+        if (state.DoctorReport is null)
+        {
+            frame.Add(new Label("Press F5 to run diagnostics.") { X = 1, Y = 1 });
+            return frame;
+        }
+
+        var y = 1;
+        foreach (var check in state.DoctorReport.Checks)
+        {
+            frame.Add(new Label($"{FormatDoctorStatus(check.Status),-4} {check.Name,-24} {check.Message} {check.Detail}".Trim())
+            {
+                X = 1,
+                Y = y++,
+                Width = Dim.Fill(2)
+            });
+        }
+
+        return frame;
+    }
+
+    private static View CreateHelpView()
+    {
+        var frame = new FrameView("Command Help")
+        {
+            X = 0,
+            Y = 5,
+            Width = Dim.Fill(),
+            Height = Dim.Fill(4)
+        };
+
+        var lines = new[]
+        {
+            "dispatch                         Open the retained Terminal.Gui command center",
+            @"dispatch run --script .\Fix.ps1 --computer-name PC001 --transport psexec",
+            "dispatch doctor                  Check local prerequisites",
+            "dispatch --version               Show installed version",
+            string.Empty,
+            "Automation should read durable JSON/CSV result files. The terminal is operator UI."
+        };
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            frame.Add(new Label(lines[index]) { X = 1, Y = index + 1, Width = Dim.Fill(2) });
+        }
+
+        return frame;
+    }
+
+    private View CreateFooter()
+    {
+        var controls = state.View == CommandCenterView.RunSetup
+            ? "Up/Down fields | type edit | Backspace delete | Space/Left/Right choices | Ctrl+R start | Esc back | F1 help | F5 doctor"
+            : "Up/Down select | 1-4 jump | Enter open | F1 help | F5 doctor | Esc/Q exit";
+
+        var frame = new FrameView("Controls")
+        {
+            X = 0,
+            Y = Pos.AnchorEnd(4),
+            Width = Dim.Fill(),
+            Height = 4
+        };
+        frame.Add(new Label(controls) { X = 1, Y = 0, Width = Dim.Fill(2) });
+        return frame;
     }
 
     private CommandCenterResult? HandleHomeKey(ConsoleKeyInfo key)
@@ -423,251 +773,74 @@ internal sealed class SpectreDispatchCommandCenter(
         state.Message = $"Editing {RunSetupField.GetLabel(state.SelectedField)}.";
     }
 
-    private static IRenderable CreateFrame(CommandCenterState state)
+    private IEnumerable<string> RenderHomeSnapshot()
     {
-        var body = state.View switch
+        yield return $"View: {GetViewName(state.View)}";
+        yield return $"Status: {state.Message}";
+        yield return string.Empty;
+        for (var index = 0; index < MainActions.Length; index++)
         {
-            CommandCenterView.Home => CreateHomeBody(state),
-            CommandCenterView.RunSetup => CreateRunSetupBody(state),
-            CommandCenterView.Doctor => CreateDoctorBody(state),
-            CommandCenterView.Help => CreateHelpBody(),
-            _ => CreateHomeBody(state)
-        };
-
-        return new Panel(new Rows(
-                CreateHeader(state),
-                body,
-                CreateFooter(state)))
-            .Header("[bold steelblue1] Dispatch Live Command Center [/]")
-            .RoundedBorder()
-            .BorderColor(Color.SteelBlue1)
-            .Expand();
-    }
-
-    private static IRenderable CreateHeader(CommandCenterState state)
-    {
-        var grid = new Grid().Expand();
-        grid.AddColumn();
-        grid.AddColumn();
-        grid.AddColumn();
-        grid.AddRow(
-            new Panel(new Markup("[bold]Windows-native script orchestration[/]\n[grey]One operator console for setup, diagnostics, execution, and results.[/]"))
-                .Header("[grey] Mission [/]")
-                .RoundedBorder()
-                .BorderColor(Color.SteelBlue1),
-            new Panel(new Markup($"[bold]View[/] {Markup.Escape(GetViewName(state.View))}\n[bold]Version[/] {Markup.Escape(DispatchProduct.Version)}"))
-                .Header("[grey] Runtime [/]")
-                .RoundedBorder()
-                .BorderColor(Color.Grey),
-            new Panel(new Markup(Markup.Escape(state.Message)))
-                .Header("[grey] Status [/]")
-                .RoundedBorder()
-                .BorderColor(Color.Yellow));
-        return grid;
-    }
-
-    private static IRenderable CreateHomeBody(CommandCenterState state)
-    {
-        var grid = new Grid().Expand();
-        grid.AddColumn();
-        grid.AddColumn();
-
-        grid.AddRow(CreateMainMenu(state), CreateHomeDashboard(state));
-        return grid;
-    }
-
-    private static IRenderable CreateMainMenu(CommandCenterState state)
-    {
-        var table = new Table()
-            .RoundedBorder()
-            .BorderColor(Color.Grey)
-            .Expand();
-        table.AddColumn("Key");
-        table.AddColumn("Action");
-        table.AddColumn("Purpose");
-
-        AddMenuRow(table, state, 0, "1", "Start script run", "Build a Dispatch request and launch dry-run or execution.");
-        AddMenuRow(table, state, 1, "2", "Doctor diagnostics", "Run local prerequisite checks in this console.");
-        AddMenuRow(table, state, 2, "3", "Command help", "Show command syntax and supported options.");
-        AddMenuRow(table, state, 3, "4", "Exit", "Leave the command center.");
-        return table;
-    }
-
-    private static void AddMenuRow(Table table, CommandCenterState state, int index, string key, string action, string purpose)
-    {
-        var selected = state.SelectedAction == index;
-        table.AddRow(
-            selected ? $"[black on steelblue1] {key} [/]" : $"[grey]{key}[/]",
-            selected ? $"[black on steelblue1] {Markup.Escape(action)} [/]" : Markup.Escape(action),
-            selected ? $"[black on steelblue1] {Markup.Escape(purpose)} [/]" : $"[grey]{Markup.Escape(purpose)}[/]");
-    }
-
-    private static IRenderable CreateHomeDashboard(CommandCenterState state)
-    {
-        var chart = new BarChart()
-            .Width(42)
-            .Label("[grey]Command Surface[/]")
-            .CenterLabel()
-            .AddItem("Run", state.SelectedAction == 0 ? 4 : 2, Color.SteelBlue1)
-            .AddItem("Doctor", state.SelectedAction == 1 ? 4 : 2, Color.Green)
-            .AddItem("Help", state.SelectedAction == 2 ? 4 : 2, Color.Yellow)
-            .AddItem("Exit", state.SelectedAction == 3 ? 4 : 2, Color.Grey);
-
-        var breakdown = new BreakdownChart()
-            .Width(42)
-            .AddItem("Plan", 25, Color.SteelBlue1)
-            .AddItem("Execute", 25, Color.Green)
-            .AddItem("Diagnose", 25, Color.Yellow)
-            .AddItem("Report", 25, Color.Grey);
-
-        return new Panel(new Rows(
-                chart,
-                new Rule("[grey]Operator Flow[/]").RuleStyle("grey"),
-                breakdown))
-            .Header("[grey] Command Center [/]")
-            .RoundedBorder()
-            .BorderColor(Color.Grey);
-    }
-
-    private static IRenderable CreateRunSetupBody(CommandCenterState state)
-    {
-        var grid = new Grid().Expand();
-        grid.AddColumn();
-        grid.AddColumn();
-        grid.AddRow(CreateRunSetupTable(state), CreateRunSetupSummary(state));
-        return grid;
-    }
-
-    private static IRenderable CreateRunSetupTable(CommandCenterState state)
-    {
-        var table = new Table()
-            .RoundedBorder()
-            .BorderColor(Color.SteelBlue1)
-            .Expand();
-        table.AddColumn("");
-        table.AddColumn("Field");
-        table.AddColumn("Value");
-        table.AddColumn("Input");
-
-        AddFieldRow(table, state, RunSetupField.ScriptPath, "Script path", state.ScriptPath, "type path");
-        AddFieldRow(table, state, RunSetupField.ComputerNames, "Targets", state.ComputerNames, "type names");
-        AddFieldRow(table, state, RunSetupField.Transport, "Transport", TransportChoices[state.TransportIndex], "Left/Right/Space");
-        AddFieldRow(table, state, RunSetupField.RunAsSystem, "Run as SYSTEM", FormatBool(state.RunAsSystem), "Space");
-        AddFieldRow(table, state, RunSetupField.DryRun, "Dry run", FormatBool(state.DryRun), "Space");
-        AddFieldRow(table, state, RunSetupField.Throttle, "Throttle", state.Throttle, "digits");
-        AddFieldRow(table, state, RunSetupField.ExpectedExitCodes, "Expected exit codes", state.ExpectedExitCodes, "digits/comma");
-        AddFieldRow(table, state, RunSetupField.ArtifactPaths, "Artifact paths", state.ArtifactPaths, "optional");
-        AddFieldRow(table, state, RunSetupField.OutputRoot, "Output root", state.OutputRoot, "optional");
-        AddFieldRow(table, state, RunSetupField.RemoteRoot, "Remote root", state.RemoteRoot, "optional");
-        AddFieldRow(table, state, RunSetupField.ScriptArguments, "Script arguments", state.ScriptArguments, "optional");
-        return table;
-    }
-
-    private static void AddFieldRow(Table table, CommandCenterState state, int field, string label, string value, string input)
-    {
-        var selected = state.SelectedField == field;
-        var marker = selected ? "[steelblue1]>[/]" : "[grey]|[/]";
-        var renderedValue = string.IsNullOrEmpty(value) ? "[grey]<empty>[/]" : Markup.Escape(value);
-        table.AddRow(
-            marker,
-            selected ? $"[bold steelblue1]{Markup.Escape(label)}[/]" : Markup.Escape(label),
-            selected ? $"[black on steelblue1] {renderedValue} [/]" : renderedValue,
-            $"[grey]{Markup.Escape(input)}[/]");
-    }
-
-    private static IRenderable CreateRunSetupSummary(CommandCenterState state)
-    {
-        var ready = !string.IsNullOrWhiteSpace(state.ScriptPath) && !string.IsNullOrWhiteSpace(state.ComputerNames);
-        var table = new Table()
-            .NoBorder()
-            .HideHeaders();
-        table.AddColumn("Name");
-        table.AddColumn("Value");
-        table.AddRow("[grey]Ready[/]", ready ? "[green]yes[/]" : "[yellow]missing required fields[/]");
-        table.AddRow("[grey]Mode[/]", state.DryRun ? "[green]dry run[/]" : "[yellow]execute[/]");
-        table.AddRow("[grey]Transport[/]", Markup.Escape(TransportChoices[state.TransportIndex]));
-        table.AddRow("[grey]Run trigger[/]", "[steelblue1]Ctrl+R[/]");
-        table.AddRow("[grey]Back[/]", "[grey]Esc[/]");
-
-        var chart = new BreakdownChart()
-            .Width(42)
-            .AddItem("Required", ready ? 2 : 1, ready ? Color.Green : Color.Yellow)
-            .AddItem("Optional", 8, Color.Grey)
-            .AddItem("Controls", 2, Color.SteelBlue1);
-
-        return new Panel(new Rows(
-                table,
-                new Rule("[grey]Setup Completeness[/]").RuleStyle("grey"),
-                chart))
-            .Header("[grey] Run Setup [/]")
-            .RoundedBorder()
-            .BorderColor(ready ? Color.Green : Color.Yellow);
-    }
-
-    private static IRenderable CreateDoctorBody(CommandCenterState state)
-    {
-        if (state.DoctorReport is null)
-        {
-            return new Panel(new Markup("[grey]Press F5 to run diagnostics.[/]"))
-                .Header("[grey] Doctor [/]")
-                .RoundedBorder()
-                .BorderColor(Color.Grey);
+            yield return $"{(state.SelectedAction == index ? ">" : " ")} {index + 1}. {MainActions[index]}";
         }
 
-        var table = new Table()
-            .RoundedBorder()
-            .BorderColor(state.DoctorReport.Succeeded ? Color.Green : Color.Red)
-            .Expand();
-        table.AddColumn("Status");
-        table.AddColumn("Check");
-        table.AddColumn("Result");
+        yield return string.Empty;
+        yield return "F1 help | F5 doctor | Enter open | Esc/Q exit";
+    }
+
+    private IEnumerable<string> RenderRunSetupSnapshot()
+    {
+        yield return $"View: {GetViewName(state.View)}";
+        yield return $"Status: {state.Message}";
+        yield return string.Empty;
+        foreach (var row in GetRunSetupRows())
+        {
+            yield return $"{(row.Selected ? ">" : " ")} {row.Label,-20} {row.Value}";
+        }
+
+        yield return string.Empty;
+        yield return "Ctrl+R start | Space/Left/Right choices | Esc back";
+    }
+
+    private IEnumerable<string> RenderDoctorSnapshot()
+    {
+        yield return $"View: {GetViewName(state.View)}";
+        yield return $"Status: {state.Message}";
+        yield return string.Empty;
+        if (state.DoctorReport is null)
+        {
+            yield return "Press F5 to run diagnostics.";
+            yield break;
+        }
 
         foreach (var check in state.DoctorReport.Checks)
         {
-            table.AddRow(
-                FormatDoctorStatus(check.Status),
-                Markup.Escape(check.Name),
-                Markup.Escape(string.IsNullOrWhiteSpace(check.Detail)
-                    ? check.Message
-                    : $"{check.Message} {check.Detail}"));
+            yield return $"{FormatDoctorStatus(check.Status),-4} {check.Name,-24} {check.Message} {check.Detail}".Trim();
         }
-
-        return table;
     }
 
-    private static IRenderable CreateHelpBody()
+    private static IEnumerable<string> RenderHelpSnapshot()
     {
-        var table = new Table()
-            .RoundedBorder()
-            .BorderColor(Color.Grey)
-            .Expand();
-        table.AddColumn("Command");
-        table.AddColumn("Purpose");
-        table.AddColumn("Example");
-        table.AddRow("dispatch", "Open this live command center.", "dispatch");
-        table.AddRow("dispatch run", "Plan or execute a script job.", "dispatch run --script .\\Fix.ps1 --computer-name PC001 --transport psexec");
-        table.AddRow("dispatch doctor", "Check local prerequisites.", "dispatch doctor");
-        table.AddRow("dispatch --version", "Show installed version.", "dispatch --version");
-
-        return new Panel(new Rows(
-                table,
-                new Rule("[grey]Automation Note[/]").RuleStyle("grey"),
-                new Markup("[grey]Automation should read durable JSON/CSV result files. The terminal is an operator UI.[/]")))
-            .Header("[grey] Command Help [/]")
-            .RoundedBorder()
-            .BorderColor(Color.Grey);
+        yield return "dispatch                         Open the retained Terminal.Gui command center";
+        yield return @"dispatch run --script .\Fix.ps1 --computer-name PC001 --transport psexec";
+        yield return "dispatch doctor                  Check local prerequisites";
+        yield return "dispatch --version               Show installed version";
+        yield return string.Empty;
+        yield return "Automation should read durable JSON/CSV result files.";
     }
 
-    private static IRenderable CreateFooter(CommandCenterState state)
+    private IEnumerable<(bool Selected, string Label, string Value)> GetRunSetupRows()
     {
-        var controls = state.View == CommandCenterView.RunSetup
-            ? "Up/Down fields | type to edit | Backspace delete | Space/Left/Right change choices | Ctrl+R start | Esc back | F1 help | F5 doctor"
-            : "Up/Down select | 1-4 jump | Enter open | F1 help | F5 doctor | Esc/Q exit";
-
-        return new Panel(new Markup($"[grey]{Markup.Escape(controls)}[/]"))
-            .Header("[grey] Controls [/]")
-            .RoundedBorder()
-            .BorderColor(Color.Grey);
+        yield return (state.SelectedField == RunSetupField.ScriptPath, "Script path", EmptyText(state.ScriptPath));
+        yield return (state.SelectedField == RunSetupField.ComputerNames, "Targets", EmptyText(state.ComputerNames));
+        yield return (state.SelectedField == RunSetupField.Transport, "Transport", TransportChoices[state.TransportIndex]);
+        yield return (state.SelectedField == RunSetupField.RunAsSystem, "Run as SYSTEM", FormatBoolPlain(state.RunAsSystem));
+        yield return (state.SelectedField == RunSetupField.DryRun, "Dry run", FormatBoolPlain(state.DryRun));
+        yield return (state.SelectedField == RunSetupField.Throttle, "Throttle", EmptyText(state.Throttle));
+        yield return (state.SelectedField == RunSetupField.ExpectedExitCodes, "Expected exit codes", EmptyText(state.ExpectedExitCodes));
+        yield return (state.SelectedField == RunSetupField.ArtifactPaths, "Artifact paths", EmptyText(state.ArtifactPaths));
+        yield return (state.SelectedField == RunSetupField.OutputRoot, "Output root", EmptyText(state.OutputRoot));
+        yield return (state.SelectedField == RunSetupField.RemoteRoot, "Remote root", EmptyText(state.RemoteRoot));
+        yield return (state.SelectedField == RunSetupField.ScriptArguments, "Script arguments", EmptyText(state.ScriptArguments));
     }
 
     private static string GetViewName(CommandCenterView view) =>
@@ -683,17 +856,17 @@ internal sealed class SpectreDispatchCommandCenter(
     private static string FormatDoctorStatus(DispatchDoctorStatus status) =>
         status switch
         {
-            DispatchDoctorStatus.Pass => "[green]PASS[/]",
-            DispatchDoctorStatus.Warning => "[yellow]WARN[/]",
-            DispatchDoctorStatus.Fail => "[red]FAIL[/]",
-            _ => Markup.Escape(status.ToString().ToUpperInvariant())
+            DispatchDoctorStatus.Pass => "PASS",
+            DispatchDoctorStatus.Warning => "WARN",
+            DispatchDoctorStatus.Fail => "FAIL",
+            _ => status.ToString().ToUpperInvariant()
         };
-
-    private static string FormatBool(bool value) =>
-        value ? "[green]yes[/]" : "[grey]no[/]";
 
     private static string FormatBoolPlain(bool value) =>
         value ? "yes" : "no";
+
+    private static string EmptyText(string value) =>
+        string.IsNullOrEmpty(value) ? "<empty>" : value;
 
     private static int Wrap(int value, int count) =>
         (value % count + count) % count;
@@ -784,4 +957,13 @@ internal static class RunSetupField
             ScriptArguments => "Script arguments",
             _ => "Field"
         };
+}
+
+internal static class TerminalGuiViewExtensions
+{
+    public static View AddChained(this View view, params View[] children)
+    {
+        view.Add(children);
+        return view;
+    }
 }

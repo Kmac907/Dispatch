@@ -1,13 +1,13 @@
 using Dispatch.Core.Execution;
-using Spectre.Console;
 
 namespace Dispatch.Cli;
 
-internal sealed class SpectreDispatchExecutionObserver(
-    SpectreDispatchRunDashboard dashboard,
-    LiveDisplayContext context,
-    object gate) : IDispatchExecutionObserver
+internal sealed class TerminalGuiDispatchExecutionObserver(
+    TerminalGuiDispatchRunDashboard dashboard,
+    Action refresh) : IDispatchExecutionObserver
 {
+    private readonly object gate = new();
+
     public Task OnProgressAsync(DispatchExecutionProgress progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -15,8 +15,7 @@ internal sealed class SpectreDispatchExecutionObserver(
         lock (gate)
         {
             dashboard.Update(progress);
-            context.UpdateTarget(dashboard.Render());
-            context.Refresh();
+            refresh();
         }
 
         return Task.CompletedTask;
