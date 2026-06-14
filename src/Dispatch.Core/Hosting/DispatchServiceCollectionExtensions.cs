@@ -27,6 +27,8 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IRunIdGenerator, DispatchRunIdGenerator>();
         services.AddSingleton<ISystemClock, SystemClock>();
         services.AddSingleton<ILocalRunLayoutService, LocalRunLayoutService>();
+        services.AddSingleton<IEndpointFileSystem, EndpointFileSystem>();
+        services.AddSingleton<IScriptPreparationService, ScriptPreparationService>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, NotImplementedDispatchExecutor>();
 
