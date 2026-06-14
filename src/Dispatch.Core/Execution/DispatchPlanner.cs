@@ -8,7 +8,8 @@ namespace Dispatch.Core.Execution;
 internal sealed class DispatchPlanner(
     IOptions<DispatchOptions> options,
     IRunIdGenerator runIdGenerator,
-    ISystemClock clock) : IDispatchPlanner
+    ISystemClock clock,
+    ILocalRunLayoutService localRunLayoutService) : IDispatchPlanner
 {
     public Task<ExecutionPlan> CreatePlanAsync(DispatchRequest request, CancellationToken cancellationToken)
     {
@@ -23,8 +24,18 @@ internal sealed class DispatchPlanner(
         var runId = runIdGenerator.CreateRunId();
         var localRoot = request.LocalRunRoot ?? options.Value.LocalRunRoot;
         var remoteRoot = request.RemoteRunRoot ?? options.Value.RemoteRunRoot;
-        var localRunRoot = Path.Combine(localRoot, runId);
-        var localAdminRoot = Path.Combine(localRunRoot, "Admin");
+        var localLayoutResult = localRunLayoutService.Prepare(
+            localRoot,
+            runId,
+            request.Targets,
+            createDirectories: !request.DryRun);
+
+        if (!localLayoutResult.IsValid)
+        {
+            throw new DispatchPlanningException(localLayoutResult.Errors);
+        }
+
+        var localLayout = localLayoutResult.Layout!;
         var remoteRunRoot = CombineWindowsPath(remoteRoot, runId);
         var throttleLimit = request.Throttle ?? options.Value.Throttle;
         var expectedExitCodes = request.ExpectedExitCodes.Count > 0
@@ -43,10 +54,10 @@ internal sealed class DispatchPlanner(
             RetryPolicy: new RetryPolicy(),
             ExpectedExitCodes: expectedExitCodes,
             ArtifactPolicy: new ArtifactPolicy(),
-            ResultPolicy: new ResultPolicy(localRunRoot));
+            ResultPolicy: new ResultPolicy(localLayout.LocalRunRoot));
 
-        var targets = request.Targets
-            .Select(target => CreateTargetExecution(runId, target, request.Payload, localRunRoot, remoteRunRoot))
+        var targets = localLayout.Targets
+            .Select(target => CreateTargetExecution(runId, target, request.Payload, remoteRunRoot))
             .ToArray();
 
         var plan = new ExecutionPlan(
@@ -56,23 +67,22 @@ internal sealed class DispatchPlanner(
             Targets: targets,
             DryRun: request.DryRun,
             ThrottleLimit: throttleLimit,
-            LocalRunRoot: localRunRoot,
+            LocalRunRoot: localLayout.LocalRunRoot,
             RemoteRunRoot: remoteRunRoot,
-            LocalAdminRoot: localAdminRoot,
-            LocalResultsJsonPath: Path.Combine(localAdminRoot, "results.json"),
-            LocalResultsCsvPath: Path.Combine(localAdminRoot, "results.csv"));
+            LocalAdminRoot: localLayout.LocalAdminRoot,
+            LocalTargetsRoot: localLayout.LocalTargetsRoot,
+            LocalResultsJsonPath: localLayout.LocalResultsJsonPath,
+            LocalResultsCsvPath: localLayout.LocalResultsCsvPath);
 
         return Task.FromResult(plan);
     }
 
     private static TargetExecution CreateTargetExecution(
         string runId,
-        TargetSpec target,
+        TargetLocalLayout targetLayout,
         DispatchPayload payload,
-        string localRunRoot,
         string remoteRunRoot)
     {
-        var localTargetRoot = Path.Combine(localRunRoot, "Targets", SanitizePathSegment(target.Name));
         var remoteScriptPath = payload is ScriptPayload script
             ? CombineWindowsPath(remoteRunRoot, "script", Path.GetFileName(script.ScriptPath))
             : null;
@@ -83,9 +93,10 @@ internal sealed class DispatchPlanner(
 
         return new TargetExecution(
             RunId: runId,
-            Target: target,
+            Target: targetLayout.Target,
             State: TargetExecutionState.Pending,
-            PlannedLocalResultPath: Path.Combine(localTargetRoot, "result.json"),
+            PlannedLocalTargetRoot: targetLayout.LocalTargetRoot,
+            PlannedLocalResultPath: targetLayout.LocalResultPath,
             PlannedRemoteScriptPath: remoteScriptPath,
             PlannedCommand: command);
     }
@@ -181,12 +192,6 @@ internal sealed class DispatchPlanner(
 
         var first = parts[0].TrimEnd('\\');
         return string.Join('\\', new[] { first }.Concat(nonEmptyParts.Skip(1)));
-    }
-
-    private static string SanitizePathSegment(string value)
-    {
-        var invalid = Path.GetInvalidFileNameChars();
-        return string.Concat(value.Select(character => invalid.Contains(character) ? '_' : character));
     }
 
     private static bool IsValidLocalRoot(string path)

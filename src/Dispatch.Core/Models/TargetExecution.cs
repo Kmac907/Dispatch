@@ -4,6 +4,7 @@ public sealed record TargetExecution(
     string RunId,
     TargetSpec Target,
     TargetExecutionState State,
+    string? PlannedLocalTargetRoot,
     string? PlannedLocalResultPath,
     string? PlannedRemoteScriptPath,
     DirectExecutionCommand? PlannedCommand = null,

@@ -53,6 +53,7 @@ public sealed class JobResultModelTests
                     RunId: "run-001",
                     Target: new TargetSpec("PC001", "computer-name"),
                     State: TargetExecutionState.Pending,
+                    PlannedLocalTargetRoot: "C:\\Runs\\run-001\\Targets\\PC001",
                     PlannedLocalResultPath: "C:\\Runs\\run-001\\Targets\\PC001\\result.json",
                     PlannedRemoteScriptPath: "C:\\ProgramData\\Dispatch\\Runs\\run-001\\script\\Fix.ps1")
             ],

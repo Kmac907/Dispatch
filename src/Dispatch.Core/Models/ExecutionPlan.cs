@@ -10,5 +10,6 @@ public sealed record ExecutionPlan(
     string LocalRunRoot = "",
     string RemoteRunRoot = "",
     string LocalAdminRoot = "",
+    string LocalTargetsRoot = "",
     string LocalResultsJsonPath = "",
     string LocalResultsCsvPath = "");

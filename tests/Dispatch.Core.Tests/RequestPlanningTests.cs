@@ -36,6 +36,7 @@ public sealed class RequestPlanningTests
         Assert.Equal(new DateTimeOffset(2026, 06, 13, 12, 0, 0, TimeSpan.Zero), plan.CreatedAt);
         Assert.Equal(@"D:\Dispatch\Runs\run-001", plan.LocalRunRoot);
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin", plan.LocalAdminRoot);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Targets", plan.LocalTargetsRoot);
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.json", plan.LocalResultsJsonPath);
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.csv", plan.LocalResultsCsvPath);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001", plan.RemoteRunRoot);
@@ -44,6 +45,7 @@ public sealed class RequestPlanningTests
 
         Assert.Equal("PC001", target.Target.Name);
         Assert.Equal(TargetExecutionState.Pending, target.State);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Targets\PC001", target.PlannedLocalTargetRoot);
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Targets\PC001\result.json", target.PlannedLocalResultPath);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.PlannedRemoteScriptPath);
         Assert.NotNull(target.PlannedCommand);
@@ -107,12 +109,77 @@ public sealed class RequestPlanningTests
         Assert.Contains(exception.Errors, static error => error.Code == "InvalidRemoteRunRoot");
     }
 
-    private static ServiceProvider BuildProvider()
+    [Fact]
+    public async Task RealRunPlanningCreatesLocalRunLayoutUnderOverrideRoot()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        using var provider = BuildProvider(outputRoot.Path);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001"), new TargetSpec("PC002")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+
+        Assert.True(Directory.Exists(plan.LocalRunRoot));
+        Assert.True(Directory.Exists(plan.LocalAdminRoot));
+        Assert.True(Directory.Exists(plan.LocalTargetsRoot));
+        Assert.All(plan.Targets, target => Assert.True(Directory.Exists(target.PlannedLocalTargetRoot)));
+    }
+
+    [Fact]
+    public async Task DryRunPlanningUsesConfiguredDefaultRunRoot()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        using var provider = BuildProvider(outputRoot.Path);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+
+        Assert.Equal(System.IO.Path.Combine(outputRoot.Path, "run-001"), plan.LocalRunRoot);
+        Assert.Equal(System.IO.Path.Combine(outputRoot.Path, "run-001", "Admin"), plan.LocalAdminRoot);
+        Assert.Equal(System.IO.Path.Combine(outputRoot.Path, "run-001", "Targets"), plan.LocalTargetsRoot);
+    }
+
+    [Fact]
+    public async Task DryRunPlanningValidatesFileDirectoryConflicts()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runRoot = System.IO.Path.Combine(outputRoot.Path, "run-001");
+        Directory.CreateDirectory(runRoot);
+        File.WriteAllText(System.IO.Path.Combine(runRoot, "Admin"), "conflict");
+        using var provider = BuildProvider(outputRoot.Path);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true,
+            localRunRoot: outputRoot.Path);
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "LocalAdminPathConflictsWithFile");
+    }
+
+    private static ServiceProvider BuildProvider(string localRunRoot = @"D:\Dispatch\Runs")
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Dispatch:LocalRunRoot"] = @"D:\Dispatch\Runs",
+                ["Dispatch:LocalRunRoot"] = localRunRoot,
                 ["Dispatch:RemoteRunRoot"] = @"C:\ProgramData\Dispatch\Runs",
                 ["Dispatch:ExpectedExitCodes:0"] = "0"
             })
