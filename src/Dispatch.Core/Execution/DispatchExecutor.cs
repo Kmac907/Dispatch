@@ -5,6 +5,7 @@ namespace Dispatch.Core.Execution;
 
 internal sealed class DispatchExecutor(
     IScriptPreparationService scriptPreparationService,
+    IDispatchArtifactCollector artifactCollector,
     IEnumerable<ITransportScriptExecutor> transportExecutors,
     IEnumerable<ITransportEndpointProbe> endpointProbes,
     IDispatchResultWriter resultWriter,
@@ -153,8 +154,9 @@ internal sealed class DispatchExecutor(
             var execution = await transportExecutor.ExecuteScriptAsync(
                 new TransportScriptExecutionRequest(plan, target, targetPreparation),
                 cancellationToken).ConfigureAwait(false);
+            var artifacts = await artifactCollector.CollectAsync(plan, target, cancellationToken).ConfigureAwait(false);
 
-            return await CreateExecutionResultAsync(plan, target, execution, cancellationToken).ConfigureAwait(false);
+            return await CreateExecutionResultAsync(plan, target, execution, artifacts, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -177,6 +179,7 @@ internal sealed class DispatchExecutor(
         ExecutionPlan plan,
         TargetExecution target,
         TransportScriptExecutionResult execution,
+        ArtifactCollectionResult artifacts,
         CancellationToken cancellationToken)
     {
         var state = execution.FailureCategory == FailureCategory.None
@@ -208,7 +211,9 @@ internal sealed class DispatchExecutor(
             StdoutPath: stdoutPath,
             StderrPath: stderrPath,
             ResultPath: target.PlannedLocalResultPath ?? string.Empty,
-            Artifacts: [],
+            Artifacts: artifacts.Artifacts,
+            ArtifactCollectionStatus: artifacts.Status,
+            ArtifactCollectionFailureMessage: artifacts.FailureMessage,
             SecretHandoffStatus: "not-supported",
             CleanupStatus: "not-started",
             TransportMetadata: execution.Metadata);
@@ -236,6 +241,8 @@ internal sealed class DispatchExecutor(
             FailureCategory: failureCategory,
             FailureMessage: failureMessage,
             ResultPath: target.PlannedLocalResultPath ?? string.Empty,
+            Artifacts: [],
+            ArtifactCollectionStatus: "skipped",
             SecretHandoffStatus: "not-supported",
             CleanupStatus: "not-started",
             TransportMetadata: metadata);

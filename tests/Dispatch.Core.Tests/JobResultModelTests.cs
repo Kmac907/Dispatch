@@ -152,6 +152,8 @@ public sealed class JobResultModelTests
             StderrPath: "C:\\Runs\\run-001\\Targets\\PC001\\stderr.txt",
             ResultPath: "C:\\Runs\\run-001\\Targets\\PC001\\result.json",
             Artifacts: ["logs\\install.log"],
+            ArtifactCollectionStatus: "collected",
+            ArtifactCollectionFailureMessage: null,
             SecretHandoffStatus: "notSupported",
             CleanupStatus: "notStarted",
             TransportMetadata: new Dictionary<string, string>

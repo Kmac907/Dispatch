@@ -11,6 +11,7 @@ public sealed record DispatchRequest
         bool dryRun = false,
         string? localRunRoot = null,
         string? remoteRunRoot = null,
+        IReadOnlyList<string>? artifactPaths = null,
         ExecutionContextOptions? executionContext = null)
     {
         Payload = payload;
@@ -21,6 +22,7 @@ public sealed record DispatchRequest
         DryRun = dryRun;
         LocalRunRoot = localRunRoot;
         RemoteRunRoot = remoteRunRoot;
+        ArtifactPaths = artifactPaths ?? [];
         ExecutionContext = executionContext ?? new ExecutionContextOptions();
     }
 
@@ -39,6 +41,8 @@ public sealed record DispatchRequest
     public string? LocalRunRoot { get; init; }
 
     public string? RemoteRunRoot { get; init; }
+
+    public IReadOnlyList<string> ArtifactPaths { get; init; }
 
     public ExecutionContextOptions ExecutionContext { get; init; }
 }

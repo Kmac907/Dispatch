@@ -53,7 +53,7 @@ internal sealed class DispatchPlanner(
             TimeoutPolicy: new TimeoutPolicy(),
             RetryPolicy: new RetryPolicy(),
             ExpectedExitCodes: expectedExitCodes,
-            ArtifactPolicy: new ArtifactPolicy(),
+            ArtifactPolicy: new ArtifactPolicy(request.ArtifactPaths),
             ResultPolicy: new ResultPolicy(localLayout.LocalRunRoot));
 
         var targets = localLayout.Targets

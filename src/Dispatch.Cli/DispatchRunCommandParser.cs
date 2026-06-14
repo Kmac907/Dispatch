@@ -24,6 +24,7 @@ internal sealed class DispatchRunCommandParser
         int? throttle = null;
         string? localRunRoot = null;
         string? remoteRunRoot = null;
+        var artifactPaths = new List<string>();
         var runAsSystem = false;
         var scriptArguments = new List<string>();
 
@@ -107,6 +108,14 @@ internal sealed class DispatchRunCommandParser
                     }
 
                     break;
+                case "--artifact-path":
+                    if (!TryReadValue(args, ref index, arg, out var artifactPathValue, out error))
+                    {
+                        return false;
+                    }
+
+                    artifactPaths.AddRange(SplitCommaSeparatedValues(artifactPathValue));
+                    break;
                 case "--target-file":
                     if (!TryReadValue(args, ref index, arg, out targetFile, out error))
                     {
@@ -153,6 +162,7 @@ internal sealed class DispatchRunCommandParser
             Throttle: throttle,
             LocalRunRoot: localRunRoot,
             RemoteRunRoot: remoteRunRoot,
+            ArtifactPaths: artifactPaths,
             RunAsSystem: runAsSystem);
         return true;
     }
@@ -176,6 +186,9 @@ internal sealed class DispatchRunCommandParser
         value = args[++index];
         return true;
     }
+
+    private static IEnumerable<string> SplitCommaSeparatedValues(string value) =>
+        value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     private static bool TryParseTransport(string value, out TransportKind transport)
     {

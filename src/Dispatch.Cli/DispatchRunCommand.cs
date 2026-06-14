@@ -12,6 +12,7 @@ internal sealed record DispatchRunCommand(
     int? Throttle,
     string? LocalRunRoot,
     string? RemoteRunRoot,
+    IReadOnlyList<string> ArtifactPaths,
     bool RunAsSystem)
 {
     public DispatchRequest ToRequest() =>
@@ -24,5 +25,6 @@ internal sealed record DispatchRunCommand(
             dryRun: DryRun,
             localRunRoot: LocalRunRoot,
             remoteRunRoot: RemoteRunRoot,
+            artifactPaths: ArtifactPaths,
             executionContext: new ExecutionContextOptions(RunAsSystem));
 }

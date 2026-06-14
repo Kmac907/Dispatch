@@ -39,6 +39,8 @@ public static class DispatchRequestValidator
             AddScriptArgumentSecretErrors(scriptPayload, errors);
         }
 
+        AddArtifactPathErrors(request.ArtifactPaths, errors);
+
         return errors.Count == 0
             ? DispatchRequestValidationResult.Success
             : new DispatchRequestValidationResult(errors);
@@ -83,4 +85,44 @@ public static class DispatchRequestValidator
         value.Contains("sig=", StringComparison.OrdinalIgnoreCase)
         || value.Contains("SharedAccessSignature=", StringComparison.OrdinalIgnoreCase)
         || value.Contains("sv=", StringComparison.OrdinalIgnoreCase) && value.Contains("se=", StringComparison.OrdinalIgnoreCase) && value.Contains("sp=", StringComparison.OrdinalIgnoreCase);
+
+    private static void AddArtifactPathErrors(
+        IReadOnlyList<string> artifactPaths,
+        ICollection<DispatchValidationError> errors)
+    {
+        foreach (var artifactPath in artifactPaths)
+        {
+            if (string.IsNullOrWhiteSpace(artifactPath))
+            {
+                errors.Add(new("InvalidArtifactPath", "Artifact paths must not be empty."));
+                continue;
+            }
+
+            if (artifactPath.StartsWith(@"\\", StringComparison.Ordinal)
+                || Path.IsPathRooted(artifactPath)
+                || artifactPath.Length >= 2 && artifactPath[1] == ':')
+            {
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must be relative to the remote Dispatch run folder."));
+                continue;
+            }
+
+            if (artifactPath.Contains('*') || artifactPath.Contains('?'))
+            {
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must be a simple relative folder path, not a glob."));
+                continue;
+            }
+
+            if (artifactPath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            {
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' contains invalid path characters."));
+                continue;
+            }
+
+            var segments = artifactPath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0 || segments.Any(static segment => segment is "." or ".."))
+            {
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must not contain current-directory or parent-directory segments."));
+            }
+        }
+    }
 }

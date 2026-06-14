@@ -40,6 +40,7 @@ Run options:
   --run-as-system
   --output-root <path>
   --remote-root <path>
+  --artifact-path <relative-path[,relative-path]>
 
 Available transports:
   {PsExecTransportDescriptor.TransportName}

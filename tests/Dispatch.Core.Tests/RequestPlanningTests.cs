@@ -25,6 +25,7 @@ public sealed class RequestPlanningTests
             dryRun: true,
             localRunRoot: @"D:\Dispatch\Runs",
             remoteRunRoot: @"C:\ProgramData\Dispatch\Runs",
+            artifactPaths: ["logs", @"custom\reports"],
             executionContext: new ExecutionContextOptions(RunAsSystem: true));
 
         var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
@@ -41,6 +42,7 @@ public sealed class RequestPlanningTests
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.csv", plan.LocalResultsCsvPath);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001", plan.RemoteRunRoot);
         Assert.Equal([0, 3010], plan.Job.ExpectedExitCodes);
+        Assert.Equal(["logs", @"custom\reports"], plan.Job.ArtifactPolicy.Paths);
         Assert.True(plan.Job.ExecutionContext.RunAsSystem);
 
         Assert.Equal("PC001", target.Target.Name);
@@ -125,6 +127,30 @@ public sealed class RequestPlanningTests
             () => planner.CreatePlanAsync(request, CancellationToken.None));
 
         Assert.Contains(exception.Errors, static error => error.Code == "InvalidRemoteRunRoot");
+    }
+
+    [Theory]
+    [InlineData(@"C:\Temp\logs")]
+    [InlineData(@"\\server\share")]
+    [InlineData(@"..\logs")]
+    [InlineData(@"logs\..\secret")]
+    [InlineData(@"logs\*.txt")]
+    public async Task PlannerRejectsUnsafeArtifactPaths(string artifactPath)
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true,
+            artifactPaths: [artifactPath]);
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "InvalidArtifactPath");
     }
 
     [Fact]

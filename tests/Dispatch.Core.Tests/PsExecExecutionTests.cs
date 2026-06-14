@@ -270,6 +270,144 @@ public sealed class PsExecExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorCopiesDefaultArtifactFoldersWhenPresent()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        endpointFileSystem.AddRemoteDirectory(
+            @"\\PC001\C$\ProgramData\Dispatch\Runs\run-001\logs",
+            ["install.log"]);
+        endpointFileSystem.AddRemoteDirectory(
+            @"\\PC001\C$\ProgramData\Dispatch\Runs\run-001\artifacts",
+            [@"reports\summary.json"]);
+        using var provider = BuildProvider(outputRoot.Path, runner, endpointFileSystem: endpointFileSystem);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal("collected", target.ArtifactCollectionStatus);
+        Assert.Null(target.ArtifactCollectionFailureMessage);
+        Assert.Equal(
+            [
+                @"logs\install.log",
+                @"artifacts\reports\summary.json"
+            ],
+            target.Artifacts);
+        Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "logs", "install.log")));
+        Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "artifacts", "reports", "summary.json")));
+
+        var targetJson = await File.ReadAllTextAsync(target.ResultPath);
+        Assert.Contains("\"artifactCollectionStatus\": \"collected\"", targetJson);
+
+        var resultsCsv = await File.ReadAllTextAsync(plan.LocalResultsCsvPath);
+        Assert.Contains(@"logs\install.log;artifacts\reports\summary.json", resultsCsv);
+    }
+
+    [Fact]
+    public async Task ExecutorCopiesDeclaredArtifactFoldersWhenPresent()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        endpointFileSystem.AddRemoteDirectory(
+            @"\\PC001\C$\ProgramData\Dispatch\Runs\run-001\custom\reports",
+            ["summary.json"]);
+        using var provider = BuildProvider(outputRoot.Path, runner, endpointFileSystem: endpointFileSystem);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path,
+            artifactPaths: [@"custom\reports"]);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal("collected", target.ArtifactCollectionStatus);
+        var artifact = Assert.Single(target.Artifacts ?? []);
+        Assert.Equal(@"custom\reports\summary.json", artifact);
+        Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "custom", "reports", "summary.json")));
+    }
+
+    [Fact]
+    public async Task ExecutorTreatsMissingArtifactFoldersAsNonFailure()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        using var provider = BuildProvider(outputRoot.Path, runner);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal(FailureCategory.None, target.FailureCategory);
+        Assert.Equal("not-found", target.ArtifactCollectionStatus);
+        Assert.Empty(target.Artifacts ?? []);
+        Assert.Equal(0, result.FailedCount);
+    }
+
+    [Fact]
+    public async Task ExecutorTracksArtifactCopyFailureSeparatelyFromScriptResult()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem
+        {
+            ThrowOnCopyDirectoryContaining = @"\logs"
+        };
+        endpointFileSystem.AddRemoteDirectory(
+            @"\\PC001\C$\ProgramData\Dispatch\Runs\run-001\logs",
+            ["install.log"]);
+        using var provider = BuildProvider(outputRoot.Path, runner, endpointFileSystem: endpointFileSystem);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal(FailureCategory.None, target.FailureCategory);
+        Assert.Equal("failed", target.ArtifactCollectionStatus);
+        Assert.Contains("Artifact copy-back failed", target.ArtifactCollectionFailureMessage);
+        Assert.Equal(0, result.FailedCount);
+    }
+
+    [Fact]
     public async Task PsExecPortProbePropagatesCallerCancellation()
     {
         using var cancellation = new CancellationTokenSource();
@@ -327,12 +465,54 @@ public sealed class PsExecExecutionTests
     {
         public List<(string SourcePath, string DestinationPath)> Copies { get; } = [];
 
+        private readonly Dictionary<string, IReadOnlyList<string>> remoteDirectories = new(StringComparer.OrdinalIgnoreCase);
+
+        public string? ThrowOnCopyDirectoryContaining { get; init; }
+
+        public void AddRemoteDirectory(string path, IReadOnlyList<string> relativeFiles)
+        {
+            remoteDirectories[path] = relativeFiles;
+        }
+
         public Task CreateDirectoryAsync(string path, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task CopyFileAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken cancellationToken)
         {
             Copies.Add((sourcePath, destinationPath));
             return Task.CompletedTask;
+        }
+
+        public Task<bool> DirectoryExistsAsync(string path, CancellationToken cancellationToken) =>
+            Task.FromResult(remoteDirectories.ContainsKey(path));
+
+        public Task<IReadOnlyList<string>> CopyDirectoryAsync(
+            string sourcePath,
+            string destinationPath,
+            bool overwrite,
+            CancellationToken cancellationToken)
+        {
+            if (ThrowOnCopyDirectoryContaining is not null
+                && sourcePath.Contains(ThrowOnCopyDirectoryContaining, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new IOException("Simulated artifact copy failure.");
+            }
+
+            if (!remoteDirectories.TryGetValue(sourcePath, out var relativeFiles))
+            {
+                return Task.FromResult<IReadOnlyList<string>>([]);
+            }
+
+            Directory.CreateDirectory(destinationPath);
+            var copied = new List<string>();
+            foreach (var relativeFile in relativeFiles)
+            {
+                var destinationFile = Path.Combine(destinationPath, relativeFile);
+                Directory.CreateDirectory(Path.GetDirectoryName(destinationFile)!);
+                File.WriteAllText(destinationFile, $"copied from {sourcePath}");
+                copied.Add(destinationFile);
+            }
+
+            return Task.FromResult<IReadOnlyList<string>>(copied);
         }
     }
 

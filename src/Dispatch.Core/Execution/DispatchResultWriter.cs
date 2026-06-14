@@ -67,6 +67,8 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
             "StderrPath",
             "ResultPath",
             "Artifacts",
+            "ArtifactCollectionStatus",
+            "ArtifactCollectionFailureMessage",
             "SecretHandoffStatus",
             "CleanupStatus");
 
@@ -100,6 +102,8 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
                 target.StderrPath ?? string.Empty,
                 target.ResultPath,
                 string.Join(';', target.Artifacts ?? []),
+                target.ArtifactCollectionStatus ?? string.Empty,
+                target.ArtifactCollectionFailureMessage ?? string.Empty,
                 target.SecretHandoffStatus ?? string.Empty,
                 target.CleanupStatus ?? string.Empty);
         }
@@ -122,7 +126,10 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
             var failure = target.FailureCategory == FailureCategory.None
                 ? string.Empty
                 : $"; Failure: {target.FailureCategory} {target.FailureMessage}";
-            builder.AppendLine($"Target: {target.Target}; State: {target.State}; ExitCode: {target.ExitCode?.ToString() ?? ""}{failure}");
+            var artifactStatus = string.IsNullOrWhiteSpace(target.ArtifactCollectionStatus)
+                ? string.Empty
+                : $"; Artifacts: {target.ArtifactCollectionStatus}";
+            builder.AppendLine($"Target: {target.Target}; State: {target.State}; ExitCode: {target.ExitCode?.ToString() ?? ""}{failure}{artifactStatus}");
         }
 
         return builder.ToString();

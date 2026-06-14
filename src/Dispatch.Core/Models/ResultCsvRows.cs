@@ -34,6 +34,8 @@ public sealed record TargetResultCsvRow(
     string? StderrPath,
     string ResultPath,
     string Artifacts,
+    string? ArtifactCollectionStatus,
+    string? ArtifactCollectionFailureMessage,
     string? SecretHandoffStatus,
     string? CleanupStatus);
 
@@ -75,6 +77,8 @@ public static class ResultCsvMapper
             result.StderrPath,
             result.ResultPath,
             string.Join(';', result.Artifacts ?? []),
+            result.ArtifactCollectionStatus,
+            result.ArtifactCollectionFailureMessage,
             result.SecretHandoffStatus,
             result.CleanupStatus);
 }

@@ -204,5 +204,10 @@ public sealed class ScriptPreparationTests
             Copies.Add((sourcePath, destinationPath));
             return Task.CompletedTask;
         }
+
+        public Task<bool> DirectoryExistsAsync(string path, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<IReadOnlyList<string>> CopyDirectoryAsync(string sourcePath, string destinationPath, bool overwrite, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>([]);
     }
 }
