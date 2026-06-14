@@ -21,6 +21,7 @@ public static class DispatchCliHost
         builder.Logging.AddConsole();
         builder.Services.AddDispatchCore(builder.Configuration);
         builder.Services.AddDispatchPsExecTransport();
+        builder.Services.AddSingleton<IDispatchDoctor, DispatchDoctor>();
         builder.Services.AddSingleton<DispatchCliApplication>();
 
         return builder.Build();

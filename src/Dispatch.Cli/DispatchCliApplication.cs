@@ -15,7 +15,8 @@ namespace Dispatch.Cli;
 public sealed class DispatchCliApplication(
     IOptions<DispatchOptions> options,
     IDispatchPlanner planner,
-    IDispatchExecutor executor)
+    IDispatchExecutor executor,
+    IDispatchDoctor doctor)
 {
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -75,14 +76,14 @@ public sealed class DispatchCliApplication(
         return runCommand;
     }
 
-    private static Command BuildDoctorCommand()
+    private Command BuildDoctorCommand()
     {
         var doctorCommand = new Command("doctor", "Check local Dispatch prerequisites.");
-        doctorCommand.SetHandler(static context =>
+        doctorCommand.SetHandler(context =>
         {
-            Console.WriteLine("dispatch doctor command surface is available.");
-            Console.WriteLine("Detailed prerequisite checks are implemented in roadmap slice 6.1 Operator Diagnostics.");
-            context.ExitCode = 0;
+            var report = doctor.Run();
+            RenderDoctorReport(report);
+            context.ExitCode = report.Succeeded ? 0 : 1;
         });
         return doctorCommand;
     }
@@ -272,6 +273,50 @@ public sealed class DispatchCliApplication(
         Console.Error.WriteLine(
             $"Dispatch run {result.RunId}: {result.SuccessCount}/{result.TargetCount} succeeded, {result.FailedCount} failed, {result.TimedOutCount} timed out, {result.CancelledCount} cancelled. Results: {result.ResultPath}");
     }
+
+    private static void RenderDoctorReport(DispatchDoctorReport report)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            Console.WriteLine(report.Succeeded ? "Dispatch doctor: passed" : "Dispatch doctor: failed");
+            foreach (var check in report.Checks)
+            {
+                Console.WriteLine($"{FormatStatus(check.Status)} {check.Name}: {check.Message}");
+                if (!string.IsNullOrWhiteSpace(check.Detail))
+                {
+                    Console.WriteLine($"  {check.Detail}");
+                }
+            }
+
+            return;
+        }
+
+        var table = new Table().RoundedBorder();
+        table.AddColumn("Status");
+        table.AddColumn("Check");
+        table.AddColumn("Result");
+        foreach (var check in report.Checks)
+        {
+            table.AddRow(
+                FormatStatus(check.Status),
+                Markup.Escape(check.Name),
+                Markup.Escape(string.IsNullOrWhiteSpace(check.Detail)
+                    ? check.Message
+                    : $"{check.Message} {check.Detail}"));
+        }
+
+        AnsiConsole.Write(table);
+        AnsiConsole.MarkupLine(report.Succeeded ? "[green]Dispatch doctor passed.[/]" : "[red]Dispatch doctor failed.[/]");
+    }
+
+    private static string FormatStatus(DispatchDoctorStatus status) =>
+        status switch
+        {
+            DispatchDoctorStatus.Pass => "PASS",
+            DispatchDoctorStatus.Warning => "WARN",
+            DispatchDoctorStatus.Fail => "FAIL",
+            _ => status.ToString().ToUpperInvariant()
+        };
 
     private const string PayloadBoundaryHelp = """
 Payload boundary:

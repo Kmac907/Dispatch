@@ -39,7 +39,11 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, and a script-owned external payload boundary. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, the CLI product surface, and local operator diagnostics. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+
+## Operator Diagnostics
+
+Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It reports Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
 
 ## Script-Owned Payloads
 
@@ -50,6 +54,7 @@ Dispatch v1 copies only the selected PowerShell script. Installer media, package
 ```powershell
 dotnet build .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run --dry-run --script .\path\to\script.ps1 --computer-name PC001,PC002 -- -PackageUri https://contoso.example/app.msi
 dotnet test .\Dispatch.sln
 ```

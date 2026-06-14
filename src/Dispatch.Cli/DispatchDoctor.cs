@@ -1,0 +1,202 @@
+using Dispatch.Core.Configuration;
+using Microsoft.Extensions.Options;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+
+namespace Dispatch.Cli;
+
+public interface IDispatchDoctor
+{
+    DispatchDoctorReport Run();
+}
+
+public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatchDoctor
+{
+    public DispatchDoctorReport Run()
+    {
+        var checks = new List<DispatchDoctorCheck>
+        {
+            CheckOperatingSystem(),
+            CheckPowerShell(),
+            CheckPsExec(),
+            CheckLocalRunRoot(),
+            CheckAdminContext()
+        };
+
+        return new DispatchDoctorReport(checks);
+    }
+
+    private static DispatchDoctorCheck CheckOperatingSystem()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return DispatchDoctorCheck.Fail(
+                "Operating system",
+                "Dispatch v1 is supported on Windows admin workstations.",
+                RuntimeInformation.OSDescription);
+        }
+
+        return DispatchDoctorCheck.Pass("Operating system", "Windows host detected.", RuntimeInformation.OSDescription);
+    }
+
+    private static DispatchDoctorCheck CheckPowerShell()
+    {
+        var powershell = ResolveExecutable("powershell.exe");
+        return powershell is null
+            ? DispatchDoctorCheck.Fail("PowerShell", "powershell.exe was not found in PATH.", "Required for v1 direct script execution.")
+            : DispatchDoctorCheck.Pass("PowerShell", "powershell.exe is available.", RedactPath(powershell));
+    }
+
+    private DispatchDoctorCheck CheckPsExec()
+    {
+        var configuredPath = string.IsNullOrWhiteSpace(options.Value.PsExecPath)
+            ? "psexec.exe"
+            : options.Value.PsExecPath;
+
+        var resolved = ResolveExecutable(configuredPath);
+        return resolved is null
+            ? DispatchDoctorCheck.Fail(
+                "PsExec",
+                $"PsExec was not found from configured path '{RedactPath(configuredPath)}'.",
+                "Set Dispatch:PsExecPath or add psexec.exe to PATH.")
+            : DispatchDoctorCheck.Pass("PsExec", "PsExec executable resolved.", RedactPath(resolved));
+    }
+
+    private DispatchDoctorCheck CheckLocalRunRoot()
+    {
+        var localRunRoot = options.Value.LocalRunRoot;
+        if (string.IsNullOrWhiteSpace(localRunRoot))
+        {
+            return DispatchDoctorCheck.Fail("Output path", "Local run root is not configured.", "Set Dispatch:LocalRunRoot.");
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(localRunRoot);
+            if (File.Exists(fullPath))
+            {
+                return DispatchDoctorCheck.Fail("Output path", "Local run root points to a file.", RedactPath(fullPath));
+            }
+
+            Directory.CreateDirectory(fullPath);
+            var probePath = Path.Combine(fullPath, $".dispatch-doctor-{Guid.NewGuid():N}.tmp");
+            File.WriteAllText(probePath, "dispatch-doctor");
+            File.Delete(probePath);
+
+            return DispatchDoctorCheck.Pass("Output path", "Local run root is writable.", RedactPath(fullPath));
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or IOException
+            or NotSupportedException
+            or UnauthorizedAccessException)
+        {
+            return DispatchDoctorCheck.Fail(
+                "Output path",
+                "Local run root is not writable.",
+                $"{RedactPath(localRunRoot)}: {exception.Message}");
+        }
+    }
+
+    private static DispatchDoctorCheck CheckAdminContext()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return DispatchDoctorCheck.Warning(
+                "Admin context",
+                "Admin token check is only available on Windows.",
+                "Endpoint privileges still must be validated by transport probes.");
+        }
+
+        using var identity = WindowsIdentity.GetCurrent();
+        var principal = new WindowsPrincipal(identity);
+        return principal.IsInRole(WindowsBuiltInRole.Administrator)
+            ? DispatchDoctorCheck.Pass("Admin context", "Current process is running with an administrator token.", "Endpoint rights are still validated per target.")
+            : DispatchDoctorCheck.Warning("Admin context", "Current process is not elevated.", "PsExec/admin-share operations may fail without appropriate endpoint rights.");
+    }
+
+    private static string? ResolveExecutable(string executable)
+    {
+        if (string.IsNullOrWhiteSpace(executable))
+        {
+            return null;
+        }
+
+        if (executable.Contains(Path.DirectorySeparatorChar)
+            || executable.Contains(Path.AltDirectorySeparatorChar)
+            || Path.IsPathRooted(executable))
+        {
+            var fullPath = Path.GetFullPath(executable);
+            return File.Exists(fullPath) ? fullPath : null;
+        }
+
+        var path = Environment.GetEnvironmentVariable("PATH");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return null;
+        }
+
+        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var candidate = Path.Combine(directory, executable);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private static string RedactPath(string path)
+    {
+        var redacted = RedactKnownRoot(path, Environment.GetEnvironmentVariable("TEMP"), "%TEMP%");
+        redacted = RedactKnownRoot(redacted, Environment.GetEnvironmentVariable("TMP"), "%TMP%");
+        redacted = RedactKnownRoot(redacted, Path.GetTempPath(), "%TEMP%");
+        redacted = RedactKnownRoot(redacted, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "%USERPROFILE%");
+        return redacted;
+    }
+
+    private static string RedactKnownRoot(string path, string? root, string replacement)
+    {
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            return path;
+        }
+
+        root = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            return replacement + path[root.Length..];
+        }
+
+        return path;
+    }
+}
+
+public sealed record DispatchDoctorReport(IReadOnlyList<DispatchDoctorCheck> Checks)
+{
+    public bool Succeeded => Checks.All(static check => check.Status != DispatchDoctorStatus.Fail);
+}
+
+public sealed record DispatchDoctorCheck(
+    string Name,
+    DispatchDoctorStatus Status,
+    string Message,
+    string Detail)
+{
+    public static DispatchDoctorCheck Pass(string name, string message, string detail = "") =>
+        new(name, DispatchDoctorStatus.Pass, message, detail);
+
+    public static DispatchDoctorCheck Warning(string name, string message, string detail = "") =>
+        new(name, DispatchDoctorStatus.Warning, message, detail);
+
+    public static DispatchDoctorCheck Fail(string name, string message, string detail = "") =>
+        new(name, DispatchDoctorStatus.Fail, message, detail);
+}
+
+public enum DispatchDoctorStatus
+{
+    Pass,
+    Warning,
+    Fail
+}
