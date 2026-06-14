@@ -46,6 +46,11 @@ Run options:
 Available transports:
   {PsExecTransportDescriptor.TransportName}
 
+Payload boundary:
+  Dispatch prepares only the selected script. Scripts own Blob, HTTPS, SMB, Azure Files,
+  MSI, ZIP, and other external payload retrieval through ordinary non-secret script args.
+  Do not pass credentials or SAS tokens on the command line.
+
 Only dry-run planning is implemented in this slice.
 """);
             return 0;

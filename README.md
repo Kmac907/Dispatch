@@ -39,13 +39,17 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, and script preparation contracts. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, and a script-owned external payload boundary. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+
+## Script-Owned Payloads
+
+Dispatch v1 copies only the selected PowerShell script. Installer media, package payloads, Blob/HTTPS/SMB/Azure Files downloads, and payload-specific logging belong inside the script. Pass ordinary non-secret script arguments after `--`; do not pass credentials or SAS tokens on the command line. See `docs/script-owned-payloads.md`.
 
 ## Development
 
 ```powershell
 dotnet build .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
-dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run --dry-run --script .\path\to\script.ps1 --computer-name PC001,PC002
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run --dry-run --script .\path\to\script.ps1 --computer-name PC001,PC002 -- -PackageUri https://contoso.example/app.msi
 dotnet test .\Dispatch.sln
 ```

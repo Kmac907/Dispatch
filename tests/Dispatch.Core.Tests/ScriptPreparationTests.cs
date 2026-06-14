@@ -115,6 +115,40 @@ public sealed class ScriptPreparationTests
         Assert.Empty(endpointFileSystem.Copies);
     }
 
+    [Fact]
+    public async Task ScriptPreparationPreservesPayloadArgumentsWithoutStagingPayloadFiles()
+    {
+        using var script = TemporaryScript.Create("Install-App.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        using var provider = BuildProvider(outputRoot.Path, endpointFileSystem);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var preparation = provider.GetRequiredService<IScriptPreparationService>();
+        var scriptArguments = new[]
+        {
+            "-PackageUri",
+            "https://contoso.example/packages/app.msi",
+            "-PackageSource",
+            @"\\fileserver\packages\app.msi"
+        };
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, scriptArguments),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await preparation.PrepareAsync(plan, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.Manifest);
+        Assert.Equal(scriptArguments, result.Manifest.ScriptArguments);
+        var copy = Assert.Single(endpointFileSystem.Copies);
+        Assert.Equal(script.Path, copy.SourcePath);
+        Assert.EndsWith(@"\Install-App.ps1", copy.DestinationPath);
+    }
+
     private static ServiceProvider BuildProvider(string localRunRoot, IEndpointFileSystem endpointFileSystem)
     {
         var configuration = new ConfigurationBuilder()
