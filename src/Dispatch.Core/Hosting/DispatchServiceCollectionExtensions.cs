@@ -29,6 +29,7 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<ILocalRunLayoutService, LocalRunLayoutService>();
         services.AddSingleton<IEndpointFileSystem, EndpointFileSystem>();
         services.AddSingleton<IScriptPreparationService, ScriptPreparationService>();
+        services.AddSingleton<IDispatchResultWriter, DispatchResultWriter>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
 

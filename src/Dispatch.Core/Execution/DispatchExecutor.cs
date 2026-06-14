@@ -7,6 +7,7 @@ internal sealed class DispatchExecutor(
     IScriptPreparationService scriptPreparationService,
     IEnumerable<ITransportScriptExecutor> transportExecutors,
     IEnumerable<ITransportEndpointProbe> endpointProbes,
+    IDispatchResultWriter resultWriter,
     ISystemClock clock) : IDispatchExecutor
 {
     public async Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken)
@@ -34,7 +35,7 @@ internal sealed class DispatchExecutor(
                     $"No executor is registered for transport '{plan.Job.Transport.ToDispatchString()}'."))
                 .ToArray();
 
-            return new DispatchRunResult(
+            var unavailableResult = new DispatchRunResult(
                 RunId: plan.RunId,
                 StartedAt: startedAt,
                 EndedAt: unavailableEndedAt,
@@ -44,108 +45,16 @@ internal sealed class DispatchExecutor(
                 PayloadName: plan.Job.Payload.DisplayName,
                 Targets: unavailableTargets,
                 ResultPath: plan.LocalResultsJsonPath);
+
+            await resultWriter.WriteAsync(plan, unavailableResult, cancellationToken).ConfigureAwait(false);
+            return unavailableResult;
         }
 
         var endpointProbe = endpointProbes.SingleOrDefault(probe => probe.Kind == plan.Job.Transport);
-        var probeResults = new Dictionary<string, TransportEndpointProbeResult>(StringComparer.OrdinalIgnoreCase);
-        var probePassedTargets = new List<TargetExecution>();
-
-        foreach (var target in plan.Targets)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (endpointProbe is null)
-            {
-                probePassedTargets.Add(target);
-                continue;
-            }
-
-            var probeResult = await endpointProbe.ProbeAsync(new TransportEndpointProbeRequest(plan, target), cancellationToken).ConfigureAwait(false);
-            probeResults[target.Target.Name] = probeResult;
-
-            if (probeResult.Succeeded)
-            {
-                probePassedTargets.Add(target);
-            }
-        }
-
-        var probedPlan = plan with { Targets = probePassedTargets };
-        var preparation = probePassedTargets.Count == 0
-            ? new ScriptPreparationResult(null, [])
-            : await scriptPreparationService.PrepareAsync(probedPlan, cancellationToken).ConfigureAwait(false);
-        var targetResults = new List<TargetExecutionResult>();
-
-        foreach (var target in plan.Targets)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            if (probeResults.TryGetValue(target.Target.Name, out var probeResult) && !probeResult.Succeeded)
-            {
-                targetResults.Add(CreateFailureResult(
-                    plan,
-                    target,
-                    probeResult.StartedAt,
-                    probeResult.EndedAt,
-                    probeResult.FailureCategory,
-                    probeResult.FailureMessage ?? $"Endpoint probe failed for target '{target.Target.Name}'.",
-                    probeResult.Metadata));
-                continue;
-            }
-
-            var targetPreparation = preparation.Targets.SingleOrDefault(result => result.Target.Name.Equals(target.Target.Name, StringComparison.OrdinalIgnoreCase));
-            if (targetPreparation is null)
-            {
-                targetResults.Add(CreateFailureResult(
-                    plan,
-                    target,
-                    startedAt,
-                    clock.UtcNow,
-                    FailureCategory.PayloadPreparationFailed,
-                    $"No script preparation result exists for target '{target.Target.Name}'."));
-                continue;
-            }
-
-            if (!targetPreparation.Succeeded)
-            {
-                targetResults.Add(CreateFailureResult(
-                    plan,
-                    target,
-                    startedAt,
-                    clock.UtcNow,
-                    targetPreparation.FailureCategory,
-                    targetPreparation.FailureMessage ?? $"Script preparation failed for target '{target.Target.Name}'."));
-                continue;
-            }
-
-            var execution = await transportExecutor.ExecuteScriptAsync(
-                new TransportScriptExecutionRequest(plan, target, targetPreparation),
-                cancellationToken).ConfigureAwait(false);
-
-            var state = execution.FailureCategory == FailureCategory.None
-                ? TargetExecutionState.Succeeded
-                : TargetExecutionState.Failed;
-
-            targetResults.Add(new TargetExecutionResult(
-                RunId: plan.RunId,
-                Target: target.Target.Name,
-                Transport: plan.Job.Transport,
-                PayloadType: plan.Job.Payload.PayloadType,
-                PayloadName: plan.Job.Payload.DisplayName,
-                State: state,
-                ExitCode: execution.ExitCode,
-                ExpectedExitCodes: plan.Job.ExpectedExitCodes,
-                StartedAt: execution.StartedAt,
-                EndedAt: execution.EndedAt,
-                FailureCategory: execution.FailureCategory,
-                FailureMessage: execution.FailureMessage,
-                ResultPath: target.PlannedLocalResultPath ?? string.Empty,
-                SecretHandoffStatus: "not-supported",
-                CleanupStatus: "not-started",
-                TransportMetadata: execution.Metadata));
-        }
+        var targetResults = await ExecuteTargetsAsync(plan, transportExecutor, endpointProbe, cancellationToken).ConfigureAwait(false);
 
         var endedAt = clock.UtcNow;
-        return new DispatchRunResult(
+        var result = new DispatchRunResult(
             RunId: plan.RunId,
             StartedAt: startedAt,
             EndedAt: endedAt,
@@ -155,6 +64,154 @@ internal sealed class DispatchExecutor(
             PayloadName: plan.Job.Payload.DisplayName,
             Targets: targetResults,
             ResultPath: plan.LocalResultsJsonPath);
+
+        await resultWriter.WriteAsync(plan, result, cancellationToken).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<IReadOnlyList<TargetExecutionResult>> ExecuteTargetsAsync(
+        ExecutionPlan plan,
+        ITransportScriptExecutor transportExecutor,
+        ITransportEndpointProbe? endpointProbe,
+        CancellationToken cancellationToken)
+    {
+        var throttleLimit = Math.Max(1, plan.ThrottleLimit);
+        using var semaphore = new SemaphoreSlim(throttleLimit, throttleLimit);
+        var tasks = plan.Targets.Select(async (target, index) =>
+        {
+            await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var result = await ExecuteTargetAsync(plan, target, transportExecutor, endpointProbe, cancellationToken).ConfigureAwait(false);
+                return (Index: index, Result: result);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        var completed = await Task.WhenAll(tasks).ConfigureAwait(false);
+        return completed
+            .OrderBy(static target => target.Index)
+            .Select(static target => target.Result)
+            .ToArray();
+    }
+
+    private async Task<TargetExecutionResult> ExecuteTargetAsync(
+        ExecutionPlan plan,
+        TargetExecution target,
+        ITransportScriptExecutor transportExecutor,
+        ITransportEndpointProbe? endpointProbe,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (endpointProbe is not null)
+            {
+                var probeResult = await endpointProbe.ProbeAsync(new TransportEndpointProbeRequest(plan, target), cancellationToken).ConfigureAwait(false);
+                if (!probeResult.Succeeded)
+                {
+                    return CreateFailureResult(
+                        plan,
+                        target,
+                        probeResult.StartedAt,
+                        probeResult.EndedAt,
+                        probeResult.FailureCategory,
+                        probeResult.FailureMessage ?? $"Endpoint probe failed for target '{target.Target.Name}'.",
+                        probeResult.Metadata);
+                }
+            }
+
+            var targetPlan = plan with { Targets = [target] };
+            var preparation = await scriptPreparationService.PrepareAsync(targetPlan, cancellationToken).ConfigureAwait(false);
+            var targetPreparation = preparation.Targets.SingleOrDefault(result =>
+                result.Target.Name.Equals(target.Target.Name, StringComparison.OrdinalIgnoreCase));
+
+            if (targetPreparation is null)
+            {
+                return CreateFailureResult(
+                    plan,
+                    target,
+                    clock.UtcNow,
+                    clock.UtcNow,
+                    FailureCategory.PayloadPreparationFailed,
+                    $"No script preparation result exists for target '{target.Target.Name}'.");
+            }
+
+            if (!targetPreparation.Succeeded)
+            {
+                return CreateFailureResult(
+                    plan,
+                    target,
+                    clock.UtcNow,
+                    clock.UtcNow,
+                    targetPreparation.FailureCategory,
+                    targetPreparation.FailureMessage ?? $"Script preparation failed for target '{target.Target.Name}'.");
+            }
+
+            var execution = await transportExecutor.ExecuteScriptAsync(
+                new TransportScriptExecutionRequest(plan, target, targetPreparation),
+                cancellationToken).ConfigureAwait(false);
+
+            return await CreateExecutionResultAsync(plan, target, execution, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            var endedAt = clock.UtcNow;
+            return CreateFailureResult(
+                plan,
+                target,
+                endedAt,
+                endedAt,
+                FailureCategory.InternalError,
+                $"Target execution failed unexpectedly for '{target.Target.Name}': {exception.Message}");
+        }
+    }
+
+    private static async Task<TargetExecutionResult> CreateExecutionResultAsync(
+        ExecutionPlan plan,
+        TargetExecution target,
+        TransportScriptExecutionResult execution,
+        CancellationToken cancellationToken)
+    {
+        var state = execution.FailureCategory == FailureCategory.None
+            ? TargetExecutionState.Succeeded
+            : TargetExecutionState.Failed;
+        var stdoutPath = Path.Combine(target.PlannedLocalTargetRoot ?? string.Empty, "stdout.txt");
+        var stderrPath = Path.Combine(target.PlannedLocalTargetRoot ?? string.Empty, "stderr.txt");
+
+        if (!string.IsNullOrWhiteSpace(target.PlannedLocalTargetRoot))
+        {
+            Directory.CreateDirectory(target.PlannedLocalTargetRoot);
+            await File.WriteAllTextAsync(stdoutPath, execution.Stdout, cancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(stderrPath, execution.Stderr, cancellationToken).ConfigureAwait(false);
+        }
+
+        return new TargetExecutionResult(
+            RunId: plan.RunId,
+            Target: target.Target.Name,
+            Transport: plan.Job.Transport,
+            PayloadType: plan.Job.Payload.PayloadType,
+            PayloadName: plan.Job.Payload.DisplayName,
+            State: state,
+            ExitCode: execution.ExitCode,
+            ExpectedExitCodes: plan.Job.ExpectedExitCodes,
+            StartedAt: execution.StartedAt,
+            EndedAt: execution.EndedAt,
+            FailureCategory: execution.FailureCategory,
+            FailureMessage: execution.FailureMessage,
+            StdoutPath: stdoutPath,
+            StderrPath: stderrPath,
+            ResultPath: target.PlannedLocalResultPath ?? string.Empty,
+            Artifacts: [],
+            SecretHandoffStatus: "not-supported",
+            CleanupStatus: "not-started",
+            TransportMetadata: execution.Metadata);
     }
 
     private static TargetExecutionResult CreateFailureResult(

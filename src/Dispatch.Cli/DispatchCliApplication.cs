@@ -85,6 +85,8 @@ Payload boundary:
 
             var result = await executor.ExecuteAsync(plan, cancellationToken).ConfigureAwait(false);
             Console.WriteLine(DispatchJson.Serialize(result));
+            Console.Error.WriteLine(
+                $"Dispatch run {result.RunId}: {result.SuccessCount}/{result.TargetCount} succeeded, {result.FailedCount} failed, {result.TimedOutCount} timed out, {result.CancelledCount} cancelled. Results: {result.ResultPath}");
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)

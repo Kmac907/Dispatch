@@ -205,6 +205,71 @@ public sealed class PsExecExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorRespectsThrottleAndWritesDurableResults()
+    {
+        using var script = TemporaryScript.Create("Batch.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new ConcurrentPsExecProcessRunner(command =>
+        {
+            var target = command.Arguments[0].TrimStart('\\');
+            var exitCode = target.Equals("PC003", StringComparison.OrdinalIgnoreCase) ? 5 : 0;
+            return new PsExecProcessResult(
+                exitCode,
+                $"stdout from {target}",
+                $"stderr from {target}",
+                new DateTimeOffset(2026, 06, 13, 12, 0, 1, TimeSpan.Zero),
+                new DateTimeOffset(2026, 06, 13, 12, 0, 2, TimeSpan.Zero));
+        });
+        using var provider = BuildProvider(outputRoot.Path, runner);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets:
+            [
+                new TargetSpec("PC001"),
+                new TargetSpec("PC002"),
+                new TargetSpec("PC003"),
+                new TargetSpec("PC004")
+            ],
+            transport: TransportKind.PsExec,
+            throttle: 2,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        Assert.Equal(2, runner.MaxConcurrency);
+        Assert.Equal(["PC001", "PC002", "PC003", "PC004"], result.Targets.Select(static target => target.Target));
+        Assert.Equal(3, result.SuccessCount);
+        Assert.Equal(1, result.FailedCount);
+        Assert.Equal(FailureCategory.UnexpectedExitCode, result.Targets.Single(static target => target.Target == "PC003").FailureCategory);
+
+        Assert.True(File.Exists(plan.LocalResultsJsonPath));
+        Assert.True(File.Exists(plan.LocalResultsCsvPath));
+        Assert.True(File.Exists(Path.Combine(plan.LocalAdminRoot, "dispatch.log")));
+
+        var firstTarget = result.Targets.Single(static target => target.Target == "PC001");
+        Assert.True(File.Exists(firstTarget.ResultPath));
+        Assert.True(File.Exists(firstTarget.StdoutPath));
+        Assert.True(File.Exists(firstTarget.StderrPath));
+        Assert.Equal("stdout from PC001", await File.ReadAllTextAsync(firstTarget.StdoutPath));
+        Assert.Equal("stderr from PC001", await File.ReadAllTextAsync(firstTarget.StderrPath));
+
+        var resultsJson = await File.ReadAllTextAsync(plan.LocalResultsJsonPath);
+        Assert.Contains("\"targetCount\": 4", resultsJson);
+        Assert.Contains("\"failedCount\": 1", resultsJson);
+
+        var resultsCsv = await File.ReadAllTextAsync(plan.LocalResultsCsvPath);
+        Assert.Contains("PC003", resultsCsv);
+        Assert.Contains("UnexpectedExitCode", resultsCsv);
+
+        var dispatchLog = await File.ReadAllTextAsync(Path.Combine(plan.LocalAdminRoot, "dispatch.log"));
+        Assert.Contains("Succeeded: 3; Failed: 1", dispatchLog);
+    }
+
+    [Fact]
     public async Task PsExecPortProbePropagatesCallerCancellation()
     {
         using var cancellation = new CancellationTokenSource();
@@ -217,7 +282,7 @@ public sealed class PsExecExecutionTests
 
     private static ServiceProvider BuildProvider(
         string localRunRoot,
-        RecordingPsExecProcessRunner runner,
+        IPsExecProcessRunner runner,
         RecordingEndpointFileSystem? endpointFileSystem = null,
         string psexecPath = "psexec.exe",
         IPsExecDnsResolver? dnsResolver = null,
@@ -287,6 +352,28 @@ public sealed class PsExecExecutionTests
                 stderr,
                 new DateTimeOffset(2026, 06, 13, 12, 0, 1, TimeSpan.Zero),
                 new DateTimeOffset(2026, 06, 13, 12, 0, 2, TimeSpan.Zero)));
+        }
+    }
+
+    private sealed class ConcurrentPsExecProcessRunner(Func<PsExecCommand, PsExecProcessResult> resultFactory) : IPsExecProcessRunner
+    {
+        private int currentConcurrency;
+
+        public int MaxConcurrency { get; private set; }
+
+        public async Task<PsExecProcessResult> RunAsync(PsExecCommand command, CancellationToken cancellationToken)
+        {
+            var current = Interlocked.Increment(ref currentConcurrency);
+            MaxConcurrency = Math.Max(MaxConcurrency, current);
+            try
+            {
+                await Task.Delay(50, cancellationToken);
+                return resultFactory(command);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref currentConcurrency);
+            }
         }
     }
 
