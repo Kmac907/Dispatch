@@ -78,6 +78,105 @@ public sealed class PsExecExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorSkipsScriptTransferWhenDnsProbeFails()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            runner,
+            endpointFileSystem: endpointFileSystem,
+            dnsResolver: new RecordingDnsResolver(PsExecProbeResult.Failed("DNS failure.")));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("MissingHost")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.ProbeFailed, target.FailureCategory);
+        Assert.Contains("DNS failure", target.FailureMessage);
+        Assert.Empty(endpointFileSystem.Copies);
+        Assert.Empty(runner.Commands);
+        Assert.Equal("dns", target.TransportMetadata?["stage"]);
+    }
+
+    [Fact]
+    public async Task ExecutorSkipsScriptTransferWhenSmbProbeFails()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            runner,
+            endpointFileSystem: endpointFileSystem,
+            portProbe: new RecordingPortProbe(PsExecProbeResult.Failed("Port closed.")));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.TransportUnavailable, target.FailureCategory);
+        Assert.Contains("Port closed", target.FailureMessage);
+        Assert.Empty(endpointFileSystem.Copies);
+        Assert.Empty(runner.Commands);
+        Assert.Equal("smb", target.TransportMetadata?["stage"]);
+    }
+
+    [Fact]
+    public async Task ExecutorSkipsScriptTransferWhenAdminShareAuthorizationFails()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            runner,
+            endpointFileSystem: endpointFileSystem,
+            adminShareProbe: new RecordingAdminShareProbe(PsExecAdminShareProbeResult.Failed("Access denied.", PsExecAdminShareFailureKind.Authorization)));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.AuthorizationFailed, target.FailureCategory);
+        Assert.Contains("Access denied", target.FailureMessage);
+        Assert.Empty(endpointFileSystem.Copies);
+        Assert.Empty(runner.Commands);
+        Assert.Equal("admin-share", target.TransportMetadata?["stage"]);
+    }
+
+    [Fact]
     public async Task ExecutorClassifiesUnexpectedPsExecExitCode()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -105,11 +204,25 @@ public sealed class PsExecExecutionTests
         Assert.Contains("expected 0", target.FailureMessage);
     }
 
+    [Fact]
+    public async Task PsExecPortProbePropagatesCallerCancellation()
+    {
+        using var cancellation = new CancellationTokenSource();
+        await cancellation.CancelAsync();
+        var probe = new PsExecPortProbe();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => probe.CanConnectAsync("127.0.0.1", 445, cancellation.Token));
+    }
+
     private static ServiceProvider BuildProvider(
         string localRunRoot,
         RecordingPsExecProcessRunner runner,
         RecordingEndpointFileSystem? endpointFileSystem = null,
-        string psexecPath = "psexec.exe")
+        string psexecPath = "psexec.exe",
+        IPsExecDnsResolver? dnsResolver = null,
+        IPsExecPortProbe? portProbe = null,
+        IPsExecAdminShareProbe? adminShareProbe = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -128,6 +241,9 @@ public sealed class PsExecExecutionTests
             .AddSingleton<IRunIdGenerator>(new FixedRunIdGenerator("run-001"))
             .AddSingleton<ISystemClock>(new FixedSystemClock(new DateTimeOffset(2026, 06, 13, 12, 0, 0, TimeSpan.Zero)))
             .AddSingleton<IEndpointFileSystem>(endpointFileSystem ?? new RecordingEndpointFileSystem())
+            .AddSingleton<IPsExecDnsResolver>(dnsResolver ?? new RecordingDnsResolver(PsExecProbeResult.Success))
+            .AddSingleton<IPsExecPortProbe>(portProbe ?? new RecordingPortProbe(PsExecProbeResult.Success))
+            .AddSingleton<IPsExecAdminShareProbe>(adminShareProbe ?? new RecordingAdminShareProbe(PsExecAdminShareProbeResult.Success))
             .AddSingleton<IPsExecProcessRunner>(runner)
             .BuildServiceProvider(validateScopes: true);
     }
@@ -172,5 +288,20 @@ public sealed class PsExecExecutionTests
                 new DateTimeOffset(2026, 06, 13, 12, 0, 1, TimeSpan.Zero),
                 new DateTimeOffset(2026, 06, 13, 12, 0, 2, TimeSpan.Zero)));
         }
+    }
+
+    private sealed class RecordingDnsResolver(PsExecProbeResult result) : IPsExecDnsResolver
+    {
+        public Task<PsExecProbeResult> ResolveAsync(string target, CancellationToken cancellationToken) => Task.FromResult(result);
+    }
+
+    private sealed class RecordingPortProbe(PsExecProbeResult result) : IPsExecPortProbe
+    {
+        public Task<PsExecProbeResult> CanConnectAsync(string target, int port, CancellationToken cancellationToken) => Task.FromResult(result);
+    }
+
+    private sealed class RecordingAdminShareProbe(PsExecAdminShareProbeResult result) : IPsExecAdminShareProbe
+    {
+        public Task<PsExecAdminShareProbeResult> ProbeDirectoryAsync(string path, CancellationToken cancellationToken) => Task.FromResult(result);
     }
 }

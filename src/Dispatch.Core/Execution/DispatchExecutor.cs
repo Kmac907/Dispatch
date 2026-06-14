@@ -6,6 +6,7 @@ namespace Dispatch.Core.Execution;
 internal sealed class DispatchExecutor(
     IScriptPreparationService scriptPreparationService,
     IEnumerable<ITransportScriptExecutor> transportExecutors,
+    IEnumerable<ITransportEndpointProbe> endpointProbes,
     ISystemClock clock) : IDispatchExecutor
 {
     public async Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken)
@@ -45,12 +46,51 @@ internal sealed class DispatchExecutor(
                 ResultPath: plan.LocalResultsJsonPath);
         }
 
-        var preparation = await scriptPreparationService.PrepareAsync(plan, cancellationToken).ConfigureAwait(false);
+        var endpointProbe = endpointProbes.SingleOrDefault(probe => probe.Kind == plan.Job.Transport);
+        var probeResults = new Dictionary<string, TransportEndpointProbeResult>(StringComparer.OrdinalIgnoreCase);
+        var probePassedTargets = new List<TargetExecution>();
+
+        foreach (var target in plan.Targets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            if (endpointProbe is null)
+            {
+                probePassedTargets.Add(target);
+                continue;
+            }
+
+            var probeResult = await endpointProbe.ProbeAsync(new TransportEndpointProbeRequest(plan, target), cancellationToken).ConfigureAwait(false);
+            probeResults[target.Target.Name] = probeResult;
+
+            if (probeResult.Succeeded)
+            {
+                probePassedTargets.Add(target);
+            }
+        }
+
+        var probedPlan = plan with { Targets = probePassedTargets };
+        var preparation = probePassedTargets.Count == 0
+            ? new ScriptPreparationResult(null, [])
+            : await scriptPreparationService.PrepareAsync(probedPlan, cancellationToken).ConfigureAwait(false);
         var targetResults = new List<TargetExecutionResult>();
 
         foreach (var target in plan.Targets)
         {
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (probeResults.TryGetValue(target.Target.Name, out var probeResult) && !probeResult.Succeeded)
+            {
+                targetResults.Add(CreateFailureResult(
+                    plan,
+                    target,
+                    probeResult.StartedAt,
+                    probeResult.EndedAt,
+                    probeResult.FailureCategory,
+                    probeResult.FailureMessage ?? $"Endpoint probe failed for target '{target.Target.Name}'.",
+                    probeResult.Metadata));
+                continue;
+            }
 
             var targetPreparation = preparation.Targets.SingleOrDefault(result => result.Target.Name.Equals(target.Target.Name, StringComparison.OrdinalIgnoreCase));
             if (targetPreparation is null)
@@ -123,7 +163,8 @@ internal sealed class DispatchExecutor(
         DateTimeOffset startedAt,
         DateTimeOffset endedAt,
         FailureCategory failureCategory,
-        string failureMessage) =>
+        string failureMessage,
+        IReadOnlyDictionary<string, string>? metadata = null) =>
         new(
             RunId: plan.RunId,
             Target: target.Target.Name,
@@ -139,5 +180,6 @@ internal sealed class DispatchExecutor(
             FailureMessage: failureMessage,
             ResultPath: target.PlannedLocalResultPath ?? string.Empty,
             SecretHandoffStatus: "not-supported",
-            CleanupStatus: "not-started");
+            CleanupStatus: "not-started",
+            TransportMetadata: metadata);
 }
