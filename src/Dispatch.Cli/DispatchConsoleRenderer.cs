@@ -84,32 +84,6 @@ internal static class DispatchConsoleRenderer
             .BorderColor(Color.Red));
     }
 
-    public static async Task RenderPlanningProgressAsync(IAnsiConsole console, CancellationToken cancellationToken)
-    {
-        await console.Progress()
-            .AutoClear(false)
-            .HideCompleted(false)
-            .Columns(
-            [
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new PercentageColumn(),
-                new SpinnerColumn(Spinner.Known.Dots)
-            ])
-            .StartAsync(async context =>
-            {
-                var validate = context.AddTask("[steelblue1]Validate request[/]");
-                var resolve = context.AddTask("[steelblue1]Resolve targets[/]");
-                var paths = context.AddTask("[steelblue1]Plan run layout[/]");
-                foreach (var task in new[] { validate, resolve, paths })
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    task.Increment(100);
-                    await Task.Yield();
-                }
-            }).ConfigureAwait(false);
-    }
-
     public static void RenderDryRunPlan(IAnsiConsole console, ExecutionPlan plan)
     {
         console.Write(CreateShell(
@@ -120,6 +94,28 @@ internal static class DispatchConsoleRenderer
                 CreatePlanCharts(plan),
                 CreateTargetPlanTable(plan),
                 CreatePlanPathTable(plan))));
+    }
+
+    public static void RenderDryRunProgressSummary(IAnsiConsole console)
+    {
+        var table = new Table()
+            .RoundedBorder()
+            .BorderColor(Color.SteelBlue1)
+            .Expand();
+        table.AddColumn("Status");
+        table.AddColumn("Stage");
+        table.AddColumn("Progress");
+
+        table.AddRow("[green]PASS[/]", "Validate dry-run request", CreateCompletedBar());
+        table.AddRow("[green]PASS[/]", "Build execution plan", CreateCompletedBar());
+        table.AddRow("[green]PASS[/]", "Resolve target layout", CreateCompletedBar());
+        table.AddRow("[green]PASS[/]", "Prepare dry-run view", CreateCompletedBar());
+
+        console.Write(new Panel(table)
+            .Header("[bold steelblue1] Dry Run Progress [/]")
+            .RoundedBorder()
+            .BorderColor(Color.SteelBlue1)
+            .Expand());
     }
 
     public static void RenderRunResult(IAnsiConsole console, DispatchRunResult result)
@@ -331,6 +327,9 @@ internal static class DispatchConsoleRenderer
         chart.AddItem("Cancelled", Math.Max(result.CancelledCount, 0), Color.Grey);
         return chart;
     }
+
+    private static string CreateCompletedBar() =>
+        "[green]████████████████████[/] [bold green]100%[/]";
 
     private static string FormatDoctorStatus(DispatchDoctorStatus status) =>
         status switch

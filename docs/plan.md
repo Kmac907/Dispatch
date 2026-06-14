@@ -1030,7 +1030,7 @@ Scope:
 - The command center must provide a persistent operator menu for run setup, doctor diagnostics, command help, and exit.
 - The command center must be a full live console app surface hosted by Spectre.Console `LiveDisplay`; a chain of `SelectionPrompt`, `TextPrompt`, or `ConfirmationPrompt` screens does not satisfy this requirement.
 - The command center must update in place without scrolling repeated menu panels or repeated static output down the terminal.
-- Spectre.Console live primitives have defined roles: `LiveDisplay` owns the command center and run dashboard, `Status` owns indeterminate planning/prerequisite work, and `Progress` owns measurable per-target execution progress when the full dashboard is disabled.
+- Spectre.Console live primitives have defined roles: `LiveDisplay` owns the command center and run dashboard, `Status` owns indeterminate prerequisite work, and `Progress` owns dry-run planning progress plus measurable per-target execution progress when the full dashboard is disabled.
 - Render the entire command service through Spectre.Console: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact live progress, full live dashboard progress, and final run summaries.
 - Do not emit raw JSON, default parser help, or plain status lines as the console UX for any command path.
 - Use actual Spectre.Console widgets intentionally, including panels, tables, grids, rules, bar charts, breakdown charts, progress bars, status spinners, live display, prompts, confirmations, and styled markup.
@@ -1038,6 +1038,7 @@ Scope:
 - The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, status symbols, and a concise recent-event/failure area.
 - The live dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
 - Compact execution mode must use live progress bars and status columns for terminal runs; redirected/non-interactive execution must avoid repeated static progress cards and emit only durable files plus final Spectre summaries.
+- Dry-run planning must show Spectre.Console progress bars before the execution-plan view; terminal sessions should use live `Progress`, while redirected or non-live sessions must render one designed progress snapshot rather than silently dropping progress or repeatedly printing updates.
 - Dry-run and final run summaries must render as Spectre.Console operator views; durable JSON/CSV remains in the run folder for automation and module wrappers.
 - Fall back to final Spectre.Console summaries when live rendering is unavailable, redirected, unsupported, or explicitly disabled.
 
@@ -1056,7 +1057,7 @@ Definition of done:
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
 - Every command path renders through the Dispatch Spectre.Console renderer rather than default parser output, raw JSON, or plain text status lines.
-- Dry-run output renders a Spectre.Console execution-plan view and still records durable plan/result data through the shared model when appropriate.
+- Dry-run output renders visible Spectre.Console progress bars followed by a Spectre.Console execution-plan view, and still records durable plan/result data through the shared model when appropriate.
 - Real terminal runs render either the full live Spectre.Console dashboard or compact live Spectre.Console progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, charts, result-file paths, and failure summaries.
 - Tests cover help, errors, doctor, dry-run, compact live progress rendering, live dashboard rendering, command-center live surface/key navigation, and final summaries as Spectre-rendered command-service output.
 

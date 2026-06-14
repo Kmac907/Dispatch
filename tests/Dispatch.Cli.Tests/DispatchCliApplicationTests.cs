@@ -167,6 +167,10 @@ public sealed class DispatchCliApplicationTests
                 CancellationToken.None));
 
             Assert.Equal(0, exitCode);
+            Assert.Contains("Dry Run Progress", output);
+            Assert.Contains("Validate dry-run request", output);
+            Assert.Contains("Build execution plan", output);
+            Assert.Contains("100%", output);
             Assert.Contains("Dispatch Dry Run", output);
             Assert.Contains("Execution Plan", output);
             Assert.Contains("PC001", output);

@@ -63,16 +63,15 @@ public sealed class DispatchCliApplication(
 
         try
         {
-            var plan = await CreatePlanWithStatusAsync(command!.ToRequest(), cancellationToken).ConfigureAwait(false);
+            var request = command!.ToRequest();
             if (command.DryRun)
             {
-                await DispatchConsoleRenderer.RenderPlanningProgressAsync(
-                    CreateOutputConsole(Console.Out),
-                    cancellationToken).ConfigureAwait(false);
-                DispatchConsoleRenderer.RenderDryRunPlan(CreateOutputConsole(Console.Out), plan);
+                var dryRunPlan = await CreatePlanWithDryRunProgressAsync(request, cancellationToken).ConfigureAwait(false);
+                DispatchConsoleRenderer.RenderDryRunPlan(CreateOutputConsole(Console.Out), dryRunPlan);
                 return 0;
             }
 
+            var plan = await CreatePlanWithStatusAsync(request, cancellationToken).ConfigureAwait(false);
             var result = ShouldUseLiveDashboard(command.NoDashboard)
                 ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
                 : await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
@@ -195,6 +194,58 @@ public sealed class DispatchCliApplication(
                 await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false))
             .ConfigureAwait(false);
     }
+
+    private async Task<ExecutionPlan> CreatePlanWithDryRunProgressAsync(
+        DispatchRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            var redirectedPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+            DispatchConsoleRenderer.RenderDryRunProgressSummary(CreateOutputConsole(Console.Out));
+            return redirectedPlan;
+        }
+
+        var plan = await CreateOutputConsole(Console.Out)
+            .Progress()
+            .AutoClear(false)
+            .HideCompleted(false)
+            .Columns(
+            [
+                new TaskDescriptionColumn(),
+                new ProgressBarColumn(),
+                new PercentageColumn(),
+                new SpinnerColumn(Spinner.Known.Dots)
+            ])
+            .StartAsync(async context =>
+            {
+                var validate = context.AddTask("[steelblue1]Validate dry-run request[/]");
+                validate.Increment(100);
+                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
+
+                var planTask = context.AddTask("[steelblue1]Build execution plan[/]");
+                planTask.Increment(15);
+                var plan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+                planTask.Increment(85);
+                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
+
+                var targetTask = context.AddTask("[steelblue1]Resolve target layout[/]");
+                targetTask.Increment(100);
+                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
+
+                var renderTask = context.AddTask("[steelblue1]Prepare dry-run view[/]");
+                renderTask.Increment(100);
+                await HoldProgressFrameAsync(cancellationToken).ConfigureAwait(false);
+
+                return plan;
+            })
+            .ConfigureAwait(false);
+        DispatchConsoleRenderer.RenderDryRunProgressSummary(CreateOutputConsole(Console.Out));
+        return plan;
+    }
+
+    private static async Task HoldProgressFrameAsync(CancellationToken cancellationToken) =>
+        await Task.Delay(TimeSpan.FromMilliseconds(75), cancellationToken).ConfigureAwait(false);
 
     private bool ShouldUseLiveDashboard(bool noDashboard) =>
         displayMode switch
