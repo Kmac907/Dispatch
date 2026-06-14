@@ -47,7 +47,7 @@ Run `dispatch doctor` to check local prerequisites before executing endpoint job
 
 ## Run Output
 
-Real `dispatch run` executions write concise live target status to stderr and write the final result JSON to stdout. Automation should consume stdout for structured results and treat stderr as operator-facing progress and summary output.
+Real interactive `dispatch run` executions render a Spectre.Console live dashboard on stderr with run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, recent activity, and failure summaries. When interactive rendering is unavailable, output is redirected, or `--no-dashboard` is passed, Dispatch falls back to append-only stderr status lines. The final result JSON stays on stdout in both modes, so automation should consume stdout for structured results and treat stderr as operator-facing progress and summary output.
 
 ## Script-Owned Payloads
 

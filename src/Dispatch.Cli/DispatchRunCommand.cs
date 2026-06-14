@@ -13,7 +13,8 @@ internal sealed record DispatchRunCommand(
     string? LocalRunRoot,
     string? RemoteRunRoot,
     IReadOnlyList<string> ArtifactPaths,
-    bool RunAsSystem)
+    bool RunAsSystem,
+    bool NoDashboard)
 {
     public DispatchRequest ToRequest() =>
         new(

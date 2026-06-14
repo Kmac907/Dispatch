@@ -28,7 +28,7 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 
 - Dry-run planning output for all local inputs.
 - `dispatch doctor` / `Test-Dispatch` prerequisite checks.
-- Concise live terminal status with non-interactive fallback output.
+- Enterprise-grade Spectre.Console live run UI for interactive terminals, with non-interactive append-only fallback output.
 - Basic artifact copy-back rules.
 - Release ZIP packaging as a convenience artifact.
 
@@ -1027,8 +1027,12 @@ Scope:
 - Implement `dispatch doctor`.
 - Run active interactive CLI when no arguments are supplied.
 - Use `System.CommandLine` for command parsing/help.
-- Use `Spectre.Console` for prompts, confirmations, tables, progress/status output, and readable terminal summaries.
-- Fall back to simple append-only output when interactive rendering is unavailable.
+- Use `Spectre.Console` for prompts, confirmations, tables, live progress/status output, and readable terminal summaries.
+- For real interactive runs, render an enterprise-grade live run dashboard using Spectre.Console. The dashboard should be useful for repeated operator use, not merely decorative.
+- The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, and a concise recent-event/failure area.
+- The live dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
+- Keep final machine-readable result JSON on stdout. Interactive status, fallback status, warnings, and summaries must not contaminate stdout.
+- Fall back to simple append-only stderr output when interactive rendering is unavailable, redirected, unsupported, or explicitly disabled.
 
 Non-goals:
 - No GUI.
@@ -1042,6 +1046,8 @@ Definition of done:
 - `dispatch` guides the user through script, targets, transport, run context, throttle, dry-run, and confirmation.
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
+- Interactive real runs render a polished Spectre.Console live dashboard with per-target phase visibility, aggregate counters, elapsed time, and failure summaries.
+- Non-interactive runs preserve append-only stderr status and final JSON on stdout.
 
 #### 6.1 Operator Diagnostics
 

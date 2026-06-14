@@ -4,6 +4,7 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Options;
+using Spectre.Console;
 
 namespace Dispatch.Cli.Tests;
 
@@ -187,7 +188,7 @@ public sealed class DispatchCliApplicationTests
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         var planner = new CapturingPlanner();
         var executor = new SucceedingExecutor();
-        var application = CreateApplication(planner, executor: executor);
+        var application = CreateApplication(planner, executor: executor, displayMode: DispatchRunDisplayMode.AppendOnly);
 
         try
         {
@@ -203,7 +204,7 @@ public sealed class DispatchCliApplicationTests
                 ],
                 CancellationToken.None));
 
-            Assert.Equal(0, exitCode);
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
             Assert.Contains("\"runId\": \"run-test\"", output);
             Assert.Contains("\"target\": \"PC001\"", output);
             Assert.Contains("PC001: probing", error);
@@ -217,15 +218,120 @@ public sealed class DispatchCliApplicationTests
         }
     }
 
+    [Fact]
+    public async Task NoDashboardForcesAppendOnlyStatusToError()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var executor = new SucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor, displayMode: DispatchRunDisplayMode.Auto);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "--script",
+                    scriptPath,
+                    "--computer-name",
+                    "PC001",
+                    "--transport",
+                    "psexec",
+                    "--no-dashboard"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Contains("\"runId\": \"run-test\"", output);
+            Assert.Contains("PC001: probing", error);
+            Assert.Contains("PC001: succeeded", error);
+            Assert.DoesNotContain("Dispatch Run", output);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task LiveDashboardRendererShowsRunStatusTargetPhaseAndFailures()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+
+        try
+        {
+            var application = CreateApplication(planner);
+            var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "--dry-run",
+                    "--script",
+                    scriptPath,
+                    "--computer-name",
+                    "PC001,PC002",
+                    "--transport",
+                    "psexec",
+                    "--throttle",
+                    "2"
+                ],
+                CancellationToken.None));
+            Assert.True(exitCode == 0, $"Dry-run planning failed. {error}");
+
+            var plan = Assert.IsType<ExecutionPlan>(planner.LastPlan);
+            var dashboard = new SpectreDispatchRunDashboard(plan, DateTimeOffset.UnixEpoch);
+            dashboard.Update(new DispatchExecutionProgress(
+                plan.RunId,
+                "PC001",
+                TargetExecutionState.Executing,
+                DateTimeOffset.UnixEpoch.AddSeconds(1)));
+            dashboard.Update(new DispatchExecutionProgress(
+                plan.RunId,
+                "PC002",
+                TargetExecutionState.Failed,
+                DateTimeOffset.UnixEpoch.AddSeconds(2),
+                FailureCategory.ExecutionFailed,
+                "Installer returned 1603."));
+
+            using var writer = new StringWriter();
+            var console = AnsiConsole.Create(new AnsiConsoleSettings
+            {
+                Out = new DispatchAnsiConsoleOutput(writer, isTerminal: false),
+                Interactive = InteractionSupport.No
+            });
+
+            console.Write(dashboard.Render());
+            var output = writer.ToString();
+
+            Assert.Contains("Dispatch Run", output);
+            Assert.Contains("Run ID", output);
+            Assert.Contains("run-test", output);
+            Assert.Contains("PsExec", output);
+            Assert.Contains("PC001", output);
+            Assert.Contains("Executing", output);
+            Assert.Contains("PC002", output);
+            Assert.Contains("ExecutionFailed", output);
+            Assert.Contains("Installer returned 1603", output);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
     private static DispatchCliApplication CreateApplication(
         CapturingPlanner planner,
         IDispatchDoctor? doctor = null,
-        IDispatchExecutor? executor = null) =>
+        IDispatchExecutor? executor = null,
+        DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto) =>
         new(
             Options.Create(new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
             executor ?? new ThrowingExecutor(),
-            doctor ?? new StaticDoctor(new DispatchDoctorReport([])));
+            doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
+            displayMode);
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {
@@ -251,6 +357,7 @@ public sealed class DispatchCliApplicationTests
     private sealed class CapturingPlanner : IDispatchPlanner
     {
         public DispatchRequest? LastRequest { get; private set; }
+        public ExecutionPlan? LastPlan { get; private set; }
 
         public Task<ExecutionPlan> CreatePlanAsync(DispatchRequest request, CancellationToken cancellationToken)
         {
@@ -277,14 +384,15 @@ public sealed class DispatchCliApplicationTests
                 ArtifactPolicy: new ArtifactPolicy(request.ArtifactPaths),
                 ResultPolicy: new ResultPolicy(@"C:\Dispatch\Tests\run-test"));
 
-            return Task.FromResult(new ExecutionPlan(
+            LastPlan = new ExecutionPlan(
                 RunId: "run-test",
                 CreatedAt: DateTimeOffset.UnixEpoch,
                 Job: job,
                 Targets: targets,
                 DryRun: request.DryRun,
                 ThrottleLimit: request.Throttle ?? 0,
-                LocalResultsJsonPath: @"C:\Dispatch\Tests\run-test\Admin\results.json"));
+                LocalResultsJsonPath: @"C:\Dispatch\Tests\run-test\Admin\results.json");
+            return Task.FromResult(LastPlan);
         }
     }
 

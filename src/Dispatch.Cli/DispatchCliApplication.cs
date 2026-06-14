@@ -16,7 +16,9 @@ public sealed class DispatchCliApplication(
     IOptions<DispatchOptions> options,
     IDispatchPlanner planner,
     IDispatchExecutor executor,
-    IDispatchDoctor doctor)
+    IDispatchDoctor doctor,
+    DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
+    IAnsiConsole? statusConsole = null)
 {
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -61,6 +63,7 @@ public sealed class DispatchCliApplication(
         runCommand.AddOption(new Option<string>("--output-root", "Local root for Dispatch run results."));
         runCommand.AddOption(new Option<string>("--remote-root", "Remote Dispatch root for prepared scripts and outputs."));
         runCommand.AddOption(new Option<string>("--artifact-path", "Relative artifact path or comma-separated artifact paths to copy back."));
+        runCommand.AddOption(new Option<bool>("--no-dashboard", "Use append-only stderr progress instead of the interactive live dashboard."));
         runCommand.AddArgument(new Argument<string[]>("script-args", () => [], "Arguments passed through to the script.")
         {
             Arity = ArgumentArity.ZeroOrMore
@@ -110,10 +113,12 @@ public sealed class DispatchCliApplication(
                 return 0;
             }
 
-            var result = await executor.ExecuteAsync(
-                plan,
-                new ConsoleDispatchExecutionObserver(Console.Error),
-                cancellationToken).ConfigureAwait(false);
+            var result = ShouldUseLiveDashboard(command.NoDashboard)
+                ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
+                : await executor.ExecuteAsync(
+                    plan,
+                    new ConsoleDispatchExecutionObserver(Console.Error),
+                    cancellationToken).ConfigureAwait(false);
             Console.WriteLine(DispatchJson.Serialize(result));
             WriteResultSummary(result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
@@ -276,6 +281,101 @@ public sealed class DispatchCliApplication(
         Console.Error.WriteLine(
             $"Dispatch run {result.RunId}: {result.SuccessCount}/{result.TargetCount} succeeded, {result.FailedCount} failed, {result.TimedOutCount} timed out, {result.CancelledCount} cancelled. Results: {result.ResultPath}");
     }
+
+    private async Task<DispatchRunResult> RunWithLiveDashboardAsync(
+        ExecutionPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var dashboard = new SpectreDispatchRunDashboard(plan, DateTimeOffset.UtcNow);
+        var console = statusConsole ?? CreateStatusConsole(Console.Error);
+
+        try
+        {
+            return await console
+                .Live(dashboard.Render())
+                .AutoClear(false)
+                .Overflow(VerticalOverflow.Ellipsis)
+                .Cropping(VerticalOverflowCropping.Bottom)
+                .StartAsync(async context =>
+                {
+                    using var refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+                    using var refreshCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    var refreshGate = new object();
+                    var refreshTask = RefreshDashboardPeriodicallyAsync(
+                        dashboard,
+                        context,
+                        refreshGate,
+                        refreshTimer,
+                        refreshCancellation.Token);
+                    var observer = new SpectreDispatchExecutionObserver(dashboard, context, refreshGate);
+
+                    try
+                    {
+                        var result = await executor.ExecuteAsync(plan, observer, cancellationToken).ConfigureAwait(false);
+                        dashboard.Complete(result);
+                        lock (refreshGate)
+                        {
+                            context.UpdateTarget(dashboard.Render());
+                            context.Refresh();
+                        }
+
+                        return result;
+                    }
+                    finally
+                    {
+                        await refreshCancellation.CancelAsync().ConfigureAwait(false);
+                        await refreshTask.ConfigureAwait(false);
+                    }
+                }).ConfigureAwait(false);
+        }
+        catch (IOException exception) when (displayMode == DispatchRunDisplayMode.Auto)
+        {
+            Console.Error.WriteLine(
+                $"Dispatch live dashboard unavailable; falling back to append-only status. {exception.Message}");
+            return await executor.ExecuteAsync(
+                plan,
+                new ConsoleDispatchExecutionObserver(Console.Error),
+                cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private bool ShouldUseLiveDashboard(bool noDashboard) =>
+        displayMode switch
+        {
+            DispatchRunDisplayMode.LiveDashboard => true,
+            DispatchRunDisplayMode.AppendOnly => false,
+            _ => !noDashboard && !Console.IsErrorRedirected
+        };
+
+    private static async Task RefreshDashboardPeriodicallyAsync(
+        SpectreDispatchRunDashboard dashboard,
+        LiveDisplayContext context,
+        object gate,
+        PeriodicTimer refreshTimer,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (await refreshTimer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
+            {
+                lock (gate)
+                {
+                    context.UpdateTarget(dashboard.Render());
+                    context.Refresh();
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static IAnsiConsole CreateStatusConsole(TextWriter writer) =>
+        AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Out = new DispatchAnsiConsoleOutput(writer, isTerminal: true),
+            Interactive = InteractionSupport.Yes
+        });
 
     private static void RenderDoctorReport(DispatchDoctorReport report)
     {

@@ -26,6 +26,7 @@ internal sealed class DispatchRunCommandParser
         string? remoteRunRoot = null;
         var artifactPaths = new List<string>();
         var runAsSystem = false;
+        var noDashboard = false;
         var scriptArguments = new List<string>();
 
         for (var index = 0; index < args.Count; index++)
@@ -38,6 +39,9 @@ internal sealed class DispatchRunCommandParser
                     break;
                 case "--run-as-system":
                     runAsSystem = true;
+                    break;
+                case "--no-dashboard":
+                    noDashboard = true;
                     break;
                 case "--script":
                     if (!TryReadValue(args, ref index, arg, out scriptPath, out error))
@@ -163,7 +167,8 @@ internal sealed class DispatchRunCommandParser
             LocalRunRoot: localRunRoot,
             RemoteRunRoot: remoteRunRoot,
             ArtifactPaths: artifactPaths,
-            RunAsSystem: runAsSystem);
+            RunAsSystem: runAsSystem,
+            NoDashboard: noDashboard);
         return true;
     }
 
