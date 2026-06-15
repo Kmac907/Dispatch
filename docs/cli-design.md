@@ -92,6 +92,8 @@ Current execution rendering uses `DispatchExecutionProgress` events, a channel-f
 
 YAML inventory is the documented default because it supports groups, variables, transport policy, and credential references. Simple text host files remain supported for quick ad-hoc work.
 
+Dispatch YAML is intended to be structured and validated, not free-form. The project contract is to define explicit schema versions, accepted top-level fields, accepted task types, selector rules, and validation errors before endpoint work starts. This is similar in spirit to Ansible inventory and playbook parsing, but narrower in scope and versioned around Dispatch's own model.
+
 Initial selectors:
 
 ```text
@@ -104,6 +106,25 @@ file:path
 ```
 
 Advanced selector expressions such as `web:&prod` and `web:!canary` are not part of the initial selector set and must fail validation clearly.
+
+Initial documented job schema direction:
+
+```text
+schemaVersion
+name
+description
+hosts
+transport
+credential
+strategy
+defaults
+vars
+tasks
+```
+
+Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
+
+Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation only supports a small YAML inventory subset for `hosts`, `groups`, and host `tags`; broader inventory schema behavior, host/group vars, transport policy, credential references, and precedence remain roadmap work.
 
 Initial YAML job task vocabulary:
 
