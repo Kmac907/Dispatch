@@ -2,24 +2,31 @@
 
 ## 1. Product Goal
 
-Dispatch is a Windows-native, push-style remote script execution tool written in C#/.NET and packaged as a Windows single-file executable with an optional PowerShell module wrapper.
+Dispatch is a Windows-native C# automation runner packaged as a Windows single-file executable with an optional PowerShell module wrapper.
 
-Dispatch lets an administrator take a script or command, run it on one or more Windows endpoints through selectable transports such as PsExec, PSRP, or raw WinRM, collect logs/results, and report clearly. It is not an Ansible clone. It starts as a job-based script orchestration tool, not a package manager, playbook engine, or full configuration-management system.
+Dispatch lets an administrator run ad-hoc scripts and commands, apply declared YAML jobs, copy files, inspect hosts, inspect logs, and manage credential references across Windows endpoints through selectable transports such as PsExec, PSRP, or raw WinRM. Dispatch has an Ansible-style operating model for hosts, jobs, transports, logs, and artifacts, but it is not a package manager, endpoint agent, or full configuration-management platform.
 
 ## 2. Scope
+
+The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is the implementation source of truth; when the two differ, update both in the same slice.
 
 ### v1 must ship
 
 - `dispatch.exe` for Windows `win-x64`.
-- Active CLI when `dispatch` is run with no arguments.
-- Automation CLI with `dispatch run`.
+- Spectre.Console.Cli command surface with predictable root help, command help, validation errors, and typed command settings.
+- Command tree: `apply`, `run ps|cmd|exe`, `push`, `hosts list|test|validate|graph|vars`, `logs list|show|tail|export|retry`, `creds add|list|test|remove`, `doctor`, `init job|hosts|config|all`, and `version`.
+- Automation CLI for v1 PowerShell script execution through `dispatch run ps <script.ps1>` and compatibility routing for the existing `dispatch run --script ...` shape until module/install callers migrate.
+- Target selection through inventory, direct host selectors, comma-separated selectors, and simple host files.
 - Target input from `--computer-name` and `--target-file`.
 - PsExec transport.
 - Direct PowerShell script execution by default.
 - Script transfer/preparation under `C:\ProgramData\Dispatch`.
 - Throttled multi-target execution.
 - Expected exit code handling, default `[0]`, with installer-friendly support for `[0,3010]`.
-- Local run folder with admin logs, CSV summary, JSON summary, and per-target outputs.
+- Local run/log folder with admin logs, CSV summary, JSON summary, per-target outputs, and an event stream suitable for live rendering and NDJSON output.
+- Spectre.Console live progress/status/dashboard rendering driven by a single renderer over execution events; worker threads must not write directly to the console.
+- Stable output modes: `rich`, `table`, `json`, `ndjson`, and `yaml`, where JSON/NDJSON are non-decorative automation contracts.
+- YAML configuration, inventory, and job file schema surfaces, with script-first execution implemented before richer task vocabulary.
 - PowerShell module that wraps the bundled EXE.
 - Private Azure Repos source install flow: `git clone`, build, install module, validate, and clean up source.
 - Local install script deployment for `CurrentUser` and `AllUsers` module scopes.
@@ -28,7 +35,6 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 
 - Dry-run planning output for all local inputs.
 - `dispatch doctor` / `Test-Dispatch` prerequisite checks.
-- Enterprise-grade Terminal.Gui command service UI across every CLI path, including help, errors, dry run, doctor, interactive setup, a live interactive command center, retained progress/status display, and final run summaries.
 - Basic artifact copy-back rules.
 - Release ZIP packaging as a convenience artifact.
 
@@ -42,20 +48,19 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 - Dispatch-managed credential, SAS, Key Vault, or runtime secret handoff for any transport.
 - Managed/harness execution mode.
 - Retry policy beyond basic failure reporting.
-- YAML/JSON job manifests.
 - MSI installer.
 - Azure Artifacts publishing.
 - Binary PowerShell cmdlets.
 
 ## 3. Non-Goals
 
-- No Ansible-style playbook engine.
+- No open-ended Ansible-compatible playbook engine or module ecosystem.
 - No permanent endpoint agent.
 - No Azure Files identity/auth framework.
 - No CredSSP/delegation automation.
 - No secret vault system.
 - No Linux/macOS target support.
-- No full software inventory/configuration-management model.
+- No full software inventory/configuration-management model beyond declared jobs, host selection, and small task vocabulary.
 - No installer/media payload staging in v1.
 - No Azure Blob download/SAS orchestration in v1; scripts own their own external payload access.
 - No remote launcher/harness requirement in v1.
@@ -68,7 +73,7 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 - `Dispatch.Transports.PsExec` owns PsExec command construction and captured process execution.
 - `Dispatch.Transports.Psrp` is a post-MVP transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
 - `Dispatch.Transports.WinRm` is a post-MVP raw WinRM transport using WS-Management shell/command semantics.
-- `Dispatch.Cli` owns `dispatch.exe`, interactive prompts, automation commands, and console rendering.
+- `Dispatch.Cli` owns `dispatch.exe`, Spectre.Console.Cli command routing, automation commands, operator output, live rendering, and structured output modes.
 - `Dispatch.PowerShell` owns wrapper functions such as `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 
 ### Technology choices
@@ -77,9 +82,10 @@ Dispatch lets an administrator take a script or command, run it on one or more W
 - Platform: .NET.
 - Initial runtime identifier: `win-x64`.
 - Packaging target: single-file, self-contained Windows executable.
-- CLI parser/routing: internal command parser backed by the shared request model; default parser help must not be exposed as the user-facing console UX.
-- Console UX: `Terminal.Gui` for all command-service rendering.
-- Required console views: application/top-level shell, menu bar, status bar, windows/frames, labels, buttons, list views, text fields, check boxes, combo/drop-down choices, tables/lists, progress bars, keyboard focus, and mouse handling. Prompt-style flows must not replace the persistent command-center app surface.
+- CLI parser/routing: `Spectre.Console.Cli` with typed command settings, predictable help, validation errors, dependency injection, and a compatibility adapter for existing v1 `dispatch run --script` callers until they are migrated.
+- Console UX: `Spectre.Console` for root help, command help, tables, status displays, progress displays, live dashboards, final summaries, and rich terminal output.
+- Live output model: parse/validate output uses stable text/tables; preflight uses `Status` for indeterminate work and `Progress` for measurable work; execution uses one `LiveDisplay` renderer consuming a run-event stream; final summaries are printed after live rendering ends.
+- Console concurrency rule: prompts and confirmations must complete before live rendering starts, and only the renderer writes to `AnsiConsole` while a live display is active.
 - Application host: `Microsoft.Extensions.Hosting`.
 - Configuration: `Microsoft.Extensions.Configuration.Json`.
 - Logging: `Microsoft.Extensions.Logging.Console` in the CLI and `Microsoft.Extensions.Logging.Abstractions` in core libraries.
@@ -980,12 +986,12 @@ Scope:
 - Maintain per-target state transitions.
 - Collect stdout/stderr and endpoint artifacts where available.
 - Write `dispatch.log`, `results.csv`, `results.json`, and per-target `result.json`.
-- Render an enterprise-grade Terminal.Gui terminal summary.
+- Emit structured progress/result events that terminal renderers and durable log writers can consume.
 
 Non-goals:
 - No retry policy.
 - No timeout/cancellation beyond basic process completion behavior unless already trivial.
-- No full-screen TUI.
+- No terminal rendering ownership in core orchestration.
 
 Dependencies:
 - 4.1.
@@ -1021,59 +1027,216 @@ Definition of done:
 #### 6. CLI Product Surface
 
 Objective:
-Provide both automation and interactive command surfaces over the same core request/execution path.
+Replace the legacy command service with the Spectre.Console.Cli command tree from the CLI design while preserving the existing shared planner/executor path for v1 PsExec PowerShell script execution.
 
 Scope:
-- Implement `dispatch run`.
-- Implement `dispatch doctor`.
-- Run a live interactive command center when no arguments are supplied.
-- The command center must provide a persistent operator menu for run setup, doctor diagnostics, command help, and exit.
-- The command center must be a full retained terminal app surface hosted by Terminal.Gui; prompt-by-prompt flows do not satisfy this requirement.
-- The command center must update in place without scrolling repeated menu panels or repeated static output down the terminal.
-- The command center must run through the Terminal.Gui application loop and event handlers; manually reading `Console.ReadKey` while Terminal.Gui is initialized does not satisfy this requirement because it can leave operators on a blank retained screen.
-- The command center run setup must use persistent Terminal.Gui input controls; typed values must remain visible while navigating the form and must be read from the actual text fields, check boxes, and transport selection when launching a run.
-- Terminal.Gui view roles are defined: the application/top-level shell owns command-center navigation, menu/status bars own global actions and state, windows/frames own dashboard sections, tables/lists own target/plan/result rows, progress bars own dry-run and measurable target progress, and forms own run setup.
-- Render the entire command service through Terminal.Gui: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact progress, full dashboard progress, and final run summaries.
-- Do not emit raw JSON, default parser help, Spectre.Console output, or plain status lines as the console UX for any command path.
-- Use actual Terminal.Gui views intentionally, including top-level application surfaces, menu bars, status bars, windows, frames, labels, buttons, list views, text fields, check boxes, combo/drop-down choices, tables/lists, progress bars, keyboard shortcuts, and mouse-aware focus handling.
-- For real runs, render an enterprise-grade retained run dashboard using Terminal.Gui. The dashboard should be useful for repeated operator use, not merely decorative.
-- Use a restrained enterprise terminal palette and avoid fake/static progress indicators; readiness, compact progress, retained dashboard progress, outcome charts, and phase charts must be derived from current form values or execution progress events.
-- Retained run dashboards and compact progress views must run inside the Terminal.Gui application loop while endpoint execution runs on a background task; progress callbacks must update Terminal.Gui controls in place through the UI loop instead of awaiting execution before repainting.
-- The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, status symbols, and a concise recent-event/failure area.
-- The retained dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
-- Compact execution mode must use Terminal.Gui progress bars and status columns for terminal runs; redirected/non-interactive execution must avoid repeated static progress output and emit only durable files plus a single designed Terminal.Gui-compatible snapshot summary.
-- Dry-run planning must show Terminal.Gui progress before the execution-plan view; redirected or non-live sessions must render one designed progress snapshot rather than silently dropping progress or repeatedly printing updates.
-- Dry-run and final run summaries must render as Terminal.Gui operator views; durable JSON/CSV remains in the run folder for automation and module wrappers.
-- Fall back to single Terminal.Gui-compatible snapshot summaries when retained rendering is unavailable, redirected, unsupported, or explicitly disabled.
+- Use `Spectre.Console.Cli` for command registration, settings validation, help, and command dispatch.
+- Register the target command tree: `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version`.
+- Implement `dispatch run ps <script.ps1>` as the v1 supported ad-hoc execution path and map it to the existing `DispatchRequest`/planner/executor.
+- Keep a compatibility adapter for the current `dispatch run --script <path> --computer-name <names>` shape until the PowerShell module and packaging are migrated.
+- Implement root help and command help that match the CLI design: short, predictable, no more than three examples per command.
+- Implement global option parsing for inventory, target, exclude, transport, credential, concurrency, timeout, config, log directory, run ID, output mode, color/progress flags, quiet, verbose, and trace where supported by the current model.
+- Unknown or not-yet-implemented commands must render explicit Spectre.Console errors that identify the roadmap item required; they must not silently pretend support exists.
 
 Non-goals:
-- No GUI.
-- No separate GUI outside the terminal.
 - No separate interactive execution engine.
-- No raw stdout JSON console contract; structured results are durable result files.
+- No Terminal.Gui dependency for the redesigned CLI surface.
+- No implementation of PSRP/raw WinRM transport behavior in this slice.
+- No YAML job execution in this slice; `apply` can return a planned/not-implemented command error until item `6.5`.
 
 Dependencies:
 - 5.1.
 
 Definition of done:
-- `dispatch` opens a Terminal.Gui command center with retained menus for run setup, diagnostics, help, and exit.
-- The command center renders after launch and remains interactive in a real terminal through Terminal.Gui menu/status/key events.
-- The run setup view guides the user through script, targets, transport, run context, throttle, dry-run, and launch without leaving the command-center app surface, preserves entered values in persistent controls, and launches with the values visible in the form.
-- `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
-- Both modes create the same request model and call the same core planner/executor.
-- Every command path renders through the Dispatch Terminal.Gui renderer rather than default parser output, raw JSON, Spectre.Console, or plain text status lines.
-- Dry-run output renders visible Terminal.Gui progress followed by a Terminal.Gui execution-plan view, and still records durable plan/result data through the shared model when appropriate.
-- Real terminal runs render either the full retained Terminal.Gui dashboard or compact Terminal.Gui progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, result-file paths, and failure summaries while the Terminal.Gui application loop remains active.
-- Tests cover help, errors, doctor, dry-run, compact progress rendering, dashboard rendering, command-center surface/key navigation, and final summaries as Terminal.Gui command-service output.
+- `dispatch --help` and `dispatch` show the new command tree.
+- `dispatch run ps <script.ps1>` supports the current v1 PowerShell script execution path through the shared planner/executor.
+- Existing v1 `dispatch run --script ...` callers still work through a compatibility path.
+- Unsupported command surfaces are visible in help but fail with clear planned-feature messages.
+- Tests cover root help, command help, validation errors, compatibility run routing, and not-yet-implemented command errors.
 
-#### 6.1 Operator Diagnostics
+#### 6.1 Spectre Live Rendering And Output Modes
 
 Objective:
-Give operators a quick way to validate local prerequisites and common configuration problems.
+Render live terminal progress correctly using Spectre.Console while preserving stable automation output modes.
 
 Scope:
-- Implement `dispatch doctor`.
-- Check OS, PowerShell availability, PsExec path/configuration, default output path access, and basic admin context indicators.
+- Introduce an internal run-event model and a single renderer that consumes execution/planning events.
+- Bridge existing `DispatchExecutionProgress` events into renderer events without changing transport worker behavior.
+- Use `Status` only for indeterminate preflight work, `Progress` only for measurable planning/preflight work, and one `LiveDisplay` dashboard for real host execution.
+- Do not prompt while a live renderer is active.
+- Worker tasks, transports, and planners must not write directly to `AnsiConsole`; the renderer owns terminal output during live phases.
+- Implement `--no-progress`, `--no-color`, `--quiet`, `--verbose`, and `--trace` behavior where supported.
+- Implement output modes `rich`, `table`, `json`, `ndjson`, and `yaml`; JSON emits one valid document and NDJSON emits one event per line without decorative rendering.
+- Always print a stable final summary after live rendering ends for rich/table modes.
+
+Non-goals:
+- No static fake progress bars.
+- No multiple concurrent Spectre live displays.
+- No machine-readable parsing of rich terminal output.
+
+Dependencies:
+- 6.
+
+Definition of done:
+- Dry-run and execution progress visibly update while work is happening in real terminals.
+- Redirected and `--no-progress` sessions avoid live widgets and emit the requested stable output mode.
+- Final summaries include run ID, result counts, and log/result paths.
+- Tests cover event rendering, output mode selection, and no worker direct-console writes where practical.
+
+#### 6.2 Inventory And Target Selection
+
+Objective:
+Add the host selection model from the CLI design.
+
+Scope:
+- Support `-i|--inventory <path>` for YAML inventories and simple text host files.
+- Support `-t|--target <selector>` with `all`, group name, host name, comma-separated names, `tag:<name>`, and `file:<path>` forms.
+- Support `--exclude <selector>`.
+- Define precedence: CLI flag > job YAML > inventory host/group vars > user config > machine config > defaults.
+- Preserve deterministic ordering, trimming, comments, blank-line skipping, and case-insensitive de-duplication from current target resolution.
+
+Non-goals:
+- No advanced selector expressions such as `web:&prod` or `web:!canary` in the first implementation.
+- No dynamic discovery.
+
+Dependencies:
+- 6.
+
+Definition of done:
+- Existing `--computer-name` and `--target-file` can be represented through the new selector resolver.
+- YAML and text host files resolve to stable target lists.
+- Tests cover groups, hosts, simple files, excludes, and duplicate handling.
+
+#### 6.3 Structured Run Logs And Log Commands
+
+Objective:
+Create the run-history and log-inspection surface from the CLI design.
+
+Scope:
+- Write run folders under `C:\ProgramData\Dispatch\logs\<yyyy>\<MM>\<dd>\<run-id>\` unless overridden.
+- Record `run.json`, `plan.json`, `summary.json`, `events.ndjson`, host stdout/stderr/transcript paths where available, and collected artifacts.
+- Implement `dispatch logs list|show|tail|export|retry` command stubs first, then functional readers over the durable run log format.
+- Ensure credential reference names may be logged, but secret values must never be logged.
+
+Non-goals:
+- No central server or remote log store.
+- No retry re-execution until the run log format is stable.
+
+Dependencies:
+- 6.1.
+
+Definition of done:
+- New runs record an event stream and summary in the documented layout.
+- `logs list` and `logs show latest` can read local run history.
+- Tests cover layout planning, event serialization, and summary export.
+
+#### 6.4 Credential References
+
+Objective:
+Add the credential-reference surface without storing plaintext credentials in jobs or inventories.
+
+Scope:
+- Implement `dispatch creds add|list|test|remove` command surface.
+- Store references through a provider abstraction rather than embedding plaintext in YAML.
+- Allow inventories/jobs to reference `credential: <name>`.
+- Add policy validation that rejects plaintext passwords in config, inventory, and job files.
+
+Non-goals:
+- No plaintext password command-line flags.
+- No general-purpose secret vault in v1.
+- No automatic credential delegation, CredSSP, trusted-host, or remoting policy changes.
+
+Dependencies:
+- 6.2.
+
+Definition of done:
+- Credential commands exist and clearly report whether the configured provider is available.
+- YAML validation accepts reference names and rejects plaintext secret fields.
+- Tests cover redaction and validation.
+
+#### 6.5 YAML Apply And Job Model
+
+Objective:
+Support declared YAML jobs while keeping the first implementation script-first and small.
+
+Scope:
+- Implement `dispatch apply <job.yml>`.
+- Define YAML job schema version 1 with `name`, `description`, `hosts`, `transport`, `credential`, `strategy`, `defaults`, `vars`, and `tasks`.
+- Initial task vocabulary: `ps`, `cmd`, `exe`, `copy`, `fetch`, `wait`, and `reboot`, with only supported task types enabled by implementation slices.
+- Implement `--plan` and `--check` as distinct behaviors.
+- Implement `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--yes`, `--diff`, and common output/log options as planned settings.
+- Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
+
+Non-goals:
+- No full Ansible compatibility.
+- No roles, handlers, facts, module ecosystem, complex condition engine, or advanced expression syntax in v1.
+- Unsupported task types must fail clearly during validation.
+
+Dependencies:
+- 6.2.
+
+Definition of done:
+- `dispatch apply <job.yml> --plan` resolves inventory, variables, selected tasks, batches, and transport decisions.
+- Supported `ps` tasks execute through the same planner/executor model as `dispatch run ps`.
+- Validation reports unsupported task types and unsafe secret fields before endpoint work.
+
+#### 6.6 Push, Hosts, Doctor, And Init Command Surfaces
+
+Objective:
+Complete the operator command tree around execution.
+
+Scope:
+- Implement `dispatch push <source> --dest <remote-path>` with `--recurse`, `--checksum`, `--overwrite`, `--backup`, `--execute`, `--execute-as`, and `--cleanup` settings.
+- Implement `dispatch hosts list|test|validate|graph|vars`.
+- Update `dispatch doctor` to accept `--transport psexec|psrp|winrm|auto` and check local prerequisites relevant to the selected transport.
+- Implement `dispatch init config|hosts|job|all` scaffolding.
+
+Non-goals:
+- No ICMP-style `ping` command; `hosts test` tests the selected remoting path.
+- No automatic endpoint remediation.
+
+Dependencies:
+- 6.2.
+
+Definition of done:
+- Command help matches the documented tree.
+- Unsupported transport-specific behavior fails clearly.
+- Init commands generate valid starter YAML files.
+
+#### 6.7 CLI Safety, Policy, And Exit Codes
+
+Objective:
+Make the redesigned CLI predictable for enterprise use and automation.
+
+Scope:
+- Implement stable exit codes: `0` success, `1` usage/config/inventory/YAML validation error, `2` host failure, `3` unreachable host, `4` authentication/authorization failure, `5` transport initialization failure, `6` canceled, `7` plan/check policy failure, `10` internal error.
+- Require explicit `--system` for LocalSystem execution and policy approval when configured.
+- Require explicit PsExec fallback permission through CLI/config/inventory policy.
+- Require confirmation above configured host-count thresholds unless `--yes` is supplied.
+- Redact secrets from console output, logs, result JSON, CSV, dry-run/plan output, and traces.
+
+Non-goals:
+- No silent transport fallback.
+- No prompting during live rendering.
+
+Dependencies:
+- 6.1.
+
+Definition of done:
+- Exit codes are covered by tests.
+- Policy failures happen before endpoint work.
+- Transport decisions are logged per host.
+
+#### 6.8 Operator Diagnostics Migration
+
+Objective:
+Move local prerequisite diagnostics into the redesigned Spectre command surface.
+
+Scope:
+- Keep `dispatch doctor` as the primary local prerequisite command.
+- Check .NET runtime, OS, PowerShell availability, PsExec path/configuration/EULA policy, WinRM client availability, log directory writability, config parseability, credential provider availability, host schema availability, current user/domain context, and policy restrictions where implemented.
+- Support `dispatch doctor --transport psexec|psrp|winrm|auto`.
+- Render results through Spectre tables in rich mode and stable JSON/table output when requested.
 - Redact secrets and sensitive paths where needed.
 
 Non-goals:
@@ -1082,7 +1245,7 @@ Non-goals:
 - No Azure login validation in MVP.
 
 Dependencies:
-- 6.
+- 6.6.
 
 Definition of done:
 - `dispatch doctor` returns a clear success/failure summary.
@@ -1099,7 +1262,7 @@ Scope:
 - Bundle `dispatch.exe` under `bin\win-x64`.
 - Implement `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 - Ensure `Start-Dispatch` passes no arguments.
-- Prefer explicit JSON result path for automation functions rather than parsing Terminal.Gui operator output.
+- Prefer explicit JSON result path for automation functions rather than parsing rich operator output.
 
 Non-goals:
 - No binary cmdlets in MVP.
@@ -1107,7 +1270,7 @@ Non-goals:
 - No separate PowerShell execution engine.
 
 Dependencies:
-- 6.1.
+- 6.8.
 
 Definition of done:
 - Importing the module exposes the documented commands.
@@ -1280,29 +1443,30 @@ Definition of done:
 - Managed mode produces consistent result files across PsExec, PSRP, and raw WinRM.
 - Tests cover success, nonzero exit, terminating exception, and timeout classification.
 
-#### 12. Job Manifest
+#### 12. Advanced Job Features
 
 Objective:
-Allow repeatable jobs to be described in YAML or JSON without becoming a playbook engine.
+Extend the YAML job system after the script-first apply surface is stable.
 
 Scope:
-- Define minimal job manifest schema for targets, transport, script, script arguments, execution context, expected exit codes, and artifacts.
-- Add `dispatch run --job <path>`.
-- Add `Invoke-DispatchJob`.
-- Add schema file under module `schemas`.
+- Add advanced selectors and expressions such as `web:&prod` and `web:!canary`.
+- Add richer task conditions beyond the first safe expression subset.
+- Add reusable job includes/templates if a concrete need appears.
+- Add optional JSON job input after the YAML schema has stabilized.
+- Keep module schemas and examples aligned with the CLI job schema.
 
 Non-goals:
-- No task graph.
-- No conditionals, loops, facts, handlers, roles, or idempotency framework.
+- No full Ansible compatibility.
+- No roles, handlers, facts, or external module ecosystem.
 - No Ansible-style module ecosystem.
 
 Dependencies:
-- 8.
+- 6.5.
 
 Definition of done:
-- A manifest can run the same job as CLI parameters.
-- Schema validation reports actionable errors.
-- Manifest and CLI inputs converge into the same `DispatchRequest` model.
+- Advanced features are schema-versioned.
+- Unsupported features fail during validation before endpoint work.
+- Existing script-first YAML jobs remain compatible.
 
 #### 13. Enterprise Distribution
 
@@ -1339,8 +1503,10 @@ Definition of done:
 - Result JSON includes the minimum stable run and per-target schema fields.
 - Failures map to the common failure category enum with transport-specific details isolated in metadata.
 - `dispatch` starts the active CLI.
-- `dispatch run --dry-run` produces a complete execution plan.
+- `dispatch run ps <script.ps1> --plan` or the compatibility dry-run path produces a complete execution plan.
 - `dispatch run` can run a prepared script through PsExec against a test target or shim.
+- `dispatch --help` shows the documented Spectre command tree.
+- Rich terminal output uses Spectre.Console, and JSON/NDJSON output modes are non-decorative.
 - Multi-target execution respects throttle limit.
 - Dispatch does not own installer/media payload staging or Blob/SAS payload retrieval.
 - Results are written as CSV and JSON.
@@ -1363,13 +1529,20 @@ Definition of done:
 10. Endpoint probe and execution guardrails.
 11. Batch orchestration and results.
 12. Artifact copy-back.
-13. CLI product surface.
-14. Operator diagnostics.
-15. PowerShell module wrapper.
-16. Source install and local packaging.
-17. PSRP transport.
-18. Raw WinRM transport.
-19. Script-owned payload documentation and guardrails.
-20. Managed execution mode.
-21. Job manifest.
-22. Enterprise distribution.
+13. Spectre.Console.Cli product surface.
+14. Spectre live rendering and output modes.
+15. Inventory and target selection.
+16. Structured run logs and log commands.
+17. Credential references.
+18. YAML apply and job model.
+19. Push, hosts, doctor, and init command surfaces.
+20. CLI safety, policy, and exit codes.
+21. Operator diagnostics migration.
+22. PowerShell module wrapper.
+23. Source install and local packaging.
+24. PSRP transport.
+25. Raw WinRM transport.
+26. Script-owned payload documentation and guardrails.
+27. Managed execution mode.
+28. Advanced job features.
+29. Enterprise distribution.

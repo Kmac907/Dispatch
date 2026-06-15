@@ -39,29 +39,43 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, a Terminal.Gui command service, and local operator diagnostics. The product roadmap lives in `docs/plan.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, historical Terminal.Gui command-service work, and local operator diagnostics. The active CLI roadmap is being realigned to a Spectre.Console.Cli command tree with live Spectre rendering, structured output modes, inventories, YAML jobs, logs, credentials, and init scaffolding. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Operator Diagnostics
 
-Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. It renders a Terminal.Gui diagnostic report for Windows host support, PowerShell availability, PsExec path resolution, local result path writability, and an admin/elevation indicator. It does not remediate configuration or scan endpoints.
+Run `dispatch doctor` to check local prerequisites before executing endpoint jobs. The redesigned command surface renders diagnostics through Spectre.Console and supports stable structured output modes as they are implemented. Diagnostics do not remediate configuration or scan endpoints.
 
 ## Run Output
 
-Every command-service path is operator-facing Terminal.Gui UI: root help, command help, version, validation errors, dry-run plans, doctor reports, interactive setup, progress, retained dashboard, compact progress, and final run summaries. Dispatch does not use raw JSON, default parser help, or plain status lines as the console UX.
+The active CLI design uses Spectre.Console.Cli for command routing and Spectre.Console for operator output. Rich terminal output is for humans; `--output json` and `--output ndjson` are the automation contracts.
 
-Running `dispatch` with no arguments opens the interactive command center as a Terminal.Gui retained terminal app with a restrained enterprise terminal palette. It is not a chain of prompts: menu navigation, doctor diagnostics, command help, and run setup stay inside one in-place console application with menu/status bars, windows, list views, persistent text fields, check boxes, transport selection, live readiness progress, keyboard navigation, mouse-aware focus, and `Ctrl+R` to launch the shared Dispatch run path. Values entered in run setup remain in the form and the launch action reads from the visible controls.
+The target command tree is:
 
-Terminal.Gui view roles are explicit. The application shell owns command-center navigation. Menu and status bars own global actions. Windows/frames own dashboard sections. List views own target, plan, and result rows. Progress bars own dry-run and per-target execution progress. Dry-run renders visible progress before the execution-plan view; non-live or redirected sessions get one designed Terminal.Gui-compatible snapshot instead of repeated output. Real `dispatch run` executions run the retained dashboard or compact progress surface through the Terminal.Gui application loop while endpoint execution runs in the background, so run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, status symbols, recent activity, failure summaries, outcome charts, phase-distribution charts, and progress bars update in place from execution events. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
-
-### Live Terminal Test
-
-Run the command center from a real Windows Terminal or PowerShell window, not from redirected output:
-
-```powershell
-dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj --
+```text
+dispatch apply <job.yml>
+dispatch run ps <script.ps1>
+dispatch run cmd <command>
+dispatch run exe <path>
+dispatch push <source> --dest <remote-path>
+dispatch hosts list|test|validate|graph|vars
+dispatch logs list|show|tail|export|retry
+dispatch creds add|list|test|remove
+dispatch doctor
+dispatch init job|hosts|config|all
+dispatch version
 ```
 
-Expected behavior: the retained Terminal.Gui command center appears immediately. Use the menu, buttons, keyboard focus, or mouse to open Run Setup, type into the script and target fields, toggle dry-run/run-as-system, select a transport, and launch with `Ctrl+R` or the Launch button. The values you type should stay visible while you remain in run setup and should be the values used for the resulting `dispatch run` command. If the command renders a boxed text snapshot instead, stdin/stdout is redirected and the retained app cannot run in that host.
+### Live Terminal Design
+
+Spectre live output is event-driven. Planning and preflight use live `Status`/`Progress` only when the work is actually happening. Real execution uses one `LiveDisplay` dashboard fed by internal run events; workers do not write directly to the console. After live rendering ends, Dispatch prints a stable final summary and keeps durable logs/results for automation and troubleshooting.
+
+Run from a real Windows Terminal or PowerShell window, not from redirected output:
+
+```powershell
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+```
+
+Expected behavior for the completed Roadmap 6 redesign: Spectre help shows the documented command tree. During actual runs, live progress appears only while planning/preflight/execution work is active. If output is redirected or `--no-progress` is supplied, Dispatch uses stable non-live output.
 
 ## Script-Owned Payloads
 

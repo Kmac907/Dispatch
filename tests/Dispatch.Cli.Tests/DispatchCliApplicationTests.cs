@@ -18,10 +18,11 @@ public sealed class DispatchCliApplicationTests
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync([], CancellationToken.None));
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Dispatch Command Center", output);
+        Assert.Contains("Windows-native automation runner", output);
+        Assert.Contains("apply", output);
         Assert.Contains("dispatch run", output);
         Assert.Contains("dispatch doctor", output);
-        Assert.DoesNotContain("Usage:", output);
+        Assert.Contains("Usage:", output);
         Assert.Null(planner.LastRequest);
     }
 
@@ -33,7 +34,8 @@ public sealed class DispatchCliApplicationTests
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync(["--version"], CancellationToken.None));
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Dispatch Version", output);
+        Assert.Contains("Dispatch", output);
+        Assert.Contains("Spectre.Console.Cli design", output);
         Assert.Contains(DispatchProduct.Version, output);
     }
 
@@ -51,7 +53,7 @@ public sealed class DispatchCliApplicationTests
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync(["doctor"], CancellationToken.None));
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Dispatch Doctor Passed", output);
+        Assert.Contains("Dispatch doctor passed", output);
         Assert.Contains("PASS", output);
         Assert.Contains("Operating system", output);
         Assert.Contains("WARN", output);
@@ -71,7 +73,7 @@ public sealed class DispatchCliApplicationTests
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync(["doctor"], CancellationToken.None));
 
         Assert.Equal(1, exitCode);
-        Assert.Contains("Dispatch Doctor Failed", output);
+        Assert.Contains("Dispatch doctor failed", output);
         Assert.Contains("FAIL", output);
         Assert.Contains("PsExec", output);
         Assert.Contains("Set Dispatch:PsExecPath", output);
@@ -166,12 +168,10 @@ public sealed class DispatchCliApplicationTests
                 CancellationToken.None));
 
             Assert.Equal(0, exitCode);
-            Assert.Contains("Dry Run Progress", output);
-            Assert.Contains("Validate dry-run request", output);
+            Assert.Contains("Dry run planning", output);
+            Assert.Contains("Validate request", output);
             Assert.Contains("Build execution plan", output);
-            Assert.Contains("100%", output);
-            Assert.Contains("Dispatch Dry Run", output);
-            Assert.Contains("Execution Plan", output);
+            Assert.Contains("Dispatch plan", output);
             Assert.Contains("PC001", output);
             Assert.Contains("PC002", output);
             Assert.DoesNotContain("\"dryRun\": true", output);
@@ -217,7 +217,7 @@ public sealed class DispatchCliApplicationTests
                 CancellationToken.None));
 
             Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
-            Assert.Contains("Dispatch Run Complete", output);
+            Assert.Contains("Dispatch run complete", output);
             Assert.Contains("run-test", output);
             Assert.Contains("PC001", output);
             Assert.DoesNotContain("Target Progress", error);
@@ -262,7 +262,7 @@ public sealed class DispatchCliApplicationTests
                 CancellationToken.None));
 
             Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
-            Assert.Contains("Dispatch Run Complete", output);
+            Assert.Contains("Dispatch run complete", output);
             var progress = progressWriter.ToString();
             Assert.Contains("PC001", progress);
             Assert.Contains("Complete", progress);
@@ -292,6 +292,41 @@ public sealed class DispatchCliApplicationTests
         Assert.Contains("Exit", output);
         Assert.Contains("F1 help", output);
         Assert.Contains("F5 doctor", output);
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteUsesNewCommandShapeAndSharedRequest()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001,PC002",
+                    "--transport",
+                    "psexec",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Contains("Dispatch plan", output);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.DryRun);
+            Assert.Equal(["PC001", "PC002"], planner.LastRequest.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
     }
 
     [Fact]
@@ -434,17 +469,17 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task RunHelpUsesDispatchTerminalGuiHelp()
+    public async Task RunHelpUsesDispatchSpectreHelp()
     {
         var application = CreateApplication(new CapturingPlanner());
 
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync(["run", "--help"], CancellationToken.None));
 
         Assert.Equal(0, exitCode);
-        Assert.Contains("Run Command", output);
-        Assert.Contains("--script", output);
-        Assert.Contains("--computer-name", output);
-        Assert.DoesNotContain("Usage:", output);
+        Assert.Contains("dispatch run", output);
+        Assert.Contains("dispatch run ps", output);
+        Assert.Contains("Compatibility", output);
+        Assert.Contains("Usage:", output);
     }
 
     [Fact]

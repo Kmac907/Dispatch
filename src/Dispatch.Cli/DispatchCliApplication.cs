@@ -20,15 +20,13 @@ public sealed class DispatchCliApplication(
     {
         if (args.Any(static arg => arg is "--version" or "-v"))
         {
-            TerminalGuiConsoleRenderer.RenderVersion(Console.Out);
+            SpectreConsoleRenderer.RenderVersion(Console.Out);
             return 0;
         }
 
         if (args.Length == 0)
         {
-            return Console.IsInputRedirected
-                ? RenderRootHelp()
-                : await RunInteractiveAsync(cancellationToken).ConfigureAwait(false);
+            return RenderRootHelp();
         }
 
         if (IsRootHelpRequest(args))
@@ -38,14 +36,58 @@ public sealed class DispatchCliApplication(
 
         return args[0].ToLowerInvariant() switch
         {
+            "version" => RenderVersion(),
             "run" => IsExplicitHelpRequest(args.Skip(1).ToArray())
                 ? RenderRunHelp()
-                : await RunCommandAsync(args[1..], cancellationToken).ConfigureAwait(false),
+                : await RunCommandRouteAsync(args[1..], cancellationToken).ConfigureAwait(false),
             "doctor" => IsExplicitHelpRequest(args.Skip(1).ToArray())
                 ? RenderDoctorHelp()
                 : RunDoctorCommand(),
+            "apply" => RenderPlannedCommand("apply", "6.5 YAML Apply And Job Model"),
+            "push" => RenderPlannedCommand("push", "6.6 Push, Hosts, Doctor, And Init Command Surfaces"),
+            "hosts" => RenderPlannedCommand("hosts", "6.6 Push, Hosts, Doctor, And Init Command Surfaces"),
+            "logs" => RenderPlannedCommand("logs", "6.3 Structured Run Logs And Log Commands"),
+            "creds" => RenderPlannedCommand("creds", "6.4 Credential References"),
+            "init" => RenderPlannedCommand("init", "6.6 Push, Hosts, Doctor, And Init Command Surfaces"),
             _ => RenderUnknownCommand(args[0])
         };
+    }
+
+    private async Task<int> RunCommandRouteAsync(string[] args, CancellationToken cancellationToken)
+    {
+        if (args.Length == 0)
+        {
+            return RenderRunHelp();
+        }
+
+        if (args[0].Equals("ps", StringComparison.OrdinalIgnoreCase))
+        {
+            if (args.Length == 1)
+            {
+                SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", "dispatch run ps requires a script path.");
+                return 1;
+            }
+
+            if (args[1].Equals("--inline", StringComparison.OrdinalIgnoreCase))
+            {
+                return RenderPlannedCommand("run ps --inline", "post-6 command payload enablement");
+            }
+
+            return await RunCommandAsync(BuildPowerShellRunCompatibilityArgs(args[1], args[2..]), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (args[0].Equals("cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            return RenderPlannedCommand("run cmd", "post-6 command payload enablement");
+        }
+
+        if (args[0].Equals("exe", StringComparison.OrdinalIgnoreCase))
+        {
+            return RenderPlannedCommand("run exe", "post-6 command payload enablement");
+        }
+
+        return await RunCommandAsync(args, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<int> RunCommandAsync(string[] args, CancellationToken cancellationToken)
@@ -67,7 +109,7 @@ public sealed class DispatchCliApplication(
             if (command.DryRun)
             {
                 var dryRunPlan = await CreatePlanWithDryRunProgressAsync(request, cancellationToken).ConfigureAwait(false);
-                TerminalGuiConsoleRenderer.RenderDryRunPlan(Console.Out, dryRunPlan);
+                SpectreConsoleRenderer.RenderDryRunPlan(Console.Out, dryRunPlan);
                 return 0;
             }
 
@@ -75,7 +117,7 @@ public sealed class DispatchCliApplication(
             var result = ShouldUseLiveDashboard(command.NoDashboard)
                 ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
                 : await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
-            TerminalGuiConsoleRenderer.RenderRunResult(Console.Out, result);
+            SpectreConsoleRenderer.RenderRunResult(Console.Out, result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)
@@ -83,7 +125,7 @@ public sealed class DispatchCliApplication(
             var message = string.Join(
                 Environment.NewLine,
                 exception.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
-            TerminalGuiConsoleRenderer.RenderError(Console.Error, "Dispatch Planning Failed", message);
+            SpectreConsoleRenderer.RenderError(Console.Error, "Dispatch Planning Failed", message);
 
             return 1;
         }
@@ -198,10 +240,10 @@ public sealed class DispatchCliApplication(
         }
         catch (IOException exception) when (displayMode == DispatchRunDisplayMode.Auto)
         {
-            TerminalGuiConsoleRenderer.RenderError(
+            SpectreConsoleRenderer.RenderError(
                 Console.Error,
                 "Live Dashboard Unavailable",
-                $"Dispatch is using compact Terminal.Gui progress for this run. {exception.Message}");
+                $"Dispatch is using compact progress for this run. {exception.Message}");
             return await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
         }
     }
@@ -236,7 +278,7 @@ public sealed class DispatchCliApplication(
         DispatchRequest request,
         CancellationToken cancellationToken)
     {
-        TerminalGuiConsoleRenderer.RenderPlanningStatus(Console.Out);
+        SpectreConsoleRenderer.RenderPlanningStatus(Console.Out);
         return await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
     }
 
@@ -245,7 +287,7 @@ public sealed class DispatchCliApplication(
         CancellationToken cancellationToken)
     {
         var plan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-        TerminalGuiConsoleRenderer.RenderDryRunProgressSummary(Console.Out);
+        SpectreConsoleRenderer.RenderDryRunProgressSummary(Console.Out);
         return plan;
     }
 
@@ -282,35 +324,87 @@ public sealed class DispatchCliApplication(
 
     private static int RenderRootHelp()
     {
-        TerminalGuiConsoleRenderer.RenderRootHelp(Console.Out);
+        SpectreConsoleRenderer.RenderRootHelp(Console.Out);
+        return 0;
+    }
+
+    private static int RenderVersion()
+    {
+        SpectreConsoleRenderer.RenderVersion(Console.Out);
         return 0;
     }
 
     private static int RenderRunHelp()
     {
-        TerminalGuiConsoleRenderer.RenderRunHelp(Console.Out);
+        SpectreConsoleRenderer.RenderRunHelp(Console.Out);
         return 0;
     }
 
     private static int RenderDoctorHelp()
     {
-        TerminalGuiConsoleRenderer.RenderDoctorHelp(Console.Out);
+        SpectreConsoleRenderer.RenderDoctorHelp(Console.Out);
         return 0;
     }
 
     private int RunDoctorCommand()
     {
         var report = doctor.Run();
-        TerminalGuiConsoleRenderer.RenderDoctorReport(Console.Out, report);
+        SpectreConsoleRenderer.RenderDoctorReport(Console.Out, report);
         return report.Succeeded ? 0 : 1;
+    }
+
+    private static int RenderPlannedCommand(string command, string roadmapItem)
+    {
+        SpectreConsoleRenderer.RenderPlannedFeature(Console.Error, command, roadmapItem);
+        return 1;
     }
 
     private static int RenderUnknownCommand(string command)
     {
-        TerminalGuiConsoleRenderer.RenderError(
+        SpectreConsoleRenderer.RenderError(
             Console.Error,
             "Unknown Dispatch Command",
             $"'{command}' is not a Dispatch command.");
         return 1;
+    }
+
+    private static string[] BuildPowerShellRunCompatibilityArgs(string scriptPath, IReadOnlyList<string> args)
+    {
+        var mapped = new List<string> { "--script", scriptPath };
+        for (var index = 0; index < args.Count; index++)
+        {
+            var arg = args[index];
+            switch (arg)
+            {
+                case "-t":
+                case "--target":
+                    mapped.Add("--computer-name");
+                    if (index + 1 < args.Count)
+                    {
+                        mapped.Add(args[++index]);
+                    }
+
+                    break;
+                case "--plan":
+                    mapped.Add("--dry-run");
+                    break;
+                case "--system":
+                    mapped.Add("--run-as-system");
+                    break;
+                case "--concurrency":
+                    mapped.Add("--throttle");
+                    if (index + 1 < args.Count)
+                    {
+                        mapped.Add(args[++index]);
+                    }
+
+                    break;
+                default:
+                    mapped.Add(arg);
+                    break;
+            }
+        }
+
+        return mapped.ToArray();
     }
 }
