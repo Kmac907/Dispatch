@@ -193,16 +193,16 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 .ConfigureAwait(false);
     }
 
-    private sealed class RunCmdCommand : Command
+    private sealed class RunCmdCommand : Command<RunCmdSettings>
     {
-        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
-            DispatchCliApplication.RenderPlannedCommand("run cmd", "post-6 command payload enablement");
+        protected override int Execute(CommandContext context, RunCmdSettings settings, CancellationToken cancellationToken) =>
+            DispatchCliApplication.RenderPlannedCommand("run cmd", "9 PSRP Transport / 9.1 Raw WinRM Transport command execution");
     }
 
-    private sealed class RunExeCommand : Command
+    private sealed class RunExeCommand : Command<RunExeSettings>
     {
-        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
-            DispatchCliApplication.RenderPlannedCommand("run exe", "post-6 command payload enablement");
+        protected override int Execute(CommandContext context, RunExeSettings settings, CancellationToken cancellationToken) =>
+            DispatchCliApplication.RenderPlannedCommand("run exe", "9 PSRP Transport / 9.1 Raw WinRM Transport command execution");
     }
 
     private abstract class PlannedCommand(string command, string roadmapItem) : Command
@@ -317,6 +317,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--no-dashboard")]
         public bool NoDashboard { get; init; }
+    }
+
+    private sealed class RunCmdSettings : CommandSettings
+    {
+        [CommandArgument(0, "<command>")]
+        public string Command { get; init; } = string.Empty;
+    }
+
+    private sealed class RunExeSettings : CommandSettings
+    {
+        [CommandArgument(0, "<path>")]
+        public string Path { get; init; } = string.Empty;
     }
 
     private interface IRunSharedSettings

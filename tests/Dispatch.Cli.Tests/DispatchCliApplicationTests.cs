@@ -524,6 +524,21 @@ public sealed class DispatchCliApplicationTests
         Assert.Contains($"{command} {subcommand}", error);
     }
 
+    [Theory]
+    [InlineData("cmd", "whoami")]
+    [InlineData("exe", "tool.exe")]
+    public async Task PlannedRunCommandPayloadsIdentifyRoadmapItem(string subcommand, string argument)
+    {
+        var application = CreateApplication(new CapturingPlanner());
+
+        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(["run", subcommand, argument], CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Planned Dispatch command", error);
+        Assert.Contains($"run {subcommand}", error);
+        Assert.Contains("9 PSRP Transport / 9.1 Raw WinRM Transport command execution", error);
+    }
+
     [Fact]
     public async Task SpectreDashboardRendererShowsRunStatusTargetPhaseAndFailures()
     {
