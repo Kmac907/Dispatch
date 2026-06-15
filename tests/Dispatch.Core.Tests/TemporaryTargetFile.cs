@@ -9,9 +9,9 @@ internal sealed class TemporaryTargetFile : IDisposable
 
     public string Path { get; }
 
-    public static TemporaryTargetFile Create(string content)
+    public static TemporaryTargetFile Create(string content, string prefix = "dispatch-targets")
     {
-        var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"dispatch-targets-{Guid.NewGuid():N}");
+        var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"{prefix}-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
         var path = System.IO.Path.Combine(directory, "targets.txt");
         File.WriteAllText(path, content);

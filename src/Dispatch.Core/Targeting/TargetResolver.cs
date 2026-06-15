@@ -42,7 +42,7 @@ public static class TargetResolver
 
         foreach (var selector in input.ExcludeSelectors ?? Array.Empty<string>())
         {
-            ExcludeSelectorTargets(selector, inventory, targets);
+            ExcludeSelectorTargets(selector, inventory, targets, errors);
         }
 
         if (targets.Count == 0 && errors.Count == 0)
@@ -102,9 +102,35 @@ public static class TargetResolver
     {
         foreach (var item in SplitTargets(selector))
         {
+            if (item.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            {
+                var targetFile = item["file:".Length..].Trim();
+                if (targetFile.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorInvalid", "Target selector 'file:' must include a file path."));
+                    continue;
+                }
+
+                AddTargetFileTargets(targetFile, targets, seen, errors);
+                continue;
+            }
+
+            if (IsUnsupportedSelectorExpression(item))
+            {
+                errors.Add(new("TargetSelectorUnsupported", $"Target selector '{item}' uses unsupported selector expression syntax."));
+                continue;
+            }
+
             if (item.Equals("all", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var target in inventory.AllHosts)
+                var selected = inventory.AllHosts.ToArray();
+                if (selected.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorMatchedNoTargets", "Target selector 'all' did not match any inventory hosts."));
+                    continue;
+                }
+
+                foreach (var target in selected)
                 {
                     AddTarget(target.Name, target.Source, targets, seen);
                 }
@@ -112,15 +138,23 @@ public static class TargetResolver
                 continue;
             }
 
-            if (item.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
-            {
-                AddTargetFileTargets(item["file:".Length..], targets, seen, errors);
-                continue;
-            }
-
             if (item.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var target in inventory.HostsByTag(item["tag:".Length..]))
+                var tag = item["tag:".Length..].Trim();
+                if (tag.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorInvalid", "Target selector 'tag:' must include a tag name."));
+                    continue;
+                }
+
+                var selected = inventory.HostsByTag(tag).ToArray();
+                if (selected.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorMatchedNoTargets", $"Target selector 'tag:{tag}' did not match any inventory hosts."));
+                    continue;
+                }
+
+                foreach (var target in selected)
                 {
                     AddTarget(target.Name, target.Source, targets, seen);
                 }
@@ -143,14 +177,71 @@ public static class TargetResolver
     private static void ExcludeSelectorTargets(
         string selector,
         InventoryTargets inventory,
-        ICollection<TargetSpec> targets)
+        ICollection<TargetSpec> targets,
+        ICollection<DispatchValidationError> errors)
     {
         var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in SplitTargets(selector))
         {
+            if (item.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+            {
+                var targetFile = item["file:".Length..].Trim();
+                if (targetFile.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorInvalid", "Exclude selector 'file:' must include a file path."));
+                    continue;
+                }
+
+                var fileTargets = new List<TargetSpec>();
+                AddTargetFileTargets(targetFile, fileTargets, new HashSet<string>(StringComparer.OrdinalIgnoreCase), errors);
+                foreach (var target in fileTargets)
+                {
+                    excluded.Add(target.Name);
+                }
+
+                continue;
+            }
+
+            if (IsUnsupportedSelectorExpression(item))
+            {
+                errors.Add(new("TargetSelectorUnsupported", $"Exclude selector '{item}' uses unsupported selector expression syntax."));
+                continue;
+            }
+
+            if (item.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                var selected = inventory.AllHosts.ToArray();
+                if (selected.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorMatchedNoTargets", "Exclude selector 'all' did not match any inventory hosts."));
+                    continue;
+                }
+
+                foreach (var target in selected)
+                {
+                    excluded.Add(target.Name);
+                }
+
+                continue;
+            }
+
             if (item.StartsWith("tag:", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var target in inventory.HostsByTag(item["tag:".Length..]))
+                var tag = item["tag:".Length..].Trim();
+                if (tag.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorInvalid", "Exclude selector 'tag:' must include a tag name."));
+                    continue;
+                }
+
+                var selected = inventory.HostsByTag(tag).ToArray();
+                if (selected.Length == 0)
+                {
+                    errors.Add(new("TargetSelectorMatchedNoTargets", $"Exclude selector 'tag:{tag}' did not match any inventory hosts."));
+                    continue;
+                }
+
+                foreach (var target in selected)
                 {
                     excluded.Add(target.Name);
                 }
@@ -202,6 +293,13 @@ public static class TargetResolver
             var trimmed = line.Trim();
             return trimmed is "hosts:" or "groups:" || trimmed.StartsWith("tags:", StringComparison.OrdinalIgnoreCase);
         });
+
+    private static bool IsUnsupportedSelectorExpression(string selector) =>
+        selector.Equals("!", StringComparison.Ordinal) ||
+        selector.StartsWith('!') ||
+        selector.Contains('&', StringComparison.Ordinal) ||
+        selector.Contains(":!", StringComparison.Ordinal) ||
+        selector.Contains(":&", StringComparison.Ordinal);
 
     private static IEnumerable<string> SplitTargets(string value) =>
         value

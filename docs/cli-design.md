@@ -103,6 +103,8 @@ tag:name
 file:path
 ```
 
+Advanced selector expressions such as `web:&prod` and `web:!canary` are not part of the initial selector set and must fail validation clearly.
+
 Initial YAML job task vocabulary:
 
 ```text

@@ -127,4 +127,127 @@ public sealed class TargetResolutionTests
         Assert.True(result.IsValid);
         Assert.Equal(["PC200", "PC201"], result.Targets.Select(static target => target.Name));
     }
+
+    [Fact]
+    public void SelectorFileAllowsExpressionCharactersInPath()
+    {
+        using var targetFile = TemporaryTargetFile.Create("PC210", prefix: "targets&prod");
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, TargetSelectors: [$"file:{targetFile.Path}"]));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["PC210"], result.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
+    public void EmptyAllSelectorFailsClearly()
+    {
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, TargetSelectors: ["all"]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorMatchedNoTargets");
+    }
+
+    [Fact]
+    public void EmptyTagSelectorFailsClearly()
+    {
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, TargetSelectors: ["tag:"]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorInvalid");
+    }
+
+    [Fact]
+    public void EmptyFileSelectorFailsClearly()
+    {
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, TargetSelectors: ["file:"]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorInvalid");
+    }
+
+    [Fact]
+    public void UnsupportedAdvancedSelectorExpressionFailsClearly()
+    {
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, TargetSelectors: ["web:&prod"]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorUnsupported");
+    }
+
+    [Fact]
+    public void UnmatchedTagSelectorFailsClearlyEvenWhenOtherTargetsResolve()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            ["PC300"],
+            null,
+            TargetSelectors: ["tag:missing"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorMatchedNoTargets");
+    }
+
+    [Fact]
+    public void ExcludeFileSelectorRemovesTargetsFromFile()
+    {
+        using var targetFile = TemporaryTargetFile.Create("PC401");
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            ["PC400,PC401"],
+            null,
+            ExcludeSelectors: [$"file:{targetFile.Path}"]));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["PC400"], result.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
+    public void ExcludeFileSelectorAllowsExpressionCharactersInPath()
+    {
+        using var targetFile = TemporaryTargetFile.Create("PC411", prefix: "exclude&prod");
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            ["PC410,PC411"],
+            null,
+            ExcludeSelectors: [$"file:{targetFile.Path}"]));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["PC410"], result.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
+    public void ExcludeAllSelectorRemovesInventoryTargets()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            ["PC500"],
+            null,
+            TargetSelectors: ["all"],
+            InventoryPath: inventory.Path,
+            ExcludeSelectors: ["all"]));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["PC500"], result.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
+    public void InvalidExcludeSelectorFailsClearly()
+    {
+        var result = TargetResolver.Resolve(new TargetResolutionInput(["PC600"], null, ExcludeSelectors: ["tag:"]));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorInvalid");
+    }
 }
