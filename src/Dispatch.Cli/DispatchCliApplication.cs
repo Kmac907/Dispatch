@@ -141,15 +141,47 @@ public sealed class DispatchCliApplication(
 
                 using var refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
                 using var refreshCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var refreshTask = RefreshDashboardPeriodicallyAsync(Refresh, refreshTimer, refreshCancellation.Token);
-                var observer = new TerminalGuiDispatchExecutionObserver(dashboard, Refresh);
+                var refreshTask = RefreshDashboardPeriodicallyAsync(
+                    () => InvokeOnTerminalGuiLoop(Refresh),
+                    refreshTimer,
+                    refreshCancellation.Token);
+                var observer = new TerminalGuiDispatchExecutionObserver(
+                    dashboard,
+                    () => InvokeOnTerminalGuiLoop(Refresh));
+                DispatchRunResult? runResult = null;
+                Exception? runException = null;
+                var runTask = Task.Run(
+                    async () =>
+                    {
+                        try
+                        {
+                            runResult = await executor.ExecuteAsync(plan, observer, cancellationToken)
+                                .ConfigureAwait(false);
+                            dashboard.Complete(runResult);
+                            InvokeOnTerminalGuiLoop(Refresh);
+                        }
+                        catch (Exception exception)
+                        {
+                            runException = exception;
+                        }
+                        finally
+                        {
+                            InvokeOnTerminalGuiLoop(static () => Application.RequestStop());
+                        }
+                    },
+                    CancellationToken.None);
 
                 try
                 {
-                    var result = await executor.ExecuteAsync(plan, observer, cancellationToken).ConfigureAwait(false);
-                    dashboard.Complete(result);
-                    Refresh();
-                    return result;
+                    Application.Run();
+                    await runTask.ConfigureAwait(false);
+                    if (runException is not null)
+                    {
+                        throw runException;
+                    }
+
+                    return runResult
+                        ?? throw new InvalidOperationException("Dispatch execution ended without a run result.");
                 }
                 finally
                 {
@@ -171,6 +203,18 @@ public sealed class DispatchCliApplication(
                 $"Dispatch is using compact Terminal.Gui progress for this run. {exception.Message}");
             return await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static void InvokeOnTerminalGuiLoop(Action action)
+    {
+        var mainLoop = Application.MainLoop;
+        if (mainLoop is null)
+        {
+            action();
+            return;
+        }
+
+        mainLoop.Invoke(action);
     }
 
     private async Task<DispatchRunResult> RunWithCompactProgressAsync(

@@ -334,6 +334,44 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public void CommandCenterBuildRunArgumentsUsesEnteredFormValues()
+    {
+        var args = TerminalGuiDispatchCommandCenter.BuildRunArgumentsFromValues(
+            dryRun: false,
+            scriptPath: @" C:\Scripts\Fix.ps1 ",
+            computerNames: " PC001,PC002 ",
+            transportIndex: 0,
+            runAsSystem: true,
+            expectedExitCodes: "0,3010",
+            throttle: "4",
+            artifactPaths: "logs,artifacts",
+            outputRoot: @"C:\Dispatch\Out",
+            remoteRoot: @"C:\ProgramData\Dispatch",
+            scriptArguments: "-Mode Repair -Verbose");
+
+        Assert.DoesNotContain("--dry-run", args);
+        Assert.Contains("--script", args);
+        Assert.Contains(@"C:\Scripts\Fix.ps1", args);
+        Assert.Contains("--computer-name", args);
+        Assert.Contains("PC001,PC002", args);
+        Assert.Contains("--run-as-system", args);
+        Assert.Contains("--expected-exit-code", args);
+        Assert.Contains("0,3010", args);
+        Assert.Contains("--throttle", args);
+        Assert.Contains("4", args);
+        Assert.Contains("--artifact-path", args);
+        Assert.Contains("logs,artifacts", args);
+        Assert.Contains("--output-root", args);
+        Assert.Contains(@"C:\Dispatch\Out", args);
+        Assert.Contains("--remote-root", args);
+        Assert.Contains(@"C:\ProgramData\Dispatch", args);
+        Assert.Contains("--", args);
+        Assert.Contains("-Mode", args);
+        Assert.Contains("Repair", args);
+        Assert.Contains("-Verbose", args);
+    }
+
+    [Fact]
     public async Task LiveDashboardRendererShowsRunStatusTargetPhaseAndFailures()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

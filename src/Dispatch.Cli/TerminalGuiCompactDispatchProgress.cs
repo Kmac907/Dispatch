@@ -29,16 +29,48 @@ internal sealed class TerminalGuiCompactDispatchProgress(
             top.Add(root);
             Application.Refresh();
 
-            var result = await executor.ExecuteAsync(
-                    plan,
-                    new TerminalGuiCompactObserver(tracker, static () => Application.Refresh()),
-                    cancellationToken)
-                .ConfigureAwait(false);
-            tracker.Complete(result);
-            root.RemoveAll();
-            root.Add(tracker.BuildView().Subviews.ToArray());
-            Application.Refresh();
-            return result;
+            void Refresh()
+            {
+                root.RemoveAll();
+                root.Add(tracker.BuildView().Subviews.ToArray());
+                Application.Refresh();
+            }
+
+            DispatchRunResult? runResult = null;
+            Exception? runException = null;
+            var runTask = Task.Run(
+                async () =>
+                {
+                    try
+                    {
+                        runResult = await executor.ExecuteAsync(
+                                plan,
+                                new TerminalGuiCompactObserver(tracker, () => InvokeOnTerminalGuiLoop(Refresh)),
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        tracker.Complete(runResult);
+                        InvokeOnTerminalGuiLoop(Refresh);
+                    }
+                    catch (Exception exception)
+                    {
+                        runException = exception;
+                    }
+                    finally
+                    {
+                        InvokeOnTerminalGuiLoop(static () => Application.RequestStop());
+                    }
+                },
+                CancellationToken.None);
+
+            Application.Run();
+            await runTask.ConfigureAwait(false);
+            if (runException is not null)
+            {
+                throw runException;
+            }
+
+            return runResult
+                ?? throw new InvalidOperationException("Dispatch execution ended without a run result.");
         }
         finally
         {
@@ -58,6 +90,18 @@ internal sealed class TerminalGuiCompactDispatchProgress(
             refresh();
             return Task.CompletedTask;
         }
+    }
+
+    private static void InvokeOnTerminalGuiLoop(Action action)
+    {
+        var mainLoop = Application.MainLoop;
+        if (mainLoop is null)
+        {
+            action();
+            return;
+        }
+
+        mainLoop.Invoke(action);
     }
 
     private sealed class CompactProgressTracker : IDispatchExecutionObserver

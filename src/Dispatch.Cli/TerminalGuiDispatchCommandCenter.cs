@@ -33,32 +33,12 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             return Task.FromResult(CommandCenterResult.Exit);
         }
 
-        pendingResult = null;
         Application.Init();
         try
         {
             ApplyColorSchemes();
-            var top = Application.Top;
-            top.RemoveAll();
-            var root = BuildRootView();
-            top.Add(root);
-            top.KeyPress += args =>
-            {
-                var result = HandleKey(ToConsoleKeyInfo(args.KeyEvent));
-                RefreshRoot(root);
-                Application.Refresh();
-                args.Handled = true;
-
-                if (result is not null)
-                {
-                    pendingResult = result;
-                    Application.RequestStop();
-                }
-            };
-            using var cancellationRegistration = cancellationToken.Register(static () => Application.RequestStop());
-            Application.Refresh();
-            Application.Run();
-            return Task.FromResult(pendingResult ?? CommandCenterResult.Exit);
+            var session = new TerminalGuiCommandCenterSession(doctor);
+            return Task.FromResult(session.Run(cancellationToken));
         }
         finally
         {
@@ -657,8 +637,35 @@ internal sealed class TerminalGuiDispatchCommandCenter(
 
     private string[] BuildRunArguments()
     {
+        return BuildRunArgumentsFromValues(
+            state.DryRun,
+            state.ScriptPath,
+            state.ComputerNames,
+            state.TransportIndex,
+            state.RunAsSystem,
+            state.ExpectedExitCodes,
+            state.Throttle,
+            state.ArtifactPaths,
+            state.OutputRoot,
+            state.RemoteRoot,
+            state.ScriptArguments);
+    }
+
+    internal static string[] BuildRunArgumentsFromValues(
+        bool dryRun,
+        string scriptPath,
+        string computerNames,
+        int transportIndex,
+        bool runAsSystem,
+        string expectedExitCodes,
+        string throttle,
+        string artifactPaths,
+        string outputRoot,
+        string remoteRoot,
+        string scriptArguments)
+    {
         var args = new List<string>();
-        if (state.DryRun)
+        if (dryRun)
         {
             args.Add("--dry-run");
         }
@@ -666,24 +673,24 @@ internal sealed class TerminalGuiDispatchCommandCenter(
         args.AddRange(
         [
             "--script",
-            state.ScriptPath.Trim(),
+            scriptPath.Trim(),
             "--computer-name",
-            state.ComputerNames.Trim(),
+            computerNames.Trim(),
             "--transport",
-            TransportChoices[state.TransportIndex]
+            TransportChoices[Wrap(transportIndex, TransportChoices.Length)]
         ]);
 
-        AddOptionalPair(args, "--expected-exit-code", state.ExpectedExitCodes);
-        AddOptionalPair(args, "--throttle", state.Throttle);
-        if (state.RunAsSystem)
+        AddOptionalPair(args, "--expected-exit-code", expectedExitCodes);
+        AddOptionalPair(args, "--throttle", throttle);
+        if (runAsSystem)
         {
             args.Add("--run-as-system");
         }
 
-        AddOptionalPair(args, "--artifact-path", state.ArtifactPaths);
-        AddOptionalPair(args, "--output-root", state.OutputRoot);
-        AddOptionalPair(args, "--remote-root", state.RemoteRoot);
-        AddScriptArgs(args, state.ScriptArguments);
+        AddOptionalPair(args, "--artifact-path", artifactPaths);
+        AddOptionalPair(args, "--output-root", outputRoot);
+        AddOptionalPair(args, "--remote-root", remoteRoot);
+        AddScriptArgs(args, scriptArguments);
         return [.. args];
     }
 
@@ -1022,6 +1029,421 @@ internal sealed class TerminalGuiDispatchCommandCenter(
         public string RemoteRoot { get; set; } = string.Empty;
 
         public string ScriptArguments { get; set; } = string.Empty;
+    }
+
+    private sealed class TerminalGuiCommandCenterSession(IDispatchDoctor doctor)
+    {
+        private readonly StatusModel status = new();
+        private CommandCenterResult result = CommandCenterResult.Exit;
+        private View? mainPane;
+        private Label? viewLabel;
+        private Label? messageLabel;
+        private Label? readinessLabel;
+        private ProgressBar? readinessBar;
+        private TextField? scriptPathField;
+        private TextField? targetsField;
+        private ListView? transportList;
+        private CheckBox? runAsSystemBox;
+        private CheckBox? dryRunBox;
+        private TextField? throttleField;
+        private TextField? expectedExitField;
+        private TextField? artifactField;
+        private TextField? outputRootField;
+        private TextField? remoteRootField;
+        private TextField? scriptArgumentsField;
+
+        public CommandCenterResult Run(CancellationToken cancellationToken)
+        {
+            var top = Application.Top;
+            top.RemoveAll();
+            BuildShell(top);
+            ShowHome();
+            using var cancellationRegistration = cancellationToken.Register(static () => Application.RequestStop());
+            Application.Run();
+            return result;
+        }
+
+        private void BuildShell(Toplevel top)
+        {
+            top.Add(new MenuBar(new[]
+            {
+                new MenuBarItem("_Dispatch", new[]
+                {
+                    new MenuItem("_Home", "Open command center home", ShowHome),
+                    new MenuItem("_Run", "Open script run setup", ShowRunSetup),
+                    new MenuItem("_Doctor", "Run local diagnostics", ShowDoctor),
+                    new MenuItem("_Help", "Show command help", ShowHelp),
+                    new MenuItem("_Quit", "Exit Dispatch", () =>
+                    {
+                        result = CommandCenterResult.Exit;
+                        Application.RequestStop();
+                    })
+                })
+            }));
+
+            var shell = new Window("Dispatch Command Center")
+            {
+                X = 0,
+                Y = 1,
+                Width = Dim.Fill(),
+                Height = Dim.Fill(1)
+            };
+
+            var header = new FrameView("Command Service")
+            {
+                X = 0,
+                Y = 0,
+                Width = Dim.Fill(),
+                Height = 6
+            };
+            viewLabel = new Label("Home") { X = 1, Y = 0, Width = Dim.Percent(35) };
+            header.Add(viewLabel);
+            header.Add(new Label($"Version: {DispatchProduct.Version}") { X = Pos.Percent(35), Y = 0, Width = Dim.Percent(30) });
+            header.Add(new Label("Renderer: Terminal.Gui retained TUI") { X = Pos.Percent(65), Y = 0, Width = Dim.Fill(2) });
+            messageLabel = new Label("Ready. Select an action.") { X = 1, Y = 2, Width = Dim.Fill(2) };
+            header.Add(messageLabel);
+
+            var nav = new FrameView("Navigation")
+            {
+                X = 0,
+                Y = 6,
+                Width = 28,
+                Height = Dim.Fill()
+            };
+            AddNavigationButton(nav, "Start Run", 1, ShowRunSetup);
+            AddNavigationButton(nav, "Doctor", 4, ShowDoctor);
+            AddNavigationButton(nav, "Help", 7, ShowHelp);
+            AddNavigationButton(nav, "Exit", 10, () =>
+            {
+                result = CommandCenterResult.Exit;
+                Application.RequestStop();
+            });
+
+            mainPane = new FrameView("Workspace")
+            {
+                X = Pos.Right(nav),
+                Y = 6,
+                Width = Dim.Fill(),
+                Height = Dim.Fill()
+            };
+
+            shell.Add(header, nav, mainPane);
+            top.Add(shell);
+            top.Add(new StatusBar(new[]
+            {
+                new StatusItem(Key.F1, "~F1~ Help", ShowHelp),
+                new StatusItem(Key.F5, "~F5~ Doctor", ShowDoctor),
+                new StatusItem(Key.CtrlMask | Key.R, "~Ctrl+R~ Launch", LaunchRunFromControls),
+                new StatusItem(Key.Esc, "~Esc~ Home", ShowHome)
+            }));
+        }
+
+        private static void AddNavigationButton(View parent, string text, int y, Action clicked)
+        {
+            var button = new Button(text)
+            {
+                X = 1,
+                Y = y,
+                Width = Dim.Fill(2)
+            };
+            button.Clicked += clicked;
+            parent.Add(button);
+        }
+
+        private void ShowHome()
+        {
+            SetStatus("Home", "Ready. Choose Start Run for a script job, Doctor for local checks, or Help for command reference.");
+            ResetWorkspace("Overview");
+            var pane = RequireMainPane();
+            pane.Add(new Label("Windows-native script orchestration for endpoint engineering.")
+            {
+                X = 1,
+                Y = 1,
+                Width = Dim.Fill(2)
+            });
+            pane.Add(new Label("Operator flow") { X = 1, Y = 3 });
+            AddPhase(pane, "Plan", 5, 0.35f);
+            AddPhase(pane, "Prepare", 7, 0.45f);
+            AddPhase(pane, "Execute", 9, 0.65f);
+            AddPhase(pane, "Report", 11, 0.85f);
+            pane.SetFocus();
+            Application.Refresh();
+        }
+
+        private static void AddPhase(View parent, string label, int y, float value)
+        {
+            parent.Add(new Label(label) { X = 1, Y = y, Width = 14 });
+            parent.Add(new ProgressBar
+            {
+                X = 16,
+                Y = y,
+                Width = Dim.Fill(2),
+                Fraction = value
+            });
+        }
+
+        private void ShowRunSetup()
+        {
+            SetStatus("Run Setup", "Edit fields directly. Values stay in the controls until you launch or exit.");
+            ResetWorkspace("Run Setup");
+            EnsureRunControls();
+
+            var pane = RequireMainPane();
+            var form = new FrameView("Script Job")
+            {
+                X = 0,
+                Y = 0,
+                Width = Dim.Percent(70),
+                Height = Dim.Fill()
+            };
+            AddFormRow(form, "Script path", scriptPathField!, 1);
+            AddFormRow(form, "Targets", targetsField!, 3);
+            form.Add(new Label("Transport") { X = 1, Y = 5, Width = 20 });
+            AddRetainedControl(form, transportList!);
+            AddRetainedControl(form, runAsSystemBox!);
+            AddRetainedControl(form, dryRunBox!);
+            AddFormRow(form, "Throttle", throttleField!, 11);
+            AddFormRow(form, "Expected exits", expectedExitField!, 13);
+            AddFormRow(form, "Artifacts", artifactField!, 15);
+            AddFormRow(form, "Output root", outputRootField!, 17);
+            AddFormRow(form, "Remote root", remoteRootField!, 19);
+            AddFormRow(form, "Script args", scriptArgumentsField!, 21);
+
+            var actions = new FrameView("Launch Readiness")
+            {
+                X = Pos.Right(form),
+                Y = 0,
+                Width = Dim.Fill(),
+                Height = Dim.Fill()
+            };
+            readinessLabel = new Label("Ready") { X = 1, Y = 1, Width = Dim.Fill(2) };
+            readinessBar = new ProgressBar { X = 1, Y = 3, Width = Dim.Fill(2), Fraction = GetReadinessFraction() };
+            actions.Add(readinessLabel, readinessBar);
+            AddActionButton(actions, "Launch", 6, LaunchRunFromControls);
+            AddActionButton(actions, "Doctor", 9, ShowDoctor);
+            AddActionButton(actions, "Home", 12, ShowHome);
+            actions.Add(new Label("Ctrl+R launches. Esc returns home.")
+            {
+                X = 1,
+                Y = 15,
+                Width = Dim.Fill(2)
+            });
+
+            pane.Add(form, actions);
+            UpdateReadiness();
+            scriptPathField!.SetFocus();
+            Application.Refresh();
+        }
+
+        private static void AddFormRow(View parent, string label, TextField field, int y)
+        {
+            parent.Add(new Label(label) { X = 1, Y = y, Width = 20 });
+            field.X = 22;
+            field.Y = y;
+            field.Width = Dim.Fill(2);
+            AddRetainedControl(parent, field);
+        }
+
+        private static void AddRetainedControl(View parent, View control)
+        {
+            control.SuperView?.Remove(control);
+            parent.Add(control);
+        }
+
+        private static void AddActionButton(View parent, string text, int y, Action clicked)
+        {
+            var button = new Button(text)
+            {
+                X = 1,
+                Y = y,
+                Width = Dim.Fill(2)
+            };
+            button.Clicked += clicked;
+            parent.Add(button);
+        }
+
+        private void EnsureRunControls()
+        {
+            scriptPathField ??= new TextField(string.Empty);
+            targetsField ??= new TextField(string.Empty);
+            transportList ??= new ListView(TransportChoices)
+            {
+                X = 22,
+                Y = 5,
+                Width = 18,
+                Height = 3,
+                SelectedItem = 0
+            };
+            runAsSystemBox ??= new CheckBox("Run as SYSTEM", false)
+            {
+                X = 1,
+                Y = 9
+            };
+            dryRunBox ??= new CheckBox("Dry run", true)
+            {
+                X = 24,
+                Y = 9
+            };
+            throttleField ??= new TextField(string.Empty);
+            expectedExitField ??= new TextField("0");
+            artifactField ??= new TextField(string.Empty);
+            outputRootField ??= new TextField(string.Empty);
+            remoteRootField ??= new TextField(string.Empty);
+            scriptArgumentsField ??= new TextField(string.Empty);
+        }
+
+        private void LaunchRunFromControls()
+        {
+            EnsureRunControls();
+            var scriptPath = GetText(scriptPathField);
+            var targets = GetText(targetsField);
+            if (string.IsNullOrWhiteSpace(scriptPath))
+            {
+                SetStatus("Run Setup", "Script path is required before a run can start.");
+                UpdateReadiness();
+                scriptPathField!.SetFocus();
+                Application.Refresh();
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(targets))
+            {
+                SetStatus("Run Setup", "At least one computer name or target file entry is required before a run can start.");
+                UpdateReadiness();
+                targetsField!.SetFocus();
+                Application.Refresh();
+                return;
+            }
+
+            result = new CommandCenterResult(
+                CommandCenterExitKind.StartRun,
+                BuildRunArgumentsFromValues(
+                    dryRunBox?.Checked is true,
+                    scriptPath,
+                    targets,
+                    transportList?.SelectedItem ?? 0,
+                    runAsSystemBox?.Checked is true,
+                    GetText(expectedExitField),
+                    GetText(throttleField),
+                    GetText(artifactField),
+                    GetText(outputRootField),
+                    GetText(remoteRootField),
+                    GetText(scriptArgumentsField)));
+            Application.RequestStop();
+        }
+
+        private void ShowDoctor()
+        {
+            SetStatus("Doctor", "Running local prerequisite checks.");
+            ResetWorkspace("Doctor");
+            var report = doctor.Run();
+            SetStatus("Doctor", report.Succeeded ? "Doctor checks passed." : "Doctor checks need attention.");
+            var pane = RequireMainPane();
+            var rows = report.Checks
+                .Select(static check => $"{FormatDoctorStatus(check.Status),-4} {check.Name,-24} {check.Message} {check.Detail}".Trim())
+                .DefaultIfEmpty("No doctor checks returned.")
+                .ToList();
+            pane.Add(new ListView(rows)
+            {
+                X = 1,
+                Y = 1,
+                Width = Dim.Fill(2),
+                Height = Dim.Fill(2)
+            });
+            Application.Refresh();
+        }
+
+        private void ShowHelp()
+        {
+            SetStatus("Help", "Command reference loaded.");
+            ResetWorkspace("Command Help");
+            var lines = new[]
+            {
+                "dispatch                         Open the retained Terminal.Gui command center",
+                @"dispatch run --script .\Fix.ps1 --computer-name PC001 --transport psexec",
+                "dispatch doctor                  Check local prerequisites",
+                "dispatch --version               Show installed version",
+                string.Empty,
+                "Automation reads durable result files. The terminal is an operator UI."
+            };
+            RequireMainPane().Add(new ListView(lines)
+            {
+                X = 1,
+                Y = 1,
+                Width = Dim.Fill(2),
+                Height = Dim.Fill(2)
+            });
+            Application.Refresh();
+        }
+
+        private void ResetWorkspace(string title)
+        {
+            var pane = RequireMainPane();
+            if (pane is FrameView frame)
+            {
+                frame.Title = title;
+            }
+
+            pane.RemoveAll();
+        }
+
+        private void SetStatus(string view, string message)
+        {
+            status.View = view;
+            status.Message = message;
+            if (viewLabel is not null)
+            {
+                viewLabel.Text = $"View: {view}";
+            }
+
+            if (messageLabel is not null)
+            {
+                messageLabel.Text = message;
+            }
+        }
+
+        private void UpdateReadiness()
+        {
+            if (readinessBar is null || readinessLabel is null)
+            {
+                return;
+            }
+
+            var fraction = GetReadinessFraction();
+            readinessBar.Fraction = fraction;
+            readinessLabel.Text = fraction >= 1
+                ? "Ready to launch"
+                : "Missing script path or targets";
+        }
+
+        private float GetReadinessFraction()
+        {
+            var required = 0;
+            if (!string.IsNullOrWhiteSpace(GetText(scriptPathField)))
+            {
+                required++;
+            }
+
+            if (!string.IsNullOrWhiteSpace(GetText(targetsField)))
+            {
+                required++;
+            }
+
+            return required / 2f;
+        }
+
+        private View RequireMainPane() =>
+            mainPane ?? throw new InvalidOperationException("The command center shell has not been built.");
+
+        private static string GetText(TextField? field) =>
+            field?.Text?.ToString() ?? string.Empty;
+
+        private sealed class StatusModel
+        {
+            public string View { get; set; } = "Home";
+
+            public string Message { get; set; } = "Ready.";
+        }
     }
 }
 

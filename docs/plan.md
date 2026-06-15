@@ -1031,11 +1031,13 @@ Scope:
 - The command center must be a full retained terminal app surface hosted by Terminal.Gui; prompt-by-prompt flows do not satisfy this requirement.
 - The command center must update in place without scrolling repeated menu panels or repeated static output down the terminal.
 - The command center must run through the Terminal.Gui application loop and event handlers; manually reading `Console.ReadKey` while Terminal.Gui is initialized does not satisfy this requirement because it can leave operators on a blank retained screen.
+- The command center run setup must use persistent Terminal.Gui input controls; typed values must remain visible while navigating the form and must be read from the actual text fields, check boxes, and transport selection when launching a run.
 - Terminal.Gui view roles are defined: the application/top-level shell owns command-center navigation, menu/status bars own global actions and state, windows/frames own dashboard sections, tables/lists own target/plan/result rows, progress bars own dry-run and measurable target progress, and forms own run setup.
 - Render the entire command service through Terminal.Gui: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact progress, full dashboard progress, and final run summaries.
 - Do not emit raw JSON, default parser help, Spectre.Console output, or plain status lines as the console UX for any command path.
 - Use actual Terminal.Gui views intentionally, including top-level application surfaces, menu bars, status bars, windows, frames, labels, buttons, list views, text fields, check boxes, combo/drop-down choices, tables/lists, progress bars, keyboard shortcuts, and mouse-aware focus handling.
 - For real runs, render an enterprise-grade retained run dashboard using Terminal.Gui. The dashboard should be useful for repeated operator use, not merely decorative.
+- Retained run dashboards and compact progress views must run inside the Terminal.Gui application loop while endpoint execution runs on a background task; progress callbacks must update Terminal.Gui controls in place through the UI loop instead of awaiting execution before repainting.
 - The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, status symbols, and a concise recent-event/failure area.
 - The retained dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.
 - Compact execution mode must use Terminal.Gui progress bars and status columns for terminal runs; redirected/non-interactive execution must avoid repeated static progress output and emit only durable files plus a single designed Terminal.Gui-compatible snapshot summary.
@@ -1055,12 +1057,12 @@ Dependencies:
 Definition of done:
 - `dispatch` opens a Terminal.Gui command center with retained menus for run setup, diagnostics, help, and exit.
 - The command center renders after launch and remains interactive in a real terminal through Terminal.Gui menu/status/key events.
-- The run setup view guides the user through script, targets, transport, run context, throttle, dry-run, and launch without leaving the command-center app surface.
+- The run setup view guides the user through script, targets, transport, run context, throttle, dry-run, and launch without leaving the command-center app surface, preserves entered values in persistent controls, and launches with the values visible in the form.
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.
 - Every command path renders through the Dispatch Terminal.Gui renderer rather than default parser output, raw JSON, Spectre.Console, or plain text status lines.
 - Dry-run output renders visible Terminal.Gui progress followed by a Terminal.Gui execution-plan view, and still records durable plan/result data through the shared model when appropriate.
-- Real terminal runs render either the full retained Terminal.Gui dashboard or compact Terminal.Gui progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, result-file paths, and failure summaries.
+- Real terminal runs render either the full retained Terminal.Gui dashboard or compact Terminal.Gui progress bars with per-target phase visibility, status symbols, aggregate counters, elapsed time, result-file paths, and failure summaries while the Terminal.Gui application loop remains active.
 - Tests cover help, errors, doctor, dry-run, compact progress rendering, dashboard rendering, command-center surface/key navigation, and final summaries as Terminal.Gui command-service output.
 
 #### 6.1 Operator Diagnostics
