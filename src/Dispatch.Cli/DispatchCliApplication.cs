@@ -54,20 +54,6 @@ public sealed class DispatchCliApplication(
             return await RunCommandAsync(args[1..], cancellationToken).ConfigureAwait(false);
         }
 
-        if (IsPlannedTopLevelCommand(commandName))
-        {
-            return commandName switch
-            {
-                "apply" => RenderPlannedCommand("apply", "6.5 YAML Apply And Job Model"),
-                "push" => RenderPlannedCommand("push", "6.6 Push, Hosts, Doctor, And Init Command Surfaces"),
-                "hosts" => RenderPlannedCommand("hosts", "6.6 Push, Hosts, Doctor, And Init Command Surfaces"),
-                "logs" => RenderPlannedCommand("logs", "6.3 Structured Run Logs And Log Commands"),
-                "creds" => RenderPlannedCommand("creds", "6.4 Credential References"),
-                "init" => RenderPlannedCommand("init", "6.6 Push, Hosts, Doctor, And Init Command Surfaces"),
-                _ => RenderUnknownCommand(commandName)
-            };
-        }
-
         if (IsSpectreRegisteredCommand(commandName))
         {
             return await new DispatchSpectreCommandApp(this).RunAsync(args, cancellationToken).ConfigureAwait(false);
@@ -95,14 +81,20 @@ public sealed class DispatchCliApplication(
             var request = command!.ToRequest();
             if (command.DryRun)
             {
-                var dryRunPlan = await CreatePlanWithDryRunProgressAsync(request, cancellationToken).ConfigureAwait(false);
-                SpectreConsoleRenderer.RenderDryRunPlan(Console.Out, dryRunPlan);
+                var dryRunPlan = command.OutputMode == DispatchOutputMode.Rich
+                    ? await CreatePlanWithDryRunProgressAsync(request, cancellationToken).ConfigureAwait(false)
+                    : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+                DispatchStructuredOutputRenderer.RenderPlan(Console.Out, dryRunPlan, command.OutputMode);
                 return 0;
             }
 
-            var plan = await CreatePlanWithStatusAsync(request, cancellationToken).ConfigureAwait(false);
-            var result = await RunWithSpectreProgressAsync(plan, command.NoDashboard, cancellationToken).ConfigureAwait(false);
-            SpectreConsoleRenderer.RenderRunResult(Console.Out, result);
+            var plan = command.OutputMode == DispatchOutputMode.Rich
+                ? await CreatePlanWithStatusAsync(request, cancellationToken).ConfigureAwait(false)
+                : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+            var result = command.OutputMode == DispatchOutputMode.Rich
+                ? await RunWithSpectreProgressAsync(plan, command.NoDashboard, cancellationToken).ConfigureAwait(false)
+                : await executor.ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken).ConfigureAwait(false);
+            DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, command.OutputMode);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)
@@ -185,11 +177,8 @@ public sealed class DispatchCliApplication(
     private static bool IsExplicitHelpRequest(IReadOnlyList<string> args) =>
         args.Any(static arg => arg is "--help" or "-h" or "-?");
 
-    private static bool IsPlannedTopLevelCommand(string command) =>
-        command is "apply" or "push" or "hosts" or "logs" or "creds" or "init";
-
     private static bool IsSpectreRegisteredCommand(string command) =>
-        command is "run" or "doctor" or "version";
+        command is "apply" or "run" or "push" or "hosts" or "logs" or "creds" or "doctor" or "init" or "version";
 
     private static bool IsLegacyRunCompatibilityRequest(IReadOnlyList<string> args) =>
         args.Count > 1 && !args[1].Equals("ps", StringComparison.OrdinalIgnoreCase)

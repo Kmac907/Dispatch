@@ -33,6 +33,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("Global options:");
         console.WriteLine("  -i, --inventory <path>      Host file");
         console.WriteLine("  -t, --target <selector>     Target host/group/selector");
+        console.WriteLine("      --exclude <selector>    Exclude selected hosts");
         console.WriteLine("      --transport <name>      auto, psrp, winrm, psexec");
         console.WriteLine("      --output <format>       rich, table, json, ndjson, yaml");
         console.WriteLine("      --no-color              Disable ANSI color");
@@ -67,6 +68,10 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("Progress options:");
         console.WriteLine("      --no-progress          Disable live progress rendering");
         console.WriteLine("      --no-dashboard         Compatibility alias for --no-progress");
+        console.WriteLine("      --output <format>      rich, table, json, ndjson, yaml");
+        console.WriteLine("      -i, --inventory <path> Host inventory");
+        console.WriteLine("      -t, --target <selector> Target host/group/selector");
+        console.WriteLine("      --exclude <selector>   Exclude selected hosts");
         console.WriteLine();
         console.WriteLine("Examples:");
         console.WriteLine(@"  dispatch run ps .\scripts\Collect-Disk.ps1 --target web -i .\hosts\prod.yml");

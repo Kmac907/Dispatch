@@ -66,4 +66,65 @@ public sealed class TargetResolutionTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, static error => error.Code == "TargetFileNotFound");
     }
+
+    [Fact]
+    public void ResolvesTextInventoryWhenNoSelectorIsProvided()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            # inventory
+            PC100
+            PC101,pc100
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, InventoryPath: inventory.Path));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["PC100", "PC101"], result.Targets.Select(static target => target.Name));
+        Assert.All(result.Targets, target => Assert.StartsWith($"inventory:{inventory.Path}", target.Source));
+    }
+
+    [Fact]
+    public void ResolvesYamlInventoryGroupsHostsTagsAndExcludes()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+              db:
+                hosts:
+                  - DB01
+            hosts:
+              WEB01:
+                tags: [prod, iis]
+              WEB02:
+                tags: [test, iis]
+              DB01:
+                tags:
+                  - prod
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["web,tag:prod"],
+            InventoryPath: inventory.Path,
+            ExcludeSelectors: ["WEB02"]));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["WEB01", "DB01"], result.Targets.Select(static target => target.Name));
+        Assert.All(result.Targets, target => Assert.Equal($"inventory:{inventory.Path}", target.Source));
+    }
+
+    [Fact]
+    public void SelectorFileCanBeUsedWithoutInventory()
+    {
+        using var targetFile = TemporaryTargetFile.Create("PC200\r\nPC201");
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, TargetSelectors: [$"file:{targetFile.Path}"]));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["PC200", "PC201"], result.Targets.Select(static target => target.Name));
+    }
 }

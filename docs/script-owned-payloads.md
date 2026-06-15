@@ -7,18 +7,20 @@ Scripts own their external payload retrieval. If a script needs an MSI, ZIP, con
 Examples of script-owned inputs:
 
 ```powershell
-dispatch run --dry-run `
-  --script .\Install-App.ps1 `
-  --computer-name PC001 `
+dispatch run ps .\Install-App.ps1 `
+  --target PC001 `
+  --plan `
   -- -PackageUri https://contoso.example/packages/app.msi -Version 1.2.3
 ```
 
 ```powershell
-dispatch run --dry-run `
-  --script .\Install-App.ps1 `
+dispatch run ps .\Install-App.ps1 `
   --target-file .\targets.txt `
+  --plan `
   -- -SourcePath \\fileserver\packages\app.msi
 ```
+
+The legacy compatibility shape `dispatch run --script <path> --computer-name <names>` remains supported while module and install callers migrate, but new examples should use the `dispatch run ps <script.ps1>` command documented in `docs/cli-design.md`.
 
 v1 guardrails:
 

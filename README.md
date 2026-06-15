@@ -39,7 +39,7 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, local operator diagnostics, a Spectre.Console.Cli route for the implemented `run ps`, `doctor`, and `version` commands, and a Spectre.Console live run surface. The legacy Terminal.Gui command-service implementation has been removed from the active CLI. The remaining CLI roadmap is structured output modes, inventories, YAML jobs, logs, credentials, push/hosts/init scaffolding, and the documented enterprise exit-code/policy behavior. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, local operator diagnostics, a Spectre.Console.Cli route for the documented command tree, initial structured output modes, initial inventory/target selectors for `run ps`, and a Spectre.Console live run surface. The legacy Terminal.Gui command-service implementation has been removed from the active CLI. The remaining CLI roadmap includes full output flag/event-stream behavior, deeper inventory selectors, YAML jobs, logs, credentials, push/hosts/init behavior, and the documented enterprise exit-code/policy behavior. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Operator Diagnostics
 
@@ -47,7 +47,7 @@ Run `dispatch doctor` to check local prerequisites before executing endpoint job
 
 ## Run Output
 
-The active CLI design uses Spectre.Console.Cli for implemented command routing and Spectre.Console for operator output. Rich terminal output is for humans; `--output json` and `--output ndjson` remain planned automation contracts.
+The active CLI design uses Spectre.Console.Cli for command routing and Spectre.Console for operator output. Rich terminal output is for humans; `--output json`, `--output ndjson`, and `--output yaml` are implemented for the current `run ps` plan/result paths, while full event streaming remains roadmap work.
 
 The target command tree is:
 
@@ -89,6 +89,7 @@ Dispatch v1 copies only the selected PowerShell script. Installer media, package
 dotnet build .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\path\to\script.ps1 --target PC001,PC002 --plan --output json
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run --dry-run --script .\path\to\script.ps1 --computer-name PC001,PC002 -- -PackageUri https://contoso.example/app.msi
 dotnet test .\Dispatch.sln
 ```

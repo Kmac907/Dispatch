@@ -1029,6 +1029,9 @@ Definition of done:
 Objective:
 Replace the legacy command service with the Spectre.Console.Cli command tree from the CLI design while preserving the existing shared planner/executor path for v1 PsExec PowerShell script execution.
 
+Reference:
+- `docs/cli-design.md` defines the command tree, global options, output phases, safety rules, and exit-code contract for this roadmap item.
+
 Scope:
 - Use `Spectre.Console.Cli` for command registration, settings validation, help, and command dispatch.
 - Register the target command tree: `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version`.
@@ -1039,9 +1042,9 @@ Scope:
 - Unknown or not-yet-implemented commands must render explicit Spectre.Console errors that identify the roadmap item required; they must not silently pretend support exists.
 
 Current implementation note:
-- `run ps`, `doctor`, and `version` are registered through Spectre.Console.Cli.
+- `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version` are registered through Spectre.Console.Cli.
 - Existing `dispatch run --script <path> --computer-name <names>` callers are preserved through the compatibility parser because that syntax predates the new command tree.
-- `run cmd`, `run exe`, `apply`, `push`, `hosts`, `logs`, `creds`, and `init` are visible in the documented design but remain planned until their specific roadmap items are implemented.
+- `run cmd`, `run exe`, `apply`, `push`, `hosts`, `logs`, `creds`, and `init` route through Spectre.Console.Cli and return planned-feature errors until their specific roadmap items are implemented.
 
 Non-goals:
 - No separate interactive execution engine.
@@ -1064,6 +1067,9 @@ Definition of done:
 Objective:
 Render live terminal progress correctly using Spectre.Console while preserving stable automation output modes.
 
+Reference:
+- `docs/cli-design.md` defines the terminal phase model, structured output modes, `--no-progress`, and renderer ownership rules for this roadmap item.
+
 Scope:
 - Introduce an internal run-event model and a single renderer that consumes execution/planning events.
 - Bridge existing `DispatchExecutionProgress` events into renderer events without changing transport worker behavior.
@@ -1078,7 +1084,9 @@ Current implementation note:
 - Real execution uses a channel-fed Spectre `LiveDisplay` renderer over `DispatchExecutionProgress` events.
 - Dry-run planning uses Spectre `Progress` when interactive and stable progress text when redirected.
 - Non-dry-run planning uses Spectre `Status` when interactive and stable text when redirected.
-- `--no-progress` is implemented; structured output modes are still pending.
+- `--no-progress` is implemented.
+- `--output rich|table|json|ndjson|yaml` is implemented for the current `run ps` dry-run plan and final result paths; JSON/YAML suppress decorative rendering, and NDJSON emits one compact typed final document line for the current path.
+- `--no-color`, `--quiet`, `--verbose`, `--trace`, and full NDJSON event streaming remain pending.
 
 Non-goals:
 - No static fake progress bars.
@@ -1099,6 +1107,9 @@ Definition of done:
 Objective:
 Add the host selection model from the CLI design.
 
+Reference:
+- `docs/cli-design.md` defines the inventory option, target selectors, and precedence rules for this roadmap item.
+
 Scope:
 - Support `-i|--inventory <path>` for YAML inventories and simple text host files.
 - Support `-t|--target <selector>` with `all`, group name, host name, comma-separated names, `tag:<name>`, and `file:<path>` forms.
@@ -1118,10 +1129,17 @@ Definition of done:
 - YAML and text host files resolve to stable target lists.
 - Tests cover groups, hosts, simple files, excludes, and duplicate handling.
 
+Current implementation note:
+- `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, groups, host names, `tag:<name>`, and `file:<path>`.
+- Advanced selectors, job/config precedence, and broader YAML inventory schema behavior remain pending.
+
 #### 6.3 Structured Run Logs And Log Commands
 
 Objective:
 Create the run-history and log-inspection surface from the CLI design.
+
+Reference:
+- `docs/cli-design.md` defines the `logs` command group and structured output expectations for this roadmap item.
 
 Scope:
 - Write run folders under `C:\ProgramData\Dispatch\logs\<yyyy>\<MM>\<dd>\<run-id>\` unless overridden.
@@ -1146,6 +1164,9 @@ Definition of done:
 Objective:
 Add the credential-reference surface without storing plaintext credentials in jobs or inventories.
 
+Reference:
+- `docs/cli-design.md` defines the `creds` command group, credential option, and CLI safety rules for this roadmap item.
+
 Scope:
 - Implement `dispatch creds add|list|test|remove` command surface.
 - Store references through a provider abstraction rather than embedding plaintext in YAML.
@@ -1169,6 +1190,9 @@ Definition of done:
 
 Objective:
 Support declared YAML jobs while keeping the first implementation script-first and small.
+
+Reference:
+- `docs/cli-design.md` defines `dispatch apply`, global option precedence, inventory/job expectations, and initial task vocabulary for this roadmap item.
 
 Scope:
 - Implement `dispatch apply <job.yml>`.
@@ -1196,6 +1220,9 @@ Definition of done:
 Objective:
 Complete the operator command tree around execution.
 
+Reference:
+- `docs/cli-design.md` defines the `push`, `hosts`, `doctor`, and `init` command groups and their global option behavior for this roadmap item.
+
 Scope:
 - Implement `dispatch push <source> --dest <remote-path>` with `--recurse`, `--checksum`, `--overwrite`, `--backup`, `--execute`, `--execute-as`, and `--cleanup` settings.
 - Implement `dispatch hosts list|test|validate|graph|vars`.
@@ -1218,6 +1245,9 @@ Definition of done:
 
 Objective:
 Make the redesigned CLI predictable for enterprise use and automation.
+
+Reference:
+- `docs/cli-design.md` defines the safety rules, prompt restrictions, and exit-code meanings for this roadmap item.
 
 Scope:
 - Implement stable exit codes: `0` success, `1` usage/config/inventory/YAML validation error, `2` host failure, `3` unreachable host, `4` authentication/authorization failure, `5` transport initialization failure, `6` canceled, `7` plan/check policy failure, `10` internal error.
@@ -1243,6 +1273,9 @@ Definition of done:
 Objective:
 Move local prerequisite diagnostics into the redesigned Spectre command surface.
 
+Reference:
+- `docs/cli-design.md` defines `dispatch doctor`, output mode expectations, and safety constraints for diagnostics.
+
 Scope:
 - Keep `dispatch doctor` as the primary local prerequisite command.
 - Check .NET runtime, OS, PowerShell availability, PsExec path/configuration/EULA policy, WinRM client availability, log directory writability, config parseability, credential provider availability, host schema availability, current user/domain context, and policy restrictions where implemented.
@@ -1267,6 +1300,9 @@ Definition of done:
 
 Objective:
 Provide PowerShell-friendly commands that wrap the bundled `dispatch.exe`.
+
+Reference:
+- `docs/cli-design.md` defines the CLI command contract that the PowerShell module must wrap without parsing rich terminal output.
 
 Scope:
 - Add `Dispatch.psd1` and `Dispatch.psm1`.

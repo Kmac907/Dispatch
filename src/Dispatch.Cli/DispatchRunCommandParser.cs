@@ -27,6 +27,10 @@ internal sealed class DispatchRunCommandParser
         var artifactPaths = new List<string>();
         var runAsSystem = false;
         var noDashboard = false;
+        var outputMode = DispatchOutputMode.Rich;
+        var targetSelectors = new List<string>();
+        var excludeSelectors = new List<string>();
+        string? inventoryPath = null;
         var scriptArguments = new List<string>();
 
         for (var index = 0; index < args.Count; index++)
@@ -58,6 +62,44 @@ internal sealed class DispatchRunCommandParser
                     }
 
                     computerNameValues.Add(computerNameValue);
+                    break;
+                case "-t":
+                case "--target":
+                    if (!TryReadValue(args, ref index, arg, out var targetSelector, out error))
+                    {
+                        return false;
+                    }
+
+                    targetSelectors.Add(targetSelector);
+                    break;
+                case "--exclude":
+                    if (!TryReadValue(args, ref index, arg, out var excludeSelector, out error))
+                    {
+                        return false;
+                    }
+
+                    excludeSelectors.Add(excludeSelector);
+                    break;
+                case "-i":
+                case "--inventory":
+                    if (!TryReadValue(args, ref index, arg, out inventoryPath, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--output":
+                    if (!TryReadValue(args, ref index, arg, out var outputValue, out error))
+                    {
+                        return false;
+                    }
+
+                    if (!TryParseOutputMode(outputValue, out outputMode))
+                    {
+                        error = $"Unsupported output mode '{outputValue}'. Expected rich, table, json, ndjson, or yaml.";
+                        return false;
+                    }
+
                     break;
                 case "--transport":
                     if (!TryReadValue(args, ref index, arg, out var transportValue, out error))
@@ -150,7 +192,12 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
-        var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(computerNameValues, targetFile));
+        var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(
+            computerNameValues,
+            targetFile,
+            targetSelectors,
+            inventoryPath,
+            excludeSelectors));
         if (!targetResolution.IsValid)
         {
             error = string.Join(Environment.NewLine, targetResolution.Errors.Select(static resolutionError => $"{resolutionError.Code}: {resolutionError.Message}"));
@@ -169,7 +216,8 @@ internal sealed class DispatchRunCommandParser
             RemoteRunRoot: remoteRunRoot,
             ArtifactPaths: artifactPaths,
             RunAsSystem: runAsSystem,
-            NoDashboard: noDashboard);
+            NoDashboard: noDashboard,
+            OutputMode: outputMode);
         return true;
     }
 
@@ -209,6 +257,25 @@ internal sealed class DispatchRunCommandParser
         return value.Equals("psexec", StringComparison.OrdinalIgnoreCase)
             || value.Equals("psrp", StringComparison.OrdinalIgnoreCase)
             || value.Equals("winrm", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseOutputMode(string value, out DispatchOutputMode outputMode)
+    {
+        outputMode = value.ToLowerInvariant() switch
+        {
+            "rich" => DispatchOutputMode.Rich,
+            "table" => DispatchOutputMode.Table,
+            "json" => DispatchOutputMode.Json,
+            "ndjson" => DispatchOutputMode.Ndjson,
+            "yaml" => DispatchOutputMode.Yaml,
+            _ => default
+        };
+
+        return value.Equals("rich", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("table", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("json", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("ndjson", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("yaml", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryParseExpectedExitCodes(string value, out IReadOnlyList<int> exitCodes)

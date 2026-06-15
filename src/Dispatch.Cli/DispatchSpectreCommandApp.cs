@@ -20,6 +20,10 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 .WithDescription("Print version and build information");
             config.AddCommand<DoctorCommand>("doctor")
                 .WithDescription("Validate local configuration and dependencies");
+            config.AddCommand<ApplyCommand>("apply")
+                .WithDescription("Run a YAML job");
+            config.AddCommand<PushCommand>("push")
+                .WithDescription("Copy files or scripts to target hosts");
 
             config.AddBranch("run", run =>
             {
@@ -31,6 +35,44 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     .WithDescription("Run a shell command");
                 run.AddCommand<RunExeCommand>("exe")
                     .WithDescription("Run an executable");
+            });
+
+            config.AddBranch("hosts", hosts =>
+            {
+                hosts.SetDescription("Inspect, validate, and test host files");
+                hosts.AddCommand<HostsListCommand>("list");
+                hosts.AddCommand<HostsTestCommand>("test");
+                hosts.AddCommand<HostsValidateCommand>("validate");
+                hosts.AddCommand<HostsGraphCommand>("graph");
+                hosts.AddCommand<HostsVarsCommand>("vars");
+            });
+
+            config.AddBranch("logs", logs =>
+            {
+                logs.SetDescription("Inspect run history and output");
+                logs.AddCommand<LogsListCommand>("list");
+                logs.AddCommand<LogsShowCommand>("show");
+                logs.AddCommand<LogsTailCommand>("tail");
+                logs.AddCommand<LogsExportCommand>("export");
+                logs.AddCommand<LogsRetryCommand>("retry");
+            });
+
+            config.AddBranch("creds", creds =>
+            {
+                creds.SetDescription("Manage credential references");
+                creds.AddCommand<CredsAddCommand>("add");
+                creds.AddCommand<CredsListCommand>("list");
+                creds.AddCommand<CredsTestCommand>("test");
+                creds.AddCommand<CredsRemoveCommand>("remove");
+            });
+
+            config.AddBranch("init", init =>
+            {
+                init.SetDescription("Create starter files");
+                init.AddCommand<InitJobCommand>("job");
+                init.AddCommand<InitHostsCommand>("hosts");
+                init.AddCommand<InitConfigCommand>("config");
+                init.AddCommand<InitAllCommand>("all");
             });
         });
 
@@ -73,6 +115,16 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new DoctorCommand(application);
             }
 
+            if (type == typeof(ApplyCommand))
+            {
+                return new ApplyCommand();
+            }
+
+            if (type == typeof(PushCommand))
+            {
+                return new PushCommand();
+            }
+
             if (type == typeof(RunPsCommand))
             {
                 return new RunPsCommand(application);
@@ -86,6 +138,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             if (type == typeof(RunExeCommand))
             {
                 return new RunExeCommand();
+            }
+
+            if (PlannedCommandTypes.Contains(type))
+            {
+                return Activator.CreateInstance(type);
             }
 
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
@@ -114,6 +171,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             application.RunDoctorCommand();
     }
 
+    private sealed class ApplyCommand : Command<ApplySettings>
+    {
+        protected override int Execute(CommandContext context, ApplySettings settings, CancellationToken cancellationToken) =>
+            DispatchCliApplication.RenderPlannedCommand("apply", "6.5 YAML Apply And Job Model");
+    }
+
+    private sealed class PushCommand : Command<PushSettings>
+    {
+        protected override int Execute(CommandContext context, PushSettings settings, CancellationToken cancellationToken) =>
+            DispatchCliApplication.RenderPlannedCommand("push", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    }
+
     private sealed class RunPsCommand(DispatchCliApplication application) : AsyncCommand<RunPsSettings>
     {
         protected override async Task<int> ExecuteAsync(
@@ -136,6 +205,60 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             DispatchCliApplication.RenderPlannedCommand("run exe", "post-6 command payload enablement");
     }
 
+    private abstract class PlannedCommand(string command, string roadmapItem) : Command
+    {
+        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
+            DispatchCliApplication.RenderPlannedCommand(command, roadmapItem);
+    }
+
+    private sealed class HostsListCommand() : PlannedCommand("hosts list", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class HostsTestCommand() : PlannedCommand("hosts test", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class HostsValidateCommand() : PlannedCommand("hosts validate", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class HostsGraphCommand() : PlannedCommand("hosts graph", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class HostsVarsCommand() : PlannedCommand("hosts vars", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class LogsListCommand() : PlannedCommand("logs list", "6.3 Structured Run Logs And Log Commands");
+
+    private sealed class LogsShowCommand() : PlannedCommand("logs show", "6.3 Structured Run Logs And Log Commands");
+
+    private sealed class LogsTailCommand() : PlannedCommand("logs tail", "6.3 Structured Run Logs And Log Commands");
+
+    private sealed class LogsExportCommand() : PlannedCommand("logs export", "6.3 Structured Run Logs And Log Commands");
+
+    private sealed class LogsRetryCommand() : PlannedCommand("logs retry", "6.3 Structured Run Logs And Log Commands");
+
+    private sealed class CredsAddCommand() : PlannedCommand("creds add", "6.4 Credential References");
+
+    private sealed class CredsListCommand() : PlannedCommand("creds list", "6.4 Credential References");
+
+    private sealed class CredsTestCommand() : PlannedCommand("creds test", "6.4 Credential References");
+
+    private sealed class CredsRemoveCommand() : PlannedCommand("creds remove", "6.4 Credential References");
+
+    private sealed class InitJobCommand() : PlannedCommand("init job", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class InitHostsCommand() : PlannedCommand("init hosts", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class InitConfigCommand() : PlannedCommand("init config", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class InitAllCommand() : PlannedCommand("init all", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+
+    private sealed class ApplySettings : CommandSettings
+    {
+        [CommandArgument(0, "[job.yml]")]
+        public string? JobPath { get; init; }
+    }
+
+    private sealed class PushSettings : CommandSettings
+    {
+        [CommandArgument(0, "[source]")]
+        public string? Source { get; init; }
+    }
+
     private sealed class RunPsSettings : CommandSettings, IRunSharedSettings
     {
         [CommandArgument(0, "<script.ps1>")]
@@ -143,6 +266,12 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("-t|--target <selector>")]
         public string? Target { get; init; }
+
+        [CommandOption("-i|--inventory <path>")]
+        public string? Inventory { get; init; }
+
+        [CommandOption("--exclude <selector>")]
+        public string? Exclude { get; init; }
 
         [CommandOption("--plan")]
         public bool Plan { get; init; }
@@ -180,6 +309,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         [CommandOption("--target-file <path>")]
         public string? TargetFile { get; init; }
 
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+
         [CommandOption("--no-progress")]
         public bool NoProgress { get; init; }
 
@@ -207,16 +339,42 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         string? TargetFile { get; }
 
+        string? Output { get; }
+
         bool NoProgress { get; }
 
         bool NoDashboard { get; }
     }
 
+    private static readonly HashSet<Type> PlannedCommandTypes =
+    [
+        typeof(HostsListCommand),
+        typeof(HostsTestCommand),
+        typeof(HostsValidateCommand),
+        typeof(HostsGraphCommand),
+        typeof(HostsVarsCommand),
+        typeof(LogsListCommand),
+        typeof(LogsShowCommand),
+        typeof(LogsTailCommand),
+        typeof(LogsExportCommand),
+        typeof(LogsRetryCommand),
+        typeof(CredsAddCommand),
+        typeof(CredsListCommand),
+        typeof(CredsTestCommand),
+        typeof(CredsRemoveCommand),
+        typeof(InitJobCommand),
+        typeof(InitHostsCommand),
+        typeof(InitConfigCommand),
+        typeof(InitAllCommand)
+    ];
+
     private static string[] BuildPowerShellArgs(RunPsSettings settings, IReadOnlyList<string> remaining)
     {
         var mapped = new List<string> { "--script", settings.ScriptPath };
         AddSharedArgs(mapped, settings);
-        AddValue(mapped, "--computer-name", settings.Target);
+        AddValue(mapped, "--target", settings.Target);
+        AddValue(mapped, "--inventory", settings.Inventory);
+        AddValue(mapped, "--exclude", settings.Exclude);
         AddValue(mapped, "--throttle", settings.Concurrency);
         if (settings.Plan)
         {
@@ -256,6 +414,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         AddValue(args, "--output-root", settings.OutputRoot);
         AddValue(args, "--remote-root", settings.RemoteRoot);
         AddValue(args, "--target-file", settings.TargetFile);
+        AddValue(args, "--output", settings.Output);
     }
 
     private static void AddValue(List<string> args, string name, string? value)

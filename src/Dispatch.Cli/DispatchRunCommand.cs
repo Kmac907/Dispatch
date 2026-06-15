@@ -14,7 +14,8 @@ internal sealed record DispatchRunCommand(
     string? RemoteRunRoot,
     IReadOnlyList<string> ArtifactPaths,
     bool RunAsSystem,
-    bool NoDashboard)
+    bool NoDashboard,
+    DispatchOutputMode OutputMode)
 {
     public DispatchRequest ToRequest() =>
         new(

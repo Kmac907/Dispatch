@@ -4,6 +4,7 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace Dispatch.Cli.Tests;
 
@@ -310,6 +311,217 @@ public sealed class DispatchCliApplicationTests
         {
             File.Delete(scriptPath);
         }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteUsesInventoryTargetSelectorAndExclude()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "web",
+                    "--exclude",
+                    "WEB02",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(["WEB01"], planner.LastRequest!.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task JsonOutputEmitsPlanDocumentWithoutDecorativeProgress()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--plan",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            Assert.Equal("run-test", document.RootElement.GetProperty("runId").GetString());
+            Assert.False(output.Contains("Dispatch plan", StringComparison.Ordinal));
+            Assert.False(output.Contains("Dry run planning", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task NdjsonOutputEmitsSingleTypedResultLineWithoutDecorativeProgress()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var executor = new SucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--output",
+                    "ndjson"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            var line = Assert.Single(output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
+            using var document = JsonDocument.Parse(line);
+            Assert.Equal("result", document.RootElement.GetProperty("type").GetString());
+            Assert.Equal("run-test", document.RootElement.GetProperty("result").GetProperty("runId").GetString());
+            Assert.DoesNotContain("Target Progress", output);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task YamlOutputEmitsStablePlanWithoutSpectreTables()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--plan",
+                    "--output",
+                    "yaml"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Contains("runId: run-test", output);
+            Assert.Contains("targets:", output);
+            Assert.DoesNotContain("╭", output);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task InvalidOutputModeFailsBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--output",
+                    "xml"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Unsupported output mode", error);
+            Assert.Null(planner.LastRequest);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Theory]
+    [InlineData("apply")]
+    [InlineData("push")]
+    public async Task PlannedTopLevelCommandsRouteThroughSpectreCli(string command)
+    {
+        var application = CreateApplication(new CapturingPlanner());
+
+        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync([command], CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Planned Dispatch command", error);
+        Assert.Contains(command, error);
+    }
+
+    [Theory]
+    [InlineData("hosts", "list")]
+    [InlineData("logs", "list")]
+    [InlineData("creds", "list")]
+    [InlineData("init", "job")]
+    public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
+    {
+        var application = CreateApplication(new CapturingPlanner());
+
+        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync([command, subcommand], CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Contains("Planned Dispatch command", error);
+        Assert.Contains($"{command} {subcommand}", error);
     }
 
     [Fact]
