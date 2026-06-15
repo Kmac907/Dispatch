@@ -6,7 +6,7 @@ This document records the active CLI design that supersedes the earlier Terminal
 
 ## Product Shape
 
-Dispatch is a Windows-native C# automation runner for Windows hosts. It supports ad-hoc execution, declared jobs, host inventories, structured logs, credential references, and explicit transports.
+Dispatch is a Windows-native C# automation runner for Windows hosts. The product design covers ad-hoc execution, declared jobs, host inventories, structured logs, credential references, and explicit transports. Current implementation status is tracked in `docs/plan.md` and `workflow/build/implementation-plan.md`.
 
 The operator model is:
 

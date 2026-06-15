@@ -6,27 +6,26 @@ The v1 goal is to let an administrator run a PowerShell script on one or more Wi
 
 V1 intentionally does not implement command execution, PSRP/raw WinRM transports, or Dispatch-managed credential/SAS handoff. Those surfaces are modeled so the architecture stays consistent, but they are post-MVP.
 
-## V1 Distribution
+## V1 Distribution Roadmap
 
-The primary v1 distribution model is source install from a private Azure DevOps repository.
+The planned v1 distribution model is source install from a private Azure DevOps repository. This is not implemented yet; the current repo does not contain the PowerShell module or packaging scripts.
 
 ```powershell
 git clone https://dev.azure.com/<org>/<project>/_git/Dispatch
 cd Dispatch
-.\packaging\bootstrap-install.ps1
-Import-Module Dispatch
-Start-Dispatch
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 ```
 
-`bootstrap-install.ps1` will build `dispatch.exe`, assemble the PowerShell module, install it into the selected module scope, validate that the module and bundled executable work, then remove the cloned source tree including the bootstrap script itself. After a successful bootstrap install, the installed PowerShell module and bundled `dispatch.exe` should remain.
+Future `bootstrap-install.ps1` work is tracked in Roadmap `8`. It will build `dispatch.exe`, assemble the PowerShell module, install it into the selected module scope, validate that the module and bundled executable work, then remove the cloned source tree including the bootstrap script itself.
 
-`install-from-source.ps1` is the reusable build/install helper for developers and CI jobs that intentionally keep the source checkout.
+Future `install-from-source.ps1` work is also tracked in Roadmap `8` as the reusable build/install helper for developers and CI jobs that intentionally keep the source checkout.
 
-## Long-Term Distribution
+## Long-Term Distribution Roadmap
 
-The long-term enterprise distribution model is an Azure Artifacts PowerShell repository backed by a NuGet feed.
+The long-term enterprise distribution model is an Azure Artifacts PowerShell repository backed by a NuGet feed. This is post-MVP Roadmap `13` work and is not implemented yet.
 
 ```powershell
+# Future command shape after Roadmap 13 is implemented:
 Register-PSResourceRepository `
   -Name DispatchInternal `
   -Uri "https://pkgs.dev.azure.com/<org>/<project>/_packaging/<feed>/nuget/v3/index.json" `
@@ -77,7 +76,7 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 
 Expected behavior for the completed Roadmap 6 redesign: Spectre help shows the documented command tree. During actual runs, live progress appears only while planning/preflight/execution work is active. If output is redirected or `--no-progress` is supplied, Dispatch uses stable non-live output.
 
-Current implementation boundary: `dispatch run ps <script.ps1> --plan`, `dispatch doctor`, and `dispatch version` are registered through Spectre.Console.Cli. The compatibility syntax `dispatch run --script <path> --computer-name <names>` is still supported through the existing Dispatch parser. `apply`, `push`, `hosts`, `logs`, `creds`, `init`, `run cmd`, and `run exe` remain planned surfaces and must fail clearly until their roadmap slices are implemented.
+Current implementation boundary: the documented command tree is registered through Spectre.Console.Cli. `dispatch run ps <script.ps1>` uses the shared planner/executor path; `dispatch doctor` and `dispatch version` are functional. The compatibility syntax `dispatch run --script <path> --computer-name <names>` is still supported through the existing Dispatch parser. `apply`, `push`, `hosts`, `logs`, `creds`, `init`, `run cmd`, and `run exe` remain planned behavior surfaces and must fail clearly until their roadmap slices are implemented.
 
 ## Script-Owned Payloads
 
