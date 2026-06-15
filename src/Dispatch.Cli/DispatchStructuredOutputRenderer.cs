@@ -7,8 +7,6 @@ namespace Dispatch.Cli;
 
 internal static class DispatchStructuredOutputRenderer
 {
-    private static readonly JsonSerializerOptions NdjsonOptions = CreateNdjsonOptions();
-
     public static void RenderPlan(TextWriter writer, ExecutionPlan plan, DispatchOutputMode mode)
     {
         switch (mode)
@@ -17,7 +15,9 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine(DispatchJson.Serialize(plan));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(new { type = "plan", plan }, NdjsonOptions));
+                var planStream = new DispatchNdjsonStreamWriter(writer, verbose: false, trace: false);
+                planStream.WritePlanningStarted();
+                planStream.WritePlan(plan);
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, plan);
@@ -38,7 +38,8 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine(DispatchJson.Serialize(result));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(new { type = "result", result }, NdjsonOptions));
+                var resultStream = new DispatchNdjsonStreamWriter(writer, verbose: false, trace: false);
+                resultStream.WriteResult(result);
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, result);
@@ -143,13 +144,4 @@ internal static class DispatchStructuredOutputRenderer
 
     private static void WriteIndent(TextWriter writer, int indent) =>
         writer.Write(new string(' ', indent));
-
-    private static JsonSerializerOptions CreateNdjsonOptions()
-    {
-        var options = new JsonSerializerOptions(DispatchJson.Options)
-        {
-            WriteIndented = false
-        };
-        return options;
-    }
 }

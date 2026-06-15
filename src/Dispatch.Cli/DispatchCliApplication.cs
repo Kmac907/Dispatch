@@ -81,6 +81,15 @@ public sealed class DispatchCliApplication(
             var request = command!.ToRequest();
             if (command.DryRun)
             {
+                if (command.OutputMode == DispatchOutputMode.Ndjson)
+                {
+                    var streamWriter = new DispatchNdjsonStreamWriter(Console.Out, command.Verbose, command.Trace);
+                    streamWriter.WritePlanningStarted();
+                    var ndjsonPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+                    streamWriter.WritePlan(ndjsonPlan);
+                    return 0;
+                }
+
                 var dryRunPlan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
                     ? await CreatePlanWithDryRunProgressAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                     : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
@@ -90,6 +99,18 @@ public sealed class DispatchCliApplication(
                 }
 
                 return 0;
+            }
+
+            if (command.OutputMode == DispatchOutputMode.Ndjson)
+            {
+                var streamWriter = new DispatchNdjsonStreamWriter(Console.Out, command.Verbose, command.Trace);
+                streamWriter.WritePlanningStarted();
+                var streamPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+                streamWriter.WritePlan(streamPlan);
+                streamWriter.WriteExecutionStarted(streamPlan);
+                var streamResult = await executor.ExecuteAsync(streamPlan, streamWriter, cancellationToken).ConfigureAwait(false);
+                streamWriter.WriteResult(streamResult);
+                return streamResult.FailedCount == 0 && streamResult.TimedOutCount == 0 && streamResult.CancelledCount == 0 ? 0 : 1;
             }
 
             var plan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet

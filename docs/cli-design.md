@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, and initial inventory/target selectors for `run ps`, and keeps YAML jobs, logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, and initial inventory/target selectors for `run ps`, and keeps YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -84,7 +84,7 @@ Current execution rendering uses `DispatchExecutionProgress` events, a channel-f
 
 `--output json` emits one valid JSON document and suppresses decorative UI.
 
-`--output ndjson` emits one event per line and suppresses decorative UI.
+`--output ndjson` emits one stdout event per line and suppresses decorative UI for the current `run ps` path. Durable `events.ndjson` run-history files belong to the later log-command work.
 
 `--no-progress` disables live widgets and keeps terminal output stable for CI and redirected hosts.
 

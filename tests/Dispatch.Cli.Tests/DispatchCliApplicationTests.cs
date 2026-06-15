@@ -466,7 +466,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task NdjsonOutputEmitsSingleTypedResultLineWithoutDecorativeProgress()
+    public async Task NdjsonOutputStreamsPlanningProgressAndResultEvents()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
@@ -489,11 +489,54 @@ public sealed class DispatchCliApplicationTests
                 CancellationToken.None));
 
             Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
-            var line = Assert.Single(output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries));
-            using var document = JsonDocument.Parse(line);
-            Assert.Equal("result", document.RootElement.GetProperty("type").GetString());
-            Assert.Equal("run-test", document.RootElement.GetProperty("result").GetProperty("runId").GetString());
+            var events = ParseNdjson(output);
+            Assert.Equal(
+                ["planning.started", "plan", "execution.started", "progress", "progress", "result"],
+                events.Select(static document => document.RootElement.GetProperty("type").GetString()).ToArray());
+            Assert.Equal("run-test", events.Last().RootElement.GetProperty("result").GetProperty("runId").GetString());
+            Assert.Contains(events, static document =>
+                document.RootElement.GetProperty("type").GetString() == "progress"
+                && document.RootElement.GetProperty("state").GetString() == "probing");
             Assert.DoesNotContain("Target Progress", output);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task NdjsonTraceOutputIncludesEventDetails()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var executor = new SucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--output",
+                    "ndjson",
+                    "--trace"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            var events = ParseNdjson(output);
+            var plan = Assert.Single(events, static document => document.RootElement.GetProperty("type").GetString() == "plan");
+            Assert.Equal("trace", plan.RootElement.GetProperty("details").GetProperty("verbosity").GetString());
+            Assert.Equal(@"C:\Dispatch\Tests\run-test\Admin\results.json", plan.RootElement.GetProperty("details").GetProperty("resultsJsonPath").GetString());
+            var progress = events.First(static document => document.RootElement.GetProperty("type").GetString() == "progress");
+            Assert.Equal("trace", progress.RootElement.GetProperty("details").GetProperty("verbosity").GetString());
+            Assert.False(progress.RootElement.GetProperty("details").GetProperty("terminal").GetBoolean());
         }
         finally
         {
@@ -732,6 +775,12 @@ public sealed class DispatchCliApplicationTests
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
             displayMode,
             statusWriter);
+
+    private static IReadOnlyList<JsonDocument> ParseNdjson(string output) =>
+        output
+            .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
+            .Select(static line => JsonDocument.Parse(line))
+            .ToArray();
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {
