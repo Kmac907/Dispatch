@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented
+Status: draft, partially implemented. Current implementation registers `run ps`, `doctor`, and `version` through Spectre.Console.Cli; preserves `dispatch run --script ...` through a compatibility parser; renders real execution through a Spectre `LiveDisplay`; and keeps structured output modes, inventories, YAML jobs, logs, credentials, push/hosts/init, `run cmd`, and `run exe` as roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -77,6 +77,8 @@ The terminal has four phases:
 4. Final summary: stable post-live result summary with run ID, counts, and log paths.
 
 Workers must not write directly to `AnsiConsole`. They emit events. A single renderer consumes events and owns live terminal output.
+
+Current execution rendering uses `DispatchExecutionProgress` events, a channel-fed renderer, and one Spectre `LiveDisplay` for live runs. Planning uses Spectre `Status` or `Progress` only during active work. Redirected sessions and `--no-progress` use stable non-live rendering.
 
 ## Structured Output
 

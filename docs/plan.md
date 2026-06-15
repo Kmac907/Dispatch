@@ -1038,6 +1038,11 @@ Scope:
 - Implement global option parsing for inventory, target, exclude, transport, credential, concurrency, timeout, config, log directory, run ID, output mode, color/progress flags, quiet, verbose, and trace where supported by the current model.
 - Unknown or not-yet-implemented commands must render explicit Spectre.Console errors that identify the roadmap item required; they must not silently pretend support exists.
 
+Current implementation note:
+- `run ps`, `doctor`, and `version` are registered through Spectre.Console.Cli.
+- Existing `dispatch run --script <path> --computer-name <names>` callers are preserved through the compatibility parser because that syntax predates the new command tree.
+- `run cmd`, `run exe`, `apply`, `push`, `hosts`, `logs`, `creds`, and `init` are visible in the documented design but remain planned until their specific roadmap items are implemented.
+
 Non-goals:
 - No separate interactive execution engine.
 - No Terminal.Gui dependency for the redesigned CLI surface.
@@ -1068,6 +1073,12 @@ Scope:
 - Implement `--no-progress`, `--no-color`, `--quiet`, `--verbose`, and `--trace` behavior where supported.
 - Implement output modes `rich`, `table`, `json`, `ndjson`, and `yaml`; JSON emits one valid document and NDJSON emits one event per line without decorative rendering.
 - Always print a stable final summary after live rendering ends for rich/table modes.
+
+Current implementation note:
+- Real execution uses a channel-fed Spectre `LiveDisplay` renderer over `DispatchExecutionProgress` events.
+- Dry-run planning uses Spectre `Progress` when interactive and stable progress text when redirected.
+- Non-dry-run planning uses Spectre `Status` when interactive and stable text when redirected.
+- `--no-progress` is implemented; structured output modes are still pending.
 
 Non-goals:
 - No static fake progress bars.
