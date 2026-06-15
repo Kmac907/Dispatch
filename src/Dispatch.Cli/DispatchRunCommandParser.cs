@@ -40,6 +40,7 @@ internal sealed class DispatchRunCommandParser
                 case "--run-as-system":
                     runAsSystem = true;
                     break;
+                case "--no-progress":
                 case "--no-dashboard":
                     noDashboard = true;
                     break;

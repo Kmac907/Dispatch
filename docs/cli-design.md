@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft
+Status: draft, partially implemented
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 

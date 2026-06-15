@@ -64,6 +64,10 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("  dispatch run cmd <command> [options]");
         console.WriteLine("  dispatch run exe <path> [-- <args>]");
         console.WriteLine();
+        console.WriteLine("Progress options:");
+        console.WriteLine("      --no-progress          Disable live progress rendering");
+        console.WriteLine("      --no-dashboard         Compatibility alias for --no-progress");
+        console.WriteLine();
         console.WriteLine("Examples:");
         console.WriteLine(@"  dispatch run ps .\scripts\Collect-Disk.ps1 --target web -i .\hosts\prod.yml");
         console.WriteLine(@"  dispatch run ps --inline ""Get-Service WinRM"" --target all");
@@ -99,6 +103,71 @@ internal static class SpectreConsoleRenderer
         {
             console.WriteLine(line);
         }
+    }
+
+    public static async Task<ExecutionPlan> RunPlanningStatusAsync(
+        TextWriter writer,
+        Func<CancellationToken, Task<ExecutionPlan>> createPlan,
+        CancellationToken cancellationToken)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            RenderPlanningStatus(writer);
+            return await createPlan(cancellationToken).ConfigureAwait(false);
+        }
+
+        var console = CreateInteractiveConsole(writer);
+        return await console.Status()
+            .Spinner(Spinner.Known.Dots)
+            .StartAsync(
+                "Building Dispatch execution plan",
+                async context =>
+                {
+                    context.Status("Validating request and resolving targets");
+                    return await createPlan(cancellationToken).ConfigureAwait(false);
+                })
+            .ConfigureAwait(false);
+    }
+
+    public static async Task<ExecutionPlan> RunDryRunPlanningProgressAsync(
+        TextWriter writer,
+        Func<CancellationToken, Task<ExecutionPlan>> createPlan,
+        CancellationToken cancellationToken)
+    {
+        if (Console.IsOutputRedirected)
+        {
+            var plan = await createPlan(cancellationToken).ConfigureAwait(false);
+            RenderDryRunProgressSummary(writer);
+            return plan;
+        }
+
+        var console = CreateInteractiveConsole(writer);
+        return await console.Progress()
+            .Columns(
+            [
+                new TaskDescriptionColumn(),
+                new ProgressBarColumn(),
+                new PercentageColumn(),
+                new SpinnerColumn()
+            ])
+            .StartAsync(async context =>
+            {
+                var validate = context.AddTask("Validate request").MaxValue(1);
+                validate.Increment(1);
+
+                var build = context.AddTask("Build execution plan").MaxValue(1);
+                var plan = await createPlan(cancellationToken).ConfigureAwait(false);
+                build.Increment(1);
+
+                var layout = context.AddTask("Resolve target layout").MaxValue(1);
+                layout.Increment(1);
+
+                var output = context.AddTask("Prepare plan output").MaxValue(1);
+                output.Increment(1);
+
+                return plan;
+            })
+            .ConfigureAwait(false);
     }
 
     public static void RenderDryRunProgressSummary(TextWriter writer)
@@ -185,12 +254,21 @@ internal static class SpectreConsoleRenderer
         console.Write(table);
     }
 
-    private static IAnsiConsole CreateConsole(TextWriter writer) =>
+    internal static IAnsiConsole CreateConsole(TextWriter writer) =>
         AnsiConsole.Create(new AnsiConsoleSettings
         {
             Ansi = AnsiSupport.No,
             ColorSystem = ColorSystemSupport.NoColors,
             Interactive = InteractionSupport.No,
+            Out = new AnsiConsoleOutput(writer)
+        });
+
+    internal static IAnsiConsole CreateInteractiveConsole(TextWriter writer) =>
+        AnsiConsole.Create(new AnsiConsoleSettings
+        {
+            Ansi = AnsiSupport.Detect,
+            ColorSystem = ColorSystemSupport.Detect,
+            Interactive = InteractionSupport.Detect,
             Out = new AnsiConsoleOutput(writer)
         });
 

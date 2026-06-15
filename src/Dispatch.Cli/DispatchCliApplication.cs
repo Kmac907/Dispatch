@@ -4,7 +4,6 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
 using Microsoft.Extensions.Options;
-using Terminal.Gui;
 
 namespace Dispatch.Cli;
 
@@ -99,7 +98,7 @@ public sealed class DispatchCliApplication(
                 out var command,
                 out var error))
         {
-            TerminalGuiConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error);
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error);
             return 1;
         }
 
@@ -114,9 +113,7 @@ public sealed class DispatchCliApplication(
             }
 
             var plan = await CreatePlanWithStatusAsync(request, cancellationToken).ConfigureAwait(false);
-            var result = ShouldUseLiveDashboard(command.NoDashboard)
-                ? await RunWithLiveDashboardAsync(plan, cancellationToken).ConfigureAwait(false)
-                : await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
+            var result = await RunWithSpectreProgressAsync(plan, command.NoDashboard, cancellationToken).ConfigureAwait(false);
             SpectreConsoleRenderer.RenderRunResult(Console.Out, result);
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
@@ -131,165 +128,60 @@ public sealed class DispatchCliApplication(
         }
     }
 
-    private async Task<int> RunInteractiveAsync(CancellationToken cancellationToken)
-    {
-        var commandCenter = new TerminalGuiDispatchCommandCenter(doctor);
-        var result = await commandCenter.RunAsync(cancellationToken).ConfigureAwait(false);
-
-        return result.Kind switch
-        {
-            CommandCenterExitKind.StartRun => await RunCommandAsync(result.RunArguments, cancellationToken)
-                .ConfigureAwait(false),
-            _ => 0
-        };
-    }
-
-    private async Task<DispatchRunResult> RunWithLiveDashboardAsync(
+    private async Task<DispatchRunResult> RunWithSpectreProgressAsync(
         ExecutionPlan plan,
+        bool noDashboard,
         CancellationToken cancellationToken)
     {
-        var dashboard = new TerminalGuiDispatchRunDashboard(plan, DateTimeOffset.UtcNow);
-        var writer = statusWriter ?? Console.Error;
-
-        try
-        {
-            if (Console.IsErrorRedirected)
-            {
-                var redirectedResult = await executor.ExecuteAsync(
-                        plan,
-                        new TerminalGuiDispatchExecutionObserver(dashboard, static () => { }),
-                        cancellationToken)
-                    .ConfigureAwait(false);
-                dashboard.Complete(redirectedResult);
-                writer.Write(dashboard.RenderSnapshot());
-                return redirectedResult;
-            }
-
-            Application.Init();
-            try
-            {
-                TerminalGuiTheme.Apply();
-                var top = Application.Top;
-                top.RemoveAll();
-                var root = dashboard.BuildView();
-                top.Add(root);
-                Application.Refresh();
-
-                void Refresh()
-                {
-                    root.RemoveAll();
-                    root.Add(dashboard.BuildView().Subviews.ToArray());
-                    Application.Refresh();
-                }
-
-                using var refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
-                using var refreshCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var refreshTask = RefreshDashboardPeriodicallyAsync(
-                    () => InvokeOnTerminalGuiLoop(Refresh),
-                    refreshTimer,
-                    refreshCancellation.Token);
-                var observer = new TerminalGuiDispatchExecutionObserver(
-                    dashboard,
-                    () => InvokeOnTerminalGuiLoop(Refresh));
-                DispatchRunResult? runResult = null;
-                Exception? runException = null;
-                var runTask = Task.Run(
-                    async () =>
-                    {
-                        try
-                        {
-                            runResult = await executor.ExecuteAsync(plan, observer, cancellationToken)
-                                .ConfigureAwait(false);
-                            dashboard.Complete(runResult);
-                            InvokeOnTerminalGuiLoop(Refresh);
-                        }
-                        catch (Exception exception)
-                        {
-                            runException = exception;
-                        }
-                        finally
-                        {
-                            InvokeOnTerminalGuiLoop(static () => Application.RequestStop());
-                        }
-                    },
-                    CancellationToken.None);
-
-                try
-                {
-                    Application.Run();
-                    await runTask.ConfigureAwait(false);
-                    if (runException is not null)
-                    {
-                        throw runException;
-                    }
-
-                    return runResult
-                        ?? throw new InvalidOperationException("Dispatch execution ended without a run result.");
-                }
-                finally
-                {
-                    await refreshCancellation.CancelAsync().ConfigureAwait(false);
-                    await refreshTask.ConfigureAwait(false);
-                    writer.Write(dashboard.RenderSnapshot());
-                }
-            }
-            finally
-            {
-                Application.Shutdown();
-            }
-        }
-        catch (IOException exception) when (displayMode == DispatchRunDisplayMode.Auto)
-        {
-            SpectreConsoleRenderer.RenderError(
-                Console.Error,
-                "Live Dashboard Unavailable",
-                $"Dispatch is using compact progress for this run. {exception.Message}");
-            return await RunWithCompactProgressAsync(plan, cancellationToken).ConfigureAwait(false);
-        }
-    }
-
-    private static void InvokeOnTerminalGuiLoop(Action action)
-    {
-        var mainLoop = Application.MainLoop;
-        if (mainLoop is null)
-        {
-            action();
-            return;
-        }
-
-        mainLoop.Invoke(action);
-    }
-
-    private async Task<DispatchRunResult> RunWithCompactProgressAsync(
-        ExecutionPlan plan,
-        CancellationToken cancellationToken)
-    {
-        if (Console.IsErrorRedirected && statusWriter is null)
+        var useLiveDisplay = ShouldUseLiveDashboard(noDashboard);
+        if (!useLiveDisplay && Console.IsErrorRedirected && statusWriter is null)
         {
             return await executor.ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        var progress = new TerminalGuiCompactDispatchProgress(plan, executor, statusWriter ?? Console.Error);
-        return await progress.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var renderer = new SpectreLiveRunRenderer(
+                plan,
+                executor,
+                statusWriter ?? Console.Error,
+                useLiveDisplay);
+            return await renderer.ExecuteAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (IOException exception) when (displayMode == DispatchRunDisplayMode.Auto && useLiveDisplay)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Live Dashboard Unavailable",
+                $"Dispatch is using append-only Spectre progress for this run. {exception.Message}");
+            var renderer = new SpectreLiveRunRenderer(
+                plan,
+                executor,
+                statusWriter ?? Console.Error,
+                useLiveDisplay: false);
+            return await renderer.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private async Task<ExecutionPlan> CreatePlanWithStatusAsync(
         DispatchRequest request,
-        CancellationToken cancellationToken)
-    {
-        SpectreConsoleRenderer.RenderPlanningStatus(Console.Out);
-        return await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-    }
+        CancellationToken cancellationToken) =>
+        await SpectreConsoleRenderer.RunPlanningStatusAsync(
+                Console.Out,
+                token => planner.CreatePlanAsync(request, token),
+                cancellationToken)
+            .ConfigureAwait(false);
 
     private async Task<ExecutionPlan> CreatePlanWithDryRunProgressAsync(
         DispatchRequest request,
-        CancellationToken cancellationToken)
-    {
-        var plan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-        SpectreConsoleRenderer.RenderDryRunProgressSummary(Console.Out);
-        return plan;
-    }
+        CancellationToken cancellationToken) =>
+        await SpectreConsoleRenderer.RunDryRunPlanningProgressAsync(
+                Console.Out,
+                token => planner.CreatePlanAsync(request, token),
+                cancellationToken)
+            .ConfigureAwait(false);
 
     private bool ShouldUseLiveDashboard(bool noDashboard) =>
         displayMode switch
@@ -298,23 +190,6 @@ public sealed class DispatchCliApplication(
             DispatchRunDisplayMode.AppendOnly => false,
             _ => !noDashboard && !Console.IsErrorRedirected
         };
-
-    private static async Task RefreshDashboardPeriodicallyAsync(
-        Action refresh,
-        PeriodicTimer refreshTimer,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            while (await refreshTimer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
-            {
-                refresh();
-            }
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
-    }
 
     private static bool IsRootHelpRequest(IReadOnlyList<string> args) =>
         args.Count == 1 && args[0] is "--help" or "-h" or "-?";

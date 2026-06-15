@@ -233,7 +233,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task NoDashboardUsesCompactLiveProgressWhenConsoleIsAvailable()
+    public async Task NoProgressUsesAppendOnlySpectreProgressWhenConsoleIsAvailable()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
@@ -257,7 +257,7 @@ public sealed class DispatchCliApplicationTests
                     "PC001",
                     "--transport",
                     "psexec",
-                    "--no-dashboard"
+                    "--no-progress"
                 ],
                 CancellationToken.None));
 
@@ -275,23 +275,6 @@ public sealed class DispatchCliApplicationTests
         {
             File.Delete(scriptPath);
         }
-    }
-
-    [Fact]
-    public void CommandCenterRendererShowsPersistentLiveSurfaceOptions()
-    {
-        var commandCenter = new TerminalGuiDispatchCommandCenter(
-            new StaticDoctor(new DispatchDoctorReport([])));
-
-        var output = commandCenter.RenderSnapshot();
-
-        Assert.Contains("Dispatch Live Command Center", output);
-        Assert.Contains("Start script run", output);
-        Assert.Contains("Doctor diagnostics", output);
-        Assert.Contains("Command help", output);
-        Assert.Contains("Exit", output);
-        Assert.Contains("F1 help", output);
-        Assert.Contains("F5 doctor", output);
     }
 
     [Fact]
@@ -330,84 +313,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public void CommandCenterKeyNavigationBuildsRunArguments()
-    {
-        var commandCenter = new TerminalGuiDispatchCommandCenter(
-            new StaticDoctor(new DispatchDoctorReport([])));
-
-        var result = commandCenter.HandleKey(CreateKey(ConsoleKey.Enter));
-        Assert.Null(result);
-        foreach (var key in CreateTextKeys(@"C:\Scripts\Fix.ps1"))
-        {
-            result = commandCenter.HandleKey(key);
-            Assert.Null(result);
-        }
-
-        result = commandCenter.HandleKey(CreateKey(ConsoleKey.DownArrow));
-        Assert.Null(result);
-        foreach (var key in CreateTextKeys("PC001"))
-        {
-            result = commandCenter.HandleKey(key);
-            Assert.Null(result);
-        }
-
-        result = commandCenter.HandleKey(CreateKey(ConsoleKey.R, control: true));
-        Assert.NotNull(result);
-
-        var output = commandCenter.RenderSnapshot();
-
-        Assert.Equal(CommandCenterExitKind.StartRun, result.Kind);
-        Assert.Contains("--dry-run", result.RunArguments);
-        Assert.Contains("--script", result.RunArguments);
-        Assert.Contains(@"C:\Scripts\Fix.ps1", result.RunArguments);
-        Assert.Contains("--computer-name", result.RunArguments);
-        Assert.Contains("PC001", result.RunArguments);
-        Assert.Contains("--transport", result.RunArguments);
-        Assert.Contains("psexec", result.RunArguments);
-        Assert.Contains("Dispatch Live Command Center", output);
-        Assert.Contains("Run Setup", output);
-    }
-
-    [Fact]
-    public void CommandCenterBuildRunArgumentsUsesEnteredFormValues()
-    {
-        var args = TerminalGuiDispatchCommandCenter.BuildRunArgumentsFromValues(
-            dryRun: false,
-            scriptPath: @" C:\Scripts\Fix.ps1 ",
-            computerNames: " PC001,PC002 ",
-            transportIndex: 0,
-            runAsSystem: true,
-            expectedExitCodes: "0,3010",
-            throttle: "4",
-            artifactPaths: "logs,artifacts",
-            outputRoot: @"C:\Dispatch\Out",
-            remoteRoot: @"C:\ProgramData\Dispatch",
-            scriptArguments: "-Mode Repair -Verbose");
-
-        Assert.DoesNotContain("--dry-run", args);
-        Assert.Contains("--script", args);
-        Assert.Contains(@"C:\Scripts\Fix.ps1", args);
-        Assert.Contains("--computer-name", args);
-        Assert.Contains("PC001,PC002", args);
-        Assert.Contains("--run-as-system", args);
-        Assert.Contains("--expected-exit-code", args);
-        Assert.Contains("0,3010", args);
-        Assert.Contains("--throttle", args);
-        Assert.Contains("4", args);
-        Assert.Contains("--artifact-path", args);
-        Assert.Contains("logs,artifacts", args);
-        Assert.Contains("--output-root", args);
-        Assert.Contains(@"C:\Dispatch\Out", args);
-        Assert.Contains("--remote-root", args);
-        Assert.Contains(@"C:\ProgramData\Dispatch", args);
-        Assert.Contains("--", args);
-        Assert.Contains("-Mode", args);
-        Assert.Contains("Repair", args);
-        Assert.Contains("-Verbose", args);
-    }
-
-    [Fact]
-    public async Task LiveDashboardRendererShowsRunStatusTargetPhaseAndFailures()
+    public async Task SpectreDashboardRendererShowsRunStatusTargetPhaseAndFailures()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
@@ -433,7 +339,7 @@ public sealed class DispatchCliApplicationTests
             Assert.True(exitCode == 0, $"Dry-run planning failed. {error}");
 
             var plan = Assert.IsType<ExecutionPlan>(planner.LastPlan);
-            var dashboard = new TerminalGuiDispatchRunDashboard(plan, DateTimeOffset.UnixEpoch);
+            var dashboard = new SpectreRunDashboard(plan, DateTimeOffset.UnixEpoch);
             dashboard.Update(new DispatchExecutionProgress(
                 plan.RunId,
                 "PC001",
@@ -447,17 +353,16 @@ public sealed class DispatchCliApplicationTests
                 FailureCategory.ExecutionFailed,
                 "Installer returned 1603."));
 
-            var output = dashboard.RenderSnapshot();
+            using var writer = new StringWriter();
+            dashboard.RenderSnapshot(writer);
+            var output = writer.ToString();
 
             Assert.Contains("Dispatch Run", output);
-            Assert.Contains("Run ID", output);
             Assert.Contains("Outcome Chart", output);
-            Assert.Contains("Phase Distribution", output);
             Assert.Contains("run-test", output);
-            Assert.Contains("PsExec", output);
+            Assert.Contains("psexec", output);
             Assert.Contains("PC001", output);
             Assert.Contains("Executing", output);
-            Assert.Contains("Execute", output);
             Assert.Contains("PC002", output);
             Assert.Contains("ExecutionFailed", output);
             Assert.Contains("Installer returned 1603", output);
@@ -483,7 +388,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task InvalidCommandUsesDispatchTerminalGuiError()
+    public async Task InvalidCommandUsesDispatchSpectreError()
     {
         var application = CreateApplication(new CapturingPlanner());
 
@@ -495,7 +400,7 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
-    public async Task RunValidationFailureUsesDispatchTerminalGuiError()
+    public async Task RunValidationFailureUsesDispatchSpectreError()
     {
         var application = CreateApplication(new CapturingPlanner());
 
@@ -542,44 +447,6 @@ public sealed class DispatchCliApplicationTests
             Console.SetOut(originalOut);
             Console.SetError(originalError);
         }
-    }
-
-    private static IEnumerable<ConsoleKeyInfo> CreateTextKeys(string value)
-    {
-        foreach (var character in value)
-        {
-            yield return new ConsoleKeyInfo(character, GetConsoleKey(character), shift: false, alt: false, control: false);
-        }
-    }
-
-    private static ConsoleKeyInfo CreateKey(
-        ConsoleKey key,
-        char character = '\0',
-        bool control = false) =>
-        new(character, key, shift: false, alt: false, control);
-
-    private static ConsoleKey GetConsoleKey(char character)
-    {
-        if (char.IsLetter(character))
-        {
-            return Enum.Parse<ConsoleKey>(character.ToString().ToUpperInvariant());
-        }
-
-        if (char.IsDigit(character))
-        {
-            return Enum.Parse<ConsoleKey>($"D{character}");
-        }
-
-        return character switch
-        {
-            ':' => ConsoleKey.Oem1,
-            '\\' => ConsoleKey.Oem5,
-            '.' => ConsoleKey.OemPeriod,
-            '-' => ConsoleKey.OemMinus,
-            '_' => ConsoleKey.OemMinus,
-            ' ' => ConsoleKey.Spacebar,
-            _ => ConsoleKey.NoName
-        };
     }
 
     private sealed class CapturingPlanner : IDispatchPlanner

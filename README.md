@@ -39,7 +39,7 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, historical Terminal.Gui command-service work, and local operator diagnostics. The active CLI roadmap is being realigned to a Spectre.Console.Cli command tree with live Spectre rendering, structured output modes, inventories, YAML jobs, logs, credentials, and init scaffolding. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, local operator diagnostics, and the active Spectre.Console run surface. The legacy Terminal.Gui command-service implementation has been removed from the active CLI. The remaining CLI roadmap is a Spectre.Console.Cli command tree with structured output modes, inventories, YAML jobs, logs, credentials, and init scaffolding. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Operator Diagnostics
 
