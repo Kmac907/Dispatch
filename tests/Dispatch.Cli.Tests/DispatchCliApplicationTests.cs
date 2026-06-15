@@ -314,6 +314,39 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteMapsAutoTransportToConfiguredDefault()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "auto",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteUsesInventoryTargetSelectorAndExclude()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

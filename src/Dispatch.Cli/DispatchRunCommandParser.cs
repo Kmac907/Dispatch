@@ -125,7 +125,7 @@ internal sealed class DispatchRunCommandParser
                         return false;
                     }
 
-                    if (!TryParseTransport(transportValue, out transport))
+                    if (!TryParseTransport(transportValue, defaultTransport, out transport))
                     {
                         error = $"Unsupported transport '{transportValue}'.";
                         return false;
@@ -266,17 +266,19 @@ internal sealed class DispatchRunCommandParser
     private static IEnumerable<string> SplitCommaSeparatedValues(string value) =>
         value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static bool TryParseTransport(string value, out TransportKind transport)
+    private static bool TryParseTransport(string value, TransportKind defaultTransport, out TransportKind transport)
     {
         transport = value.ToLowerInvariant() switch
         {
+            "auto" => defaultTransport,
             "psexec" => TransportKind.PsExec,
             "psrp" => TransportKind.Psrp,
             "winrm" => TransportKind.WinRm,
             _ => default
         };
 
-        return value.Equals("psexec", StringComparison.OrdinalIgnoreCase)
+        return value.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("psexec", StringComparison.OrdinalIgnoreCase)
             || value.Equals("psrp", StringComparison.OrdinalIgnoreCase)
             || value.Equals("winrm", StringComparison.OrdinalIgnoreCase);
     }
