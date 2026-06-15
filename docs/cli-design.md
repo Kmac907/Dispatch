@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes and initial inventory/target selectors for `run ps`, and keeps YAML jobs, logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` as roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, and initial inventory/target selectors for `run ps`, and keeps YAML jobs, logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 

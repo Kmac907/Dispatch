@@ -81,20 +81,28 @@ public sealed class DispatchCliApplication(
             var request = command!.ToRequest();
             if (command.DryRun)
             {
-                var dryRunPlan = command.OutputMode == DispatchOutputMode.Rich
-                    ? await CreatePlanWithDryRunProgressAsync(request, cancellationToken).ConfigureAwait(false)
+                var dryRunPlan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
+                    ? await CreatePlanWithDryRunProgressAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                     : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-                DispatchStructuredOutputRenderer.RenderPlan(Console.Out, dryRunPlan, command.OutputMode);
+                if (!ShouldSuppressOutput(command))
+                {
+                    DispatchStructuredOutputRenderer.RenderPlan(Console.Out, dryRunPlan, command.OutputMode);
+                }
+
                 return 0;
             }
 
-            var plan = command.OutputMode == DispatchOutputMode.Rich
-                ? await CreatePlanWithStatusAsync(request, cancellationToken).ConfigureAwait(false)
+            var plan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
+                ? await CreatePlanWithStatusAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                 : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-            var result = command.OutputMode == DispatchOutputMode.Rich
-                ? await RunWithSpectreProgressAsync(plan, command.NoDashboard, cancellationToken).ConfigureAwait(false)
+            var result = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
+                ? await RunWithSpectreProgressAsync(plan, command.NoDashboard, command.NoColor, cancellationToken).ConfigureAwait(false)
                 : await executor.ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken).ConfigureAwait(false);
-            DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, command.OutputMode);
+            if (!ShouldSuppressOutput(command))
+            {
+                DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, command.OutputMode);
+            }
+
             return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
         }
         catch (DispatchPlanningException exception)
@@ -111,6 +119,7 @@ public sealed class DispatchCliApplication(
     private async Task<DispatchRunResult> RunWithSpectreProgressAsync(
         ExecutionPlan plan,
         bool noDashboard,
+        bool noColor,
         CancellationToken cancellationToken)
     {
         var useLiveDisplay = ShouldUseLiveDashboard(noDashboard);
@@ -126,7 +135,8 @@ public sealed class DispatchCliApplication(
                 plan,
                 executor,
                 statusWriter ?? Console.Error,
-                useLiveDisplay);
+                useLiveDisplay,
+                noColor);
             return await renderer.ExecuteAsync(cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -140,28 +150,36 @@ public sealed class DispatchCliApplication(
                 plan,
                 executor,
                 statusWriter ?? Console.Error,
-                useLiveDisplay: false);
+                useLiveDisplay: false,
+                noColor);
             return await renderer.ExecuteAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 
     private async Task<ExecutionPlan> CreatePlanWithStatusAsync(
         DispatchRequest request,
+        bool noColor,
         CancellationToken cancellationToken) =>
         await SpectreConsoleRenderer.RunPlanningStatusAsync(
                 Console.Out,
                 token => planner.CreatePlanAsync(request, token),
+                noColor,
                 cancellationToken)
             .ConfigureAwait(false);
 
     private async Task<ExecutionPlan> CreatePlanWithDryRunProgressAsync(
         DispatchRequest request,
+        bool noColor,
         CancellationToken cancellationToken) =>
         await SpectreConsoleRenderer.RunDryRunPlanningProgressAsync(
                 Console.Out,
                 token => planner.CreatePlanAsync(request, token),
+                noColor,
                 cancellationToken)
             .ConfigureAwait(false);
+
+    private static bool ShouldSuppressOutput(DispatchRunCommand command) =>
+        command.Quiet && command.OutputMode is DispatchOutputMode.Rich or DispatchOutputMode.Table;
 
     private bool ShouldUseLiveDashboard(bool noDashboard) =>
         displayMode switch

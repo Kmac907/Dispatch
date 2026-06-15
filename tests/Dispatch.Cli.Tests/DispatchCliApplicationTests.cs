@@ -358,6 +358,44 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task QuietRunPowerShellPlanSuppressesRichOutputAndAcceptsDiagnosticFlags()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--plan",
+                    "--quiet",
+                    "--no-color",
+                    "--verbose",
+                    "--trace"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Equal(string.Empty, output);
+            Assert.Equal(string.Empty, error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.DryRun);
+            Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
     public async Task JsonOutputEmitsPlanDocumentWithoutDecorativeProgress()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -385,6 +423,41 @@ public sealed class DispatchCliApplicationTests
             Assert.Equal("run-test", document.RootElement.GetProperty("runId").GetString());
             Assert.False(output.Contains("Dispatch plan", StringComparison.Ordinal));
             Assert.False(output.Contains("Dry run planning", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task QuietDoesNotSuppressStructuredOutput()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--plan",
+                    "--quiet",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            Assert.Equal("run-test", document.RootElement.GetProperty("runId").GetString());
+            Assert.Equal(string.Empty, error);
         }
         finally
         {
@@ -610,6 +683,11 @@ public sealed class DispatchCliApplicationTests
         Assert.Equal(0, exitCode);
         Assert.Contains("dispatch run", output);
         Assert.Contains("dispatch run ps", output);
+        Assert.Contains("--no-progress", output);
+        Assert.Contains("--no-color", output);
+        Assert.Contains("--quiet", output);
+        Assert.Contains("--verbose", output);
+        Assert.Contains("--trace", output);
         Assert.Contains("Compatibility", output);
         Assert.Contains("Usage:", output);
     }

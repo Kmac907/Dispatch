@@ -15,7 +15,11 @@ internal sealed record DispatchRunCommand(
     IReadOnlyList<string> ArtifactPaths,
     bool RunAsSystem,
     bool NoDashboard,
-    DispatchOutputMode OutputMode)
+    DispatchOutputMode OutputMode,
+    bool NoColor,
+    bool Quiet,
+    bool Verbose,
+    bool Trace)
 {
     public DispatchRequest ToRequest() =>
         new(

@@ -68,6 +68,10 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("Progress options:");
         console.WriteLine("      --no-progress          Disable live progress rendering");
         console.WriteLine("      --no-dashboard         Compatibility alias for --no-progress");
+        console.WriteLine("      --no-color             Disable ANSI color");
+        console.WriteLine("      --quiet                Suppress rich non-error output");
+        console.WriteLine("  -v, --verbose              Accept verbose output mode for current command path");
+        console.WriteLine("      --trace                Accept trace output mode for current command path");
         console.WriteLine("      --output <format>      rich, table, json, ndjson, yaml");
         console.WriteLine("      -i, --inventory <path> Host inventory");
         console.WriteLine("      -t, --target <selector> Target host/group/selector");
@@ -113,6 +117,7 @@ internal static class SpectreConsoleRenderer
     public static async Task<ExecutionPlan> RunPlanningStatusAsync(
         TextWriter writer,
         Func<CancellationToken, Task<ExecutionPlan>> createPlan,
+        bool noColor,
         CancellationToken cancellationToken)
     {
         if (Console.IsOutputRedirected)
@@ -121,7 +126,7 @@ internal static class SpectreConsoleRenderer
             return await createPlan(cancellationToken).ConfigureAwait(false);
         }
 
-        var console = CreateInteractiveConsole(writer);
+        var console = CreateInteractiveConsole(writer, noColor);
         return await console.Status()
             .Spinner(Spinner.Known.Dots)
             .StartAsync(
@@ -137,6 +142,7 @@ internal static class SpectreConsoleRenderer
     public static async Task<ExecutionPlan> RunDryRunPlanningProgressAsync(
         TextWriter writer,
         Func<CancellationToken, Task<ExecutionPlan>> createPlan,
+        bool noColor,
         CancellationToken cancellationToken)
     {
         if (Console.IsOutputRedirected)
@@ -146,7 +152,7 @@ internal static class SpectreConsoleRenderer
             return plan;
         }
 
-        var console = CreateInteractiveConsole(writer);
+        var console = CreateInteractiveConsole(writer, noColor);
         return await console.Progress()
             .Columns(
             [
@@ -268,11 +274,11 @@ internal static class SpectreConsoleRenderer
             Out = new AnsiConsoleOutput(writer)
         });
 
-    internal static IAnsiConsole CreateInteractiveConsole(TextWriter writer) =>
+    internal static IAnsiConsole CreateInteractiveConsole(TextWriter writer, bool noColor = false) =>
         AnsiConsole.Create(new AnsiConsoleSettings
         {
-            Ansi = AnsiSupport.Detect,
-            ColorSystem = ColorSystemSupport.Detect,
+            Ansi = noColor ? AnsiSupport.No : AnsiSupport.Detect,
+            ColorSystem = noColor ? ColorSystemSupport.NoColors : ColorSystemSupport.Detect,
             Interactive = InteractionSupport.Detect,
             Out = new AnsiConsoleOutput(writer)
         });

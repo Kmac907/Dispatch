@@ -10,7 +10,8 @@ internal sealed class SpectreLiveRunRenderer(
     ExecutionPlan plan,
     IDispatchExecutor executor,
     TextWriter writer,
-    bool useLiveDisplay)
+    bool useLiveDisplay,
+    bool noColor = false)
 {
     private readonly SpectreRunDashboard dashboard = new(plan, DateTimeOffset.UtcNow);
 
@@ -21,7 +22,7 @@ internal sealed class SpectreLiveRunRenderer(
             return await ExecuteAppendOnlyAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var console = SpectreConsoleRenderer.CreateInteractiveConsole(writer);
+        var console = SpectreConsoleRenderer.CreateInteractiveConsole(writer, noColor);
         var events = Channel.CreateUnbounded<DispatchExecutionProgress>(
             new UnboundedChannelOptions
             {

@@ -1085,8 +1085,9 @@ Current implementation note:
 - Dry-run planning uses Spectre `Progress` when interactive and stable progress text when redirected.
 - Non-dry-run planning uses Spectre `Status` when interactive and stable text when redirected.
 - `--no-progress` is implemented.
+- `--no-color`, `--quiet`, `--verbose`, and `--trace` are accepted for the current `run ps` path. `--no-color` disables ANSI/color for interactive Spectre planning/execution, `--quiet` suppresses rich/table non-error output while preserving structured output, and `--verbose`/`--trace` are parsed for the current command path without adding full trace event detail yet.
 - `--output rich|table|json|ndjson|yaml` is implemented for the current `run ps` dry-run plan and final result paths; JSON/YAML suppress decorative rendering, and NDJSON emits one compact typed final document line for the current path.
-- `--no-color`, `--quiet`, `--verbose`, `--trace`, and full NDJSON event streaming remain pending.
+- Full NDJSON event streaming and deeper verbose/trace event detail remain pending.
 
 Non-goals:
 - No static fake progress bars.

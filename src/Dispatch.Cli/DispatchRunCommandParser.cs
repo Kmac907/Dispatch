@@ -28,6 +28,10 @@ internal sealed class DispatchRunCommandParser
         var runAsSystem = false;
         var noDashboard = false;
         var outputMode = DispatchOutputMode.Rich;
+        var noColor = false;
+        var quiet = false;
+        var verbose = false;
+        var trace = false;
         var targetSelectors = new List<string>();
         var excludeSelectors = new List<string>();
         string? inventoryPath = null;
@@ -47,6 +51,20 @@ internal sealed class DispatchRunCommandParser
                 case "--no-progress":
                 case "--no-dashboard":
                     noDashboard = true;
+                    break;
+                case "--no-color":
+                    noColor = true;
+                    break;
+                case "--quiet":
+                    quiet = true;
+                    break;
+                case "-v":
+                case "--verbose":
+                    verbose = true;
+                    break;
+                case "--trace":
+                    trace = true;
+                    verbose = true;
                     break;
                 case "--script":
                     if (!TryReadValue(args, ref index, arg, out scriptPath, out error))
@@ -217,7 +235,11 @@ internal sealed class DispatchRunCommandParser
             ArtifactPaths: artifactPaths,
             RunAsSystem: runAsSystem,
             NoDashboard: noDashboard,
-            OutputMode: outputMode);
+            OutputMode: outputMode,
+            NoColor: noColor,
+            Quiet: quiet,
+            Verbose: verbose,
+            Trace: trace);
         return true;
     }
 

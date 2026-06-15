@@ -312,11 +312,23 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }
 
+        [CommandOption("--no-color")]
+        public bool NoColor { get; init; }
+
         [CommandOption("--no-progress")]
         public bool NoProgress { get; init; }
 
         [CommandOption("--no-dashboard")]
         public bool NoDashboard { get; init; }
+
+        [CommandOption("--quiet")]
+        public bool Quiet { get; init; }
+
+        [CommandOption("-v|--verbose")]
+        public bool Verbose { get; init; }
+
+        [CommandOption("--trace")]
+        public bool Trace { get; init; }
     }
 
     private sealed class RunCmdSettings : CommandSettings
@@ -353,9 +365,17 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         string? Output { get; }
 
+        bool NoColor { get; }
+
         bool NoProgress { get; }
 
         bool NoDashboard { get; }
+
+        bool Quiet { get; }
+
+        bool Verbose { get; }
+
+        bool Trace { get; }
     }
 
     private static readonly HashSet<Type> PlannedCommandTypes =
@@ -417,6 +437,26 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         if (settings.NoProgress || settings.NoDashboard)
         {
             args.Add("--no-progress");
+        }
+
+        if (settings.NoColor)
+        {
+            args.Add("--no-color");
+        }
+
+        if (settings.Quiet)
+        {
+            args.Add("--quiet");
+        }
+
+        if (settings.Verbose)
+        {
+            args.Add("--verbose");
+        }
+
+        if (settings.Trace)
+        {
+            args.Add("--trace");
         }
 
         AddValue(args, "--transport", settings.Transport);
