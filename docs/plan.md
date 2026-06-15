@@ -947,6 +947,8 @@ Dependencies:
 Definition of done:
 - PsExec invocation is test-covered without requiring live endpoints.
 - Localhost or shim-based execution can validate success/failure classification.
+- Release and validation claims for PsExec execution must also include at least one successful live run against a user-approved reachable Windows endpoint when the environment allows it.
+- Live PsExec verification should use the least invasive script practical, preferably stdout-only behavior or a temporary file under the Dispatch run folder, and must avoid unrelated endpoint changes.
 - Nonzero unexpected exit codes fail the target with clear reason.
 - Dry-run and command rendering cannot expose credentials, SAS tokens, protected file content, or decrypted values.
 
@@ -1553,6 +1555,7 @@ Definition of done:
 - `dispatch` starts the active CLI.
 - `dispatch run ps <script.ps1> --plan` or the compatibility dry-run path produces a complete execution plan.
 - `dispatch run` can run a prepared script through PsExec against a test target or shim.
+- Endpoint execution validation must include at least one successful live PsExec verification against a user-approved reachable Windows endpoint, or an explicit blocker stating why the supplied host could not be resolved or reached.
 - `dispatch --help` shows the documented Spectre command tree.
 - Rich terminal output uses Spectre.Console, and JSON/NDJSON output modes are non-decorative.
 - Multi-target execution respects throttle limit.
