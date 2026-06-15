@@ -91,9 +91,7 @@ public sealed class DispatchCliApplication(
 
     private async Task<int> RunInteractiveAsync(CancellationToken cancellationToken)
     {
-        var commandCenter = new TerminalGuiDispatchCommandCenter(
-            doctor,
-            static () => Console.ReadKey(intercept: true));
+        var commandCenter = new TerminalGuiDispatchCommandCenter(doctor);
         var result = await commandCenter.RunAsync(cancellationToken).ConfigureAwait(false);
 
         return result.Kind switch

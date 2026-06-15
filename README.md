@@ -53,6 +53,16 @@ Running `dispatch` with no arguments opens the interactive command center as a T
 
 Terminal.Gui view roles are explicit. The application shell owns command-center navigation. Menu and status bars own global actions. Windows/frames own dashboard sections. List views own target, plan, and result rows. Progress bars own dry-run and per-target execution progress. Dry-run renders visible progress before the execution-plan view; non-live or redirected sessions get one designed Terminal.Gui-compatible snapshot instead of repeated output. Real `dispatch run` executions render run identity, transport, target count, elapsed time, per-target phases, aggregate status counts, status symbols, recent activity, and failure summaries. Durable `results.json`, `results.csv`, per-target `result.json`, and captured stdout/stderr files remain in the run folder for automation and troubleshooting.
 
+### Live Terminal Test
+
+Run the command center from a real Windows Terminal or PowerShell window, not from redirected output:
+
+```powershell
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj --
+```
+
+Expected behavior: the retained Terminal.Gui command center appears immediately. Use arrow keys or number keys to select actions, `F1` for help, `F5` for doctor, `Esc` or `Q` to exit, and `Ctrl+R` from run setup to launch the shared `dispatch run` path. If the command renders a boxed text snapshot instead, stdin/stdout is redirected and the retained app cannot run in that host.
+
 ## Script-Owned Payloads
 
 Dispatch v1 copies only the selected PowerShell script. Installer media, package payloads, Blob/HTTPS/SMB/Azure Files downloads, and payload-specific logging belong inside the script. Pass ordinary non-secret script arguments after `--`; do not pass credentials or SAS tokens on the command line. See `docs/script-owned-payloads.md`.

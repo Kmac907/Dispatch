@@ -5,8 +5,7 @@ using Terminal.Gui;
 namespace Dispatch.Cli;
 
 internal sealed class TerminalGuiDispatchCommandCenter(
-    IDispatchDoctor doctor,
-    Func<ConsoleKeyInfo> readKey)
+    IDispatchDoctor doctor)
 {
     private static readonly string[] MainActions =
     [
@@ -24,6 +23,7 @@ internal sealed class TerminalGuiDispatchCommandCenter(
     ];
 
     private readonly CommandCenterState state = new();
+    private CommandCenterResult? pendingResult;
 
     public Task<CommandCenterResult> RunAsync(CancellationToken cancellationToken)
     {
@@ -33,6 +33,7 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             return Task.FromResult(CommandCenterResult.Exit);
         }
 
+        pendingResult = null;
         Application.Init();
         try
         {
@@ -41,22 +42,23 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             top.RemoveAll();
             var root = BuildRootView();
             top.Add(root);
-            Application.Refresh();
-
-            while (!cancellationToken.IsCancellationRequested)
+            top.KeyPress += args =>
             {
-                var result = HandleKey(readKey());
+                var result = HandleKey(ToConsoleKeyInfo(args.KeyEvent));
                 RefreshRoot(root);
                 Application.Refresh();
+                args.Handled = true;
 
                 if (result is not null)
                 {
-                    return Task.FromResult(result);
+                    pendingResult = result;
+                    Application.RequestStop();
                 }
-            }
-
-            state.Message = "Cancellation requested.";
-            return Task.FromResult(CommandCenterResult.Exit);
+            };
+            using var cancellationRegistration = cancellationToken.Register(static () => Application.RequestStop());
+            Application.Refresh();
+            Application.Run();
+            return Task.FromResult(pendingResult ?? CommandCenterResult.Exit);
         }
         finally
         {
@@ -125,39 +127,82 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             X = 0,
             Y = 1,
             Width = Dim.Fill(),
-            Height = Dim.Fill(1)
+            Height = Dim.Fill(1),
+            CanFocus = true
         };
+
+        void Refresh()
+        {
+            RefreshRoot(root);
+            Application.Refresh();
+        }
 
         var menu = new MenuBar(new[]
         {
             new MenuBarItem("_Dispatch", new[]
             {
-                new MenuItem("_Run", "Open run setup", () => { state.View = CommandCenterView.RunSetup; }),
+                new MenuItem("_Run", "Open run setup", () =>
+                {
+                    state.View = CommandCenterView.RunSetup;
+                    state.Message = "Run setup is active. Edit fields, then press Ctrl+R.";
+                    Refresh();
+                }),
                 new MenuItem("_Doctor", "Run diagnostics", () =>
                 {
                     state.DoctorReport = doctor.Run();
                     state.View = CommandCenterView.Doctor;
+                    state.Message = state.DoctorReport.Succeeded
+                        ? "Doctor checks passed."
+                        : "Doctor checks need attention.";
+                    Refresh();
                 }),
-                new MenuItem("_Help", "Show command help", () => { state.View = CommandCenterView.Help; }),
-                new MenuItem("_Quit", "Exit Dispatch", () => { state.Message = "Exiting Dispatch."; })
+                new MenuItem("_Help", "Show command help", () =>
+                {
+                    state.View = CommandCenterView.Help;
+                    state.Message = "Command reference loaded.";
+                    Refresh();
+                }),
+                new MenuItem("_Quit", "Exit Dispatch", () =>
+                {
+                    state.Message = "Exiting Dispatch.";
+                    Application.RequestStop();
+                })
             })
         });
         Application.Top.Add(menu);
 
         var status = new StatusBar(new[]
         {
-            new StatusItem(Key.F1, "~F1~ Help", () => { state.View = CommandCenterView.Help; }),
+            new StatusItem(Key.F1, "~F1~ Help", () =>
+            {
+                state.View = CommandCenterView.Help;
+                state.Message = "Command reference loaded.";
+                Refresh();
+            }),
             new StatusItem(Key.F5, "~F5~ Doctor", () =>
             {
                 state.DoctorReport = doctor.Run();
                 state.View = CommandCenterView.Doctor;
+                state.Message = state.DoctorReport.Succeeded
+                    ? "Doctor checks passed."
+                    : "Doctor checks need attention.";
+                Refresh();
             }),
-            new StatusItem(Key.CtrlMask | Key.R, "~Ctrl+R~ Run", () => { _ = TryStartRun(); }),
-            new StatusItem(Key.Esc, "~Esc~ Back", () => { state.View = CommandCenterView.Home; })
+            new StatusItem(Key.CtrlMask | Key.R, "~Ctrl+R~ Run", () =>
+            {
+                StartRunIfReady();
+                Refresh();
+            }),
+            new StatusItem(Key.Esc, "~Esc~ Back", () =>
+            {
+                state.View = CommandCenterView.Home;
+                Refresh();
+            })
         });
         Application.Top.Add(status);
 
         RefreshRoot(root);
+        root.SetFocus();
         return root;
     }
 
@@ -323,16 +368,25 @@ internal sealed class TerminalGuiDispatchCommandCenter(
         summary.Add(new Label($"Transport: {TransportChoices[state.TransportIndex]}") { X = 1, Y = 3 });
         summary.Add(new Label("Ctrl+R launches the shared run path.") { X = 1, Y = 5 });
         summary.Add(progress);
-        summary.Add(new Button("Launch")
+        var launch = new Button("Launch")
         {
             X = 1,
             Y = 8
-        });
-        summary.Add(new Button("Back")
+        };
+        launch.Clicked += StartRunIfReady;
+        summary.Add(launch);
+
+        var back = new Button("Back")
         {
             X = 14,
             Y = 8
-        });
+        };
+        back.Clicked += () =>
+        {
+            state.View = CommandCenterView.Home;
+            state.Message = "Returned to the command center.";
+        };
+        summary.Add(back);
 
         return new View
         {
@@ -587,6 +641,18 @@ internal sealed class TerminalGuiDispatchCommandCenter(
         return new CommandCenterResult(
             CommandCenterExitKind.StartRun,
             BuildRunArguments());
+    }
+
+    private void StartRunIfReady()
+    {
+        var result = TryStartRun();
+        if (result is null)
+        {
+            return;
+        }
+
+        pendingResult = result;
+        Application.RequestStop();
     }
 
     private string[] BuildRunArguments()
@@ -870,6 +936,58 @@ internal sealed class TerminalGuiDispatchCommandCenter(
 
     private static int Wrap(int value, int count) =>
         (value % count + count) % count;
+
+    private static ConsoleKeyInfo ToConsoleKeyInfo(KeyEvent keyEvent)
+    {
+        var character = keyEvent.KeyValue is >= 32 and <= char.MaxValue
+            ? (char)keyEvent.KeyValue
+            : '\0';
+        var key = keyEvent.Key switch
+        {
+            Key.CursorUp => ConsoleKey.UpArrow,
+            Key.CursorDown => ConsoleKey.DownArrow,
+            Key.CursorLeft => ConsoleKey.LeftArrow,
+            Key.CursorRight => ConsoleKey.RightArrow,
+            Key.Backspace => ConsoleKey.Backspace,
+            Key.Tab => ConsoleKey.Tab,
+            Key.Enter => ConsoleKey.Enter,
+            Key.Esc => ConsoleKey.Escape,
+            Key.Space => ConsoleKey.Spacebar,
+            Key.F1 => ConsoleKey.F1,
+            Key.F5 => ConsoleKey.F5,
+            Key.D1 => ConsoleKey.D1,
+            Key.D2 => ConsoleKey.D2,
+            Key.D3 => ConsoleKey.D3,
+            Key.D4 => ConsoleKey.D4,
+            _ => GetConsoleKey(character)
+        };
+
+        return new ConsoleKeyInfo(character, key, keyEvent.IsShift, keyEvent.IsAlt, keyEvent.IsCtrl);
+    }
+
+    private static ConsoleKey GetConsoleKey(char character)
+    {
+        if (char.IsLetter(character))
+        {
+            return Enum.Parse<ConsoleKey>(character.ToString().ToUpperInvariant());
+        }
+
+        if (char.IsDigit(character))
+        {
+            return Enum.Parse<ConsoleKey>($"D{character}");
+        }
+
+        return character switch
+        {
+            ':' => ConsoleKey.Oem1,
+            '\\' => ConsoleKey.Oem5,
+            '.' => ConsoleKey.OemPeriod,
+            '-' => ConsoleKey.OemMinus,
+            '_' => ConsoleKey.OemMinus,
+            ' ' => ConsoleKey.Spacebar,
+            _ => ConsoleKey.NoName
+        };
+    }
 
     private sealed class CommandCenterState
     {

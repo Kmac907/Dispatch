@@ -1030,6 +1030,7 @@ Scope:
 - The command center must provide a persistent operator menu for run setup, doctor diagnostics, command help, and exit.
 - The command center must be a full retained terminal app surface hosted by Terminal.Gui; prompt-by-prompt flows do not satisfy this requirement.
 - The command center must update in place without scrolling repeated menu panels or repeated static output down the terminal.
+- The command center must run through the Terminal.Gui application loop and event handlers; manually reading `Console.ReadKey` while Terminal.Gui is initialized does not satisfy this requirement because it can leave operators on a blank retained screen.
 - Terminal.Gui view roles are defined: the application/top-level shell owns command-center navigation, menu/status bars own global actions and state, windows/frames own dashboard sections, tables/lists own target/plan/result rows, progress bars own dry-run and measurable target progress, and forms own run setup.
 - Render the entire command service through Terminal.Gui: root help, command help, version, validation errors, planning failures, doctor results, dry-run plans, interactive setup, compact progress, full dashboard progress, and final run summaries.
 - Do not emit raw JSON, default parser help, Spectre.Console output, or plain status lines as the console UX for any command path.
@@ -1053,6 +1054,7 @@ Dependencies:
 
 Definition of done:
 - `dispatch` opens a Terminal.Gui command center with retained menus for run setup, diagnostics, help, and exit.
+- The command center renders after launch and remains interactive in a real terminal through Terminal.Gui menu/status/key events.
 - The run setup view guides the user through script, targets, transport, run context, throttle, dry-run, and launch without leaving the command-center app surface.
 - `dispatch run` supports non-interactive automation for v1 PowerShell script execution; command payloads remain modeled and rejected until a post-MVP command execution slice explicitly enables them.
 - Both modes create the same request model and call the same core planner/executor.

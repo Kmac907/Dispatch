@@ -281,8 +281,7 @@ public sealed class DispatchCliApplicationTests
     public void CommandCenterRendererShowsPersistentLiveSurfaceOptions()
     {
         var commandCenter = new TerminalGuiDispatchCommandCenter(
-            new StaticDoctor(new DispatchDoctorReport([])),
-            static () => throw new InvalidOperationException("Render test must not read keys."));
+            new StaticDoctor(new DispatchDoctorReport([])));
 
         var output = commandCenter.RenderSnapshot();
 
@@ -299,8 +298,7 @@ public sealed class DispatchCliApplicationTests
     public void CommandCenterKeyNavigationBuildsRunArguments()
     {
         var commandCenter = new TerminalGuiDispatchCommandCenter(
-            new StaticDoctor(new DispatchDoctorReport([])),
-            static () => throw new InvalidOperationException("State-machine test must not read keys."));
+            new StaticDoctor(new DispatchDoctorReport([])));
 
         var result = commandCenter.HandleKey(CreateKey(ConsoleKey.Enter));
         Assert.Null(result);
