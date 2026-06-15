@@ -91,13 +91,7 @@ internal sealed class TerminalGuiDispatchCommandCenter(
 
     private static void ApplyColorSchemes()
     {
-        Colors.Base.Normal = Application.Driver.MakeAttribute(Color.White, Color.Black);
-        Colors.Base.Focus = Application.Driver.MakeAttribute(Color.Black, Color.Cyan);
-        Colors.Base.HotNormal = Application.Driver.MakeAttribute(Color.BrightCyan, Color.Black);
-        Colors.Base.HotFocus = Application.Driver.MakeAttribute(Color.Black, Color.BrightCyan);
-        Colors.Dialog.Normal = Application.Driver.MakeAttribute(Color.White, Color.Blue);
-        Colors.Menu.Normal = Application.Driver.MakeAttribute(Color.White, Color.Blue);
-        Colors.Menu.Focus = Application.Driver.MakeAttribute(Color.Black, Color.Cyan);
+        TerminalGuiTheme.Apply();
     }
 
     private Window BuildRootView()
@@ -1051,6 +1045,7 @@ internal sealed class TerminalGuiDispatchCommandCenter(
         private TextField? outputRootField;
         private TextField? remoteRootField;
         private TextField? scriptArgumentsField;
+        private bool readinessEventsWired;
 
         public CommandCenterResult Run(CancellationToken cancellationToken)
         {
@@ -1155,31 +1150,40 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             SetStatus("Home", "Ready. Choose Start Run for a script job, Doctor for local checks, or Help for command reference.");
             ResetWorkspace("Overview");
             var pane = RequireMainPane();
-            pane.Add(new Label("Windows-native script orchestration for endpoint engineering.")
+            var operations = new FrameView("Operations")
+            {
+                X = 0,
+                Y = 0,
+                Width = Dim.Percent(58),
+                Height = Dim.Fill()
+            };
+            operations.Add(new ListView(new[]
+            {
+                "Start Run        Configure and launch a PowerShell script job",
+                "Doctor           Check local prerequisites before endpoint work",
+                "Command Help     Review supported command-service routes",
+                "Exit             Close the retained terminal UI"
+            })
             {
                 X = 1,
                 Y = 1,
-                Width = Dim.Fill(2)
+                Width = Dim.Fill(2),
+                Height = Dim.Fill(2)
             });
-            pane.Add(new Label("Operator flow") { X = 1, Y = 3 });
-            AddPhase(pane, "Plan", 5, 0.35f);
-            AddPhase(pane, "Prepare", 7, 0.45f);
-            AddPhase(pane, "Execute", 9, 0.65f);
-            AddPhase(pane, "Report", 11, 0.85f);
+
+            var status = new FrameView("Current State")
+            {
+                X = Pos.Right(operations),
+                Y = 0,
+                Width = Dim.Fill(),
+                Height = Dim.Fill()
+            };
+            status.Add(new Label("No job is running in the command center.") { X = 1, Y = 1, Width = Dim.Fill(2) });
+            status.Add(new Label("Use Run Setup to create a request through the shared planner/executor.") { X = 1, Y = 3, Width = Dim.Fill(2) });
+            status.Add(new Label("Live progress appears only during dry-run planning or real execution.") { X = 1, Y = 5, Width = Dim.Fill(2) });
+            pane.Add(operations, status);
             pane.SetFocus();
             Application.Refresh();
-        }
-
-        private static void AddPhase(View parent, string label, int y, float value)
-        {
-            parent.Add(new Label(label) { X = 1, Y = y, Width = 14 });
-            parent.Add(new ProgressBar
-            {
-                X = 16,
-                Y = y,
-                Width = Dim.Fill(2),
-                Fraction = value
-            });
         }
 
         private void ShowRunSetup()
@@ -1230,6 +1234,7 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             });
 
             pane.Add(form, actions);
+            WireLiveReadiness();
             UpdateReadiness();
             scriptPathField!.SetFocus();
             Application.Refresh();
@@ -1290,6 +1295,22 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             outputRootField ??= new TextField(string.Empty);
             remoteRootField ??= new TextField(string.Empty);
             scriptArgumentsField ??= new TextField(string.Empty);
+        }
+
+        private void WireLiveReadiness()
+        {
+            if (readinessEventsWired)
+            {
+                return;
+            }
+
+            EnsureRunControls();
+            scriptPathField!.TextChanged += _ => UpdateReadiness();
+            targetsField!.TextChanged += _ => UpdateReadiness();
+            runAsSystemBox!.Toggled += _ => UpdateReadiness();
+            dryRunBox!.Toggled += _ => UpdateReadiness();
+            transportList!.SelectedItemChanged += _ => UpdateReadiness();
+            readinessEventsWired = true;
         }
 
         private void LaunchRunFromControls()
@@ -1412,8 +1433,9 @@ internal sealed class TerminalGuiDispatchCommandCenter(
             var fraction = GetReadinessFraction();
             readinessBar.Fraction = fraction;
             readinessLabel.Text = fraction >= 1
-                ? "Ready to launch"
+                ? $"Ready to launch {GetText(targetsField)}"
                 : "Missing script path or targets";
+            Application.Refresh();
         }
 
         private float GetReadinessFraction()

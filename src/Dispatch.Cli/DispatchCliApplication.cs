@@ -126,6 +126,7 @@ public sealed class DispatchCliApplication(
             Application.Init();
             try
             {
+                TerminalGuiTheme.Apply();
                 var top = Application.Top;
                 top.RemoveAll();
                 var root = dashboard.BuildView();

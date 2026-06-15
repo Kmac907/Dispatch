@@ -52,7 +52,7 @@ internal sealed class TerminalGuiDispatchRunDashboard
 
     public Window BuildView()
     {
-        var root = new Window("Dispatch Run Dashboard")
+        var root = new Window("Dispatch Run Monitor")
         {
             X = 0,
             Y = 1,
@@ -61,7 +61,8 @@ internal sealed class TerminalGuiDispatchRunDashboard
         };
 
         root.Add(CreateRunHeader());
-        root.Add(CreateProgressFrame());
+        root.Add(CreateOutcomeFrame());
+        root.Add(CreatePhaseFrame());
         root.Add(CreateTargetFrame());
         root.Add(CreateActivityFrame());
         root.Add(CreateFailureFrame());
@@ -81,8 +82,18 @@ internal sealed class TerminalGuiDispatchRunDashboard
             $"Elapsed: {FormatDuration(GetElapsed())}",
             $"Progress: [{new string('#', GetProgressBlocks(terminalCount, values.Length)).PadRight(20, '-')}] {GetPercent(terminalCount, values.Length)}%",
             string.Empty,
-            "Outcome",
+            "Outcome Chart",
             $"Active: {values.Count(static target => target.IsActive)} | Succeeded: {values.Count(static target => target.State == TargetExecutionState.Succeeded)} | Failed: {values.Count(static target => target.State == TargetExecutionState.Failed)} | Timed Out: {values.Count(static target => target.State == TargetExecutionState.TimedOut)} | Cancelled: {values.Count(static target => target.State == TargetExecutionState.Cancelled)}",
+            $"Queued   [{BuildSnapshotBar(values.Count(static target => target.State == TargetExecutionState.Pending), values.Length)}] {values.Count(static target => target.State == TargetExecutionState.Pending)}",
+            $"Active   [{BuildSnapshotBar(values.Count(static target => target.IsActive), values.Length)}] {values.Count(static target => target.IsActive)}",
+            $"Complete [{BuildSnapshotBar(values.Count(static target => target.State == TargetExecutionState.Succeeded), values.Length)}] {values.Count(static target => target.State == TargetExecutionState.Succeeded)}",
+            $"Failed   [{BuildSnapshotBar(values.Count(static target => target.State is TargetExecutionState.Failed or TargetExecutionState.TimedOut or TargetExecutionState.Cancelled), values.Length)}] {values.Count(static target => target.State is TargetExecutionState.Failed or TargetExecutionState.TimedOut or TargetExecutionState.Cancelled)}",
+            string.Empty,
+            "Phase Distribution",
+            $"Probe   [{BuildSnapshotBar(values.Count(static target => target.State == TargetExecutionState.Probing), values.Length)}] {values.Count(static target => target.State == TargetExecutionState.Probing)}",
+            $"Prepare [{BuildSnapshotBar(values.Count(static target => target.State == TargetExecutionState.PreparingScript), values.Length)}] {values.Count(static target => target.State == TargetExecutionState.PreparingScript)}",
+            $"Execute [{BuildSnapshotBar(values.Count(static target => target.State == TargetExecutionState.Executing), values.Length)}] {values.Count(static target => target.State == TargetExecutionState.Executing)}",
+            $"Collect [{BuildSnapshotBar(values.Count(static target => target.State == TargetExecutionState.CollectingArtifacts), values.Length)}] {values.Count(static target => target.State == TargetExecutionState.CollectingArtifacts)}",
             string.Empty,
             "Targets"
         };
@@ -109,55 +120,60 @@ internal sealed class TerminalGuiDispatchRunDashboard
             X = 0,
             Y = 0,
             Width = Dim.Fill(),
-            Height = 6
+            Height = 5
         };
-        frame.Add(new Label($"Run ID: {plan.RunId}") { X = 1, Y = 0, Width = Dim.Percent(50) });
-        frame.Add(new Label($"Transport: {plan.Job.Transport}") { X = Pos.Percent(50), Y = 0, Width = Dim.Fill(2) });
-        frame.Add(new Label($"Payload: {plan.Job.Payload.DisplayName}") { X = 1, Y = 1, Width = Dim.Percent(50) });
-        frame.Add(new Label($"Targets: {plan.Targets.Count}") { X = Pos.Percent(50), Y = 1, Width = Dim.Fill(2) });
-        frame.Add(new Label($"Elapsed: {FormatDuration(GetElapsed())}") { X = 1, Y = 2, Width = Dim.Percent(50) });
-        frame.Add(new Label($"Results: {plan.LocalResultsJsonPath}") { X = 1, Y = 3, Width = Dim.Fill(2) });
+        frame.Add(new Label($"Run {plan.RunId}") { X = 1, Y = 0, Width = Dim.Percent(35) });
+        frame.Add(new Label($"Transport {plan.Job.Transport}") { X = Pos.Percent(35), Y = 0, Width = Dim.Percent(25) });
+        frame.Add(new Label($"Targets {plan.Targets.Count}") { X = Pos.Percent(60), Y = 0, Width = Dim.Percent(18) });
+        frame.Add(new Label($"Elapsed {FormatDuration(GetElapsed())}") { X = Pos.Percent(78), Y = 0, Width = Dim.Fill(2) });
+        frame.Add(new Label($"Payload {plan.Job.Payload.DisplayName}") { X = 1, Y = 1, Width = Dim.Fill(2) });
+        frame.Add(new Label($"Results {Trim(plan.LocalResultsJsonPath, 120)}") { X = 1, Y = 2, Width = Dim.Fill(2) });
         return frame;
     }
 
-    private View CreateProgressFrame()
+    private View CreateOutcomeFrame()
     {
         var values = targets.Values.ToArray();
         var completed = values.Count(static target => target.IsTerminal);
-        var frame = new FrameView("Progress")
+        var failed = values.Count(static target => target.State is TargetExecutionState.Failed or TargetExecutionState.TimedOut or TargetExecutionState.Cancelled);
+        var frame = new FrameView("Progress And Outcome")
         {
             X = 0,
-            Y = 6,
-            Width = Dim.Fill(),
-            Height = 6
+            Y = 5,
+            Width = Dim.Percent(58),
+            Height = 10
         };
         frame.Add(new ProgressBar
         {
             X = 1,
             Y = 0,
             Width = Dim.Fill(2),
-            Fraction = values.Length == 0 ? 0 : (float)completed / values.Length
+            Fraction = GetFraction(completed, values.Length)
         });
-        frame.Add(new Label($"Active: {values.Count(static target => target.IsActive)}")
+        frame.Add(new Label($"{GetPercent(completed, values.Length)}% terminal") { X = 1, Y = 1, Width = Dim.Fill(2) });
+        AddMetric(frame, "Queued", values.Count(static target => target.State == TargetExecutionState.Pending), values.Length, 3);
+        AddMetric(frame, "Active", values.Count(static target => target.IsActive), values.Length, 4);
+        AddMetric(frame, "Succeeded", values.Count(static target => target.State == TargetExecutionState.Succeeded), values.Length, 5);
+        AddMetric(frame, "Failed", failed, values.Length, 6);
+        return frame;
+    }
+
+    private View CreatePhaseFrame()
+    {
+        var values = targets.Values.ToArray();
+        var frame = new FrameView("Phase Distribution")
         {
-            X = 1,
-            Y = 2
-        });
-        frame.Add(new Label($"Succeeded: {values.Count(static target => target.State == TargetExecutionState.Succeeded)}")
-        {
-            X = 18,
-            Y = 2
-        });
-        frame.Add(new Label($"Failed: {values.Count(static target => target.State == TargetExecutionState.Failed)}")
-        {
-            X = 38,
-            Y = 2
-        });
-        frame.Add(new Label($"Timed Out: {values.Count(static target => target.State == TargetExecutionState.TimedOut)}")
-        {
-            X = 52,
-            Y = 2
-        });
+            X = Pos.Percent(58),
+            Y = 5,
+            Width = Dim.Fill(),
+            Height = 10
+        };
+
+        AddMetric(frame, "Probe", values.Count(static target => target.State == TargetExecutionState.Probing), values.Length, 0);
+        AddMetric(frame, "Prepare", values.Count(static target => target.State == TargetExecutionState.PreparingScript), values.Length, 1);
+        AddMetric(frame, "Execute", values.Count(static target => target.State == TargetExecutionState.Executing), values.Length, 2);
+        AddMetric(frame, "Collect", values.Count(static target => target.State == TargetExecutionState.CollectingArtifacts), values.Length, 3);
+        AddMetric(frame, "Done", values.Count(static target => target.IsTerminal), values.Length, 4);
         return frame;
     }
 
@@ -166,13 +182,13 @@ internal sealed class TerminalGuiDispatchRunDashboard
         var frame = new FrameView("Targets")
         {
             X = 0,
-            Y = 12,
-            Width = Dim.Percent(65),
-            Height = Dim.Fill(9)
+            Y = 15,
+            Width = Dim.Percent(60),
+            Height = Dim.Fill(8)
         };
         var rows = targets.Values
             .OrderBy(static target => target.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(static target => $"{TerminalGuiConsoleRenderer.FormatStatusSymbol(target.State)} {target.Name,-24} {FormatStateText(target.State),-20} exit {target.ExitCode?.ToString() ?? "-"}")
+            .Select(static target => $"{TerminalGuiConsoleRenderer.FormatStatusSymbol(target.State)} {target.Name,-22} {FormatStateText(target.State),-20} {GetPercentForState(target.State),3}% exit {target.ExitCode?.ToString() ?? "-"}")
             .ToList();
         frame.Add(new ListView(rows)
         {
@@ -188,8 +204,8 @@ internal sealed class TerminalGuiDispatchRunDashboard
     {
         var frame = new FrameView("Recent Activity")
         {
-            X = Pos.Percent(65),
-            Y = 12,
+            X = Pos.Percent(60),
+            Y = 15,
             Width = Dim.Fill(),
             Height = Dim.Percent(45)
         };
@@ -210,10 +226,10 @@ internal sealed class TerminalGuiDispatchRunDashboard
     {
         var frame = new FrameView("Failures")
         {
-            X = Pos.Percent(65),
+            X = Pos.Percent(60),
             Y = Pos.Percent(45),
             Width = Dim.Fill(),
-            Height = Dim.Fill(9)
+            Height = Dim.Fill(8)
         };
         var failures = targets.Values
             .Where(static target => target.State is TargetExecutionState.Failed or TargetExecutionState.TimedOut or TargetExecutionState.Cancelled)
@@ -288,6 +304,40 @@ internal sealed class TerminalGuiDispatchRunDashboard
 
     private static int GetProgressBlocks(int value, int total) =>
         total == 0 ? 0 : (int)Math.Round((double)value / total * 20);
+
+    private static float GetFraction(int value, int total) =>
+        total == 0 ? 0 : Math.Clamp((float)value / total, 0, 1);
+
+    private static void AddMetric(View parent, string label, int value, int total, int y)
+    {
+        parent.Add(new Label($"{label,-9} {value,3}") { X = 1, Y = y, Width = 16 });
+        parent.Add(new ProgressBar
+        {
+            X = 18,
+            Y = y,
+            Width = Dim.Fill(2),
+            Fraction = GetFraction(value, total)
+        });
+    }
+
+    private static string BuildSnapshotBar(int value, int total) =>
+        new string('#', GetProgressBlocks(value, total)).PadRight(20, '-');
+
+    private static int GetPercentForState(TargetExecutionState state) =>
+        state switch
+        {
+            TargetExecutionState.Pending => 0,
+            TargetExecutionState.Resolving => 10,
+            TargetExecutionState.Probing => 25,
+            TargetExecutionState.PreparingScript => 45,
+            TargetExecutionState.Executing => 70,
+            TargetExecutionState.CollectingArtifacts => 90,
+            TargetExecutionState.Succeeded => 100,
+            TargetExecutionState.Failed => 100,
+            TargetExecutionState.TimedOut => 100,
+            TargetExecutionState.Cancelled => 100,
+            _ => 0
+        };
 
     private static string Trim(string value, int maxLength) =>
         value.Length <= maxLength ? value : string.Concat(value.AsSpan(0, maxLength - 3), "...");

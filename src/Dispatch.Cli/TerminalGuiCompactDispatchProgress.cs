@@ -23,6 +23,7 @@ internal sealed class TerminalGuiCompactDispatchProgress(
         Application.Init();
         try
         {
+            TerminalGuiTheme.Apply();
             var top = Application.Top;
             top.RemoveAll();
             var root = tracker.BuildView();
@@ -149,7 +150,20 @@ internal sealed class TerminalGuiCompactDispatchProgress(
                 Height = Dim.Fill(1)
             };
 
-            var y = 1;
+            var values = targets.Values.ToArray();
+            var terminal = values.Count(static target => IsTerminal(target.State));
+            root.Add(new Label($"Run {plan.RunId}") { X = 1, Y = 0, Width = Dim.Percent(45) });
+            root.Add(new Label($"Targets {values.Length}") { X = Pos.Percent(45), Y = 0, Width = 14 });
+            root.Add(new Label($"Complete {terminal}/{values.Length}") { X = Pos.Percent(62), Y = 0, Width = Dim.Fill(2) });
+            root.Add(new ProgressBar
+            {
+                X = 1,
+                Y = 2,
+                Width = Dim.Fill(2),
+                Fraction = values.Length == 0 ? 0 : (float)terminal / values.Length
+            });
+
+            var y = 4;
             foreach (var target in targets.Values.OrderBy(static target => target.Name, StringComparer.OrdinalIgnoreCase))
             {
                 root.Add(new Label($"{TerminalGuiConsoleRenderer.FormatStatusSymbol(target.State)} {target.Name,-24} {FormatState(target.State),-20}")
@@ -228,6 +242,9 @@ internal sealed class TerminalGuiCompactDispatchProgress(
 
         private static int GetProgressBlocks(TargetExecutionState state) =>
             (int)Math.Round(GetPercent(state) / 5d);
+
+        private static bool IsTerminal(TargetExecutionState state) =>
+            state is TargetExecutionState.Succeeded or TargetExecutionState.Failed or TargetExecutionState.TimedOut or TargetExecutionState.Cancelled;
 
         private sealed record TargetProgress(
             string Name,

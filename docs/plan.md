@@ -1037,6 +1037,7 @@ Scope:
 - Do not emit raw JSON, default parser help, Spectre.Console output, or plain status lines as the console UX for any command path.
 - Use actual Terminal.Gui views intentionally, including top-level application surfaces, menu bars, status bars, windows, frames, labels, buttons, list views, text fields, check boxes, combo/drop-down choices, tables/lists, progress bars, keyboard shortcuts, and mouse-aware focus handling.
 - For real runs, render an enterprise-grade retained run dashboard using Terminal.Gui. The dashboard should be useful for repeated operator use, not merely decorative.
+- Use a restrained enterprise terminal palette and avoid fake/static progress indicators; readiness, compact progress, retained dashboard progress, outcome charts, and phase charts must be derived from current form values or execution progress events.
 - Retained run dashboards and compact progress views must run inside the Terminal.Gui application loop while endpoint execution runs on a background task; progress callbacks must update Terminal.Gui controls in place through the UI loop instead of awaiting execution before repainting.
 - The live dashboard must show run identity, transport, target count, elapsed time, success/failure counts, active target phases, visual charts, status symbols, and a concise recent-event/failure area.
 - The retained dashboard must update from core execution progress events for states such as `Probing`, `PreparingScript`, `Executing`, `CollectingArtifacts`, `Succeeded`, and `Failed`.

@@ -416,11 +416,13 @@ public sealed class DispatchCliApplicationTests
 
             Assert.Contains("Dispatch Run", output);
             Assert.Contains("Run ID", output);
-            Assert.Contains("Outcome", output);
+            Assert.Contains("Outcome Chart", output);
+            Assert.Contains("Phase Distribution", output);
             Assert.Contains("run-test", output);
             Assert.Contains("PsExec", output);
             Assert.Contains("PC001", output);
             Assert.Contains("Executing", output);
+            Assert.Contains("Execute", output);
             Assert.Contains("PC002", output);
             Assert.Contains("ExecutionFailed", output);
             Assert.Contains("Installer returned 1603", output);
