@@ -369,14 +369,14 @@ public static class TargetResolver
     private sealed class InventoryTargets
     {
         private readonly Dictionary<string, InventoryHost> hosts;
-        private readonly Dictionary<string, List<string>> groups;
+        private readonly Dictionary<string, InventoryGroup> groups;
         private readonly Dictionary<string, List<string>> tags;
         private readonly Dictionary<string, TransportKind> groupTransports;
         private readonly TransportKind? defaultTransport;
 
         private InventoryTargets(
             Dictionary<string, InventoryHost> hosts,
-            Dictionary<string, List<string>> groups,
+            Dictionary<string, InventoryGroup> groups,
             Dictionary<string, List<string>> tags,
             Dictionary<string, TransportKind> groupTransports,
             TransportKind? defaultTransport)
@@ -427,7 +427,7 @@ public static class TargetResolver
         public static InventoryTargets FromYaml(string path, IReadOnlyList<string> lines, ICollection<DispatchValidationError> errors)
         {
             var hosts = new Dictionary<string, InventoryHost>(StringComparer.OrdinalIgnoreCase);
-            var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var groups = new Dictionary<string, InventoryGroup>(StringComparer.OrdinalIgnoreCase);
             var tags = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var groupTransports = new Dictionary<string, TransportKind>(StringComparer.OrdinalIgnoreCase);
             TransportKind? defaultTransport = null;
@@ -435,6 +435,7 @@ public static class TargetResolver
             string? currentGroup = null;
             string? currentHost = null;
             var inGroupHosts = false;
+            var inGroupChildren = false;
             var inGroupVars = false;
             var inHostTags = false;
             var inHostVars = false;
@@ -459,6 +460,7 @@ public static class TargetResolver
                         currentGroup = null;
                         currentHost = null;
                         inGroupHosts = false;
+                        inGroupChildren = false;
                         inGroupVars = false;
                         inHostTags = false;
                         inHostVars = false;
@@ -469,6 +471,7 @@ public static class TargetResolver
                     currentGroup = null;
                     currentHost = null;
                     inGroupHosts = false;
+                    inGroupChildren = false;
                     inGroupVars = false;
                     inHostTags = false;
                     inHostVars = false;
@@ -504,8 +507,9 @@ public static class TargetResolver
                     if (indent == 2 && trimmed.EndsWith(':'))
                     {
                         currentGroup = trimmed.TrimEnd(':');
-                        groups.TryAdd(currentGroup, []);
+                        groups.TryAdd(currentGroup, new InventoryGroup([], []));
                         inGroupHosts = false;
+                        inGroupChildren = false;
                         inGroupVars = false;
                         continue;
                     }
@@ -513,6 +517,15 @@ public static class TargetResolver
                     if (indent >= 4 && trimmed.Equals("hosts:", StringComparison.OrdinalIgnoreCase))
                     {
                         inGroupHosts = currentGroup is not null;
+                        inGroupChildren = false;
+                        inGroupVars = false;
+                        continue;
+                    }
+
+                    if (indent >= 4 && trimmed.Equals("children:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inGroupChildren = currentGroup is not null;
+                        inGroupHosts = false;
                         inGroupVars = false;
                         continue;
                     }
@@ -521,12 +534,19 @@ public static class TargetResolver
                     {
                         inGroupVars = currentGroup is not null;
                         inGroupHosts = false;
+                        inGroupChildren = false;
                         continue;
                     }
 
                     if (inGroupHosts && trimmed.StartsWith("- ", StringComparison.Ordinal))
                     {
                         AddInventoryGroupHost(path, hosts, groups, currentGroup!, trimmed[2..].Trim());
+                        continue;
+                    }
+
+                    if (inGroupChildren && trimmed.StartsWith("- ", StringComparison.Ordinal))
+                    {
+                        AddInventoryGroupChild(groups, currentGroup!, trimmed[2..].Trim());
                         continue;
                     }
 
@@ -555,6 +575,12 @@ public static class TargetResolver
                     if (inGroupHosts)
                     {
                         errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' only supports host list entries under 'hosts:'."));
+                        continue;
+                    }
+
+                    if (inGroupChildren)
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' only supports group list entries under 'children:'."));
                         continue;
                     }
 
@@ -663,6 +689,7 @@ public static class TargetResolver
                 }
             }
 
+            ValidateGroupGraph(groups, errors);
             return new(hosts, groups, tags, groupTransports, defaultTransport);
         }
 
@@ -676,17 +703,14 @@ public static class TargetResolver
                 yield return host;
             }
 
-            if (!groups.TryGetValue(selector, out var groupHosts))
+            if (!groups.TryGetValue(selector, out _))
             {
                 yield break;
             }
 
-            foreach (var groupHost in groupHosts)
+            foreach (var groupHost in ResolveGroupHosts(selector))
             {
-                if (hosts.TryGetValue(groupHost, out var resolved))
-                {
-                    yield return resolved;
-                }
+                yield return groupHost;
             }
         }
 
@@ -744,10 +768,9 @@ public static class TargetResolver
             }
 
             TransportKind? groupTransport = null;
-            foreach (var group in groups)
+            foreach (var groupName in ResolveGroupsForHost(hostName))
             {
-                if (!group.Value.Contains(hostName, StringComparer.OrdinalIgnoreCase)
-                    || !groupTransports.TryGetValue(group.Key, out var candidateTransport))
+                if (!groupTransports.TryGetValue(groupName, out var candidateTransport))
                 {
                     continue;
                 }
@@ -785,12 +808,30 @@ public static class TargetResolver
         private static void AddInventoryGroupHost(
             string path,
             IDictionary<string, InventoryHost> hosts,
-            IDictionary<string, List<string>> groups,
+            IDictionary<string, InventoryGroup> groups,
             string group,
             string host)
         {
             AddInventoryHost(path, hosts, host);
-            groups[group].Add(host);
+            if (string.IsNullOrWhiteSpace(host))
+            {
+                return;
+            }
+
+            groups[group].Hosts.Add(host);
+        }
+
+        private static void AddInventoryGroupChild(
+            IDictionary<string, InventoryGroup> groups,
+            string group,
+            string child)
+        {
+            if (string.IsNullOrWhiteSpace(child))
+            {
+                return;
+            }
+
+            groups[group].Children.Add(child);
         }
 
         private static void AddInventoryHost(string path, IDictionary<string, InventoryHost> hosts, string host)
@@ -872,7 +913,146 @@ public static class TargetResolver
 
         private static string ReadAssignedValue(string value) =>
             value["transport:".Length..].Trim();
+
+        private IEnumerable<InventoryHost> ResolveGroupHosts(string groupName)
+        {
+            var yieldedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var hostName in ResolveGroupHostNames(groupName, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+            {
+                if (!yieldedHosts.Add(hostName))
+                {
+                    continue;
+                }
+
+                if (hosts.TryGetValue(hostName, out var resolved))
+                {
+                    yield return resolved;
+                }
+            }
+        }
+
+        private IEnumerable<string> ResolveGroupHostNames(string groupName, ISet<string> visitedGroups)
+        {
+            if (!visitedGroups.Add(groupName) || !groups.TryGetValue(groupName, out var group))
+            {
+                yield break;
+            }
+
+            foreach (var hostName in group.Hosts)
+            {
+                yield return hostName;
+            }
+
+            foreach (var childGroup in group.Children)
+            {
+                foreach (var hostName in ResolveGroupHostNames(childGroup, visitedGroups))
+                {
+                    yield return hostName;
+                }
+            }
+        }
+
+        private IEnumerable<string> ResolveGroupsForHost(string hostName)
+        {
+            foreach (var groupName in groups.Keys)
+            {
+                if (GroupContainsHost(groupName, hostName, new HashSet<string>(StringComparer.OrdinalIgnoreCase)))
+                {
+                    yield return groupName;
+                }
+            }
+        }
+
+        private bool GroupContainsHost(string groupName, string hostName, ISet<string> visitedGroups)
+        {
+            if (!visitedGroups.Add(groupName) || !groups.TryGetValue(groupName, out var group))
+            {
+                return false;
+            }
+
+            if (group.Hosts.Contains(hostName, StringComparer.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            foreach (var childGroup in group.Children)
+            {
+                if (GroupContainsHost(childGroup, hostName, visitedGroups))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void ValidateGroupGraph(
+            IReadOnlyDictionary<string, InventoryGroup> groups,
+            ICollection<DispatchValidationError> errors)
+        {
+            foreach (var group in groups)
+            {
+                foreach (var child in group.Value.Children)
+                {
+                    if (!groups.ContainsKey(child))
+                    {
+                        errors.Add(new("InventorySchemaInvalid", $"Group '{group.Key}' references unknown child group '{child}'."));
+                    }
+                }
+            }
+
+            var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var activePath = new List<string>();
+            var activeSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var groupName in groups.Keys)
+            {
+                ValidateGroupAcyclic(groupName, groups, errors, visited, activePath, activeSet);
+            }
+        }
+
+        private static void ValidateGroupAcyclic(
+            string groupName,
+            IReadOnlyDictionary<string, InventoryGroup> groups,
+            ICollection<DispatchValidationError> errors,
+            ISet<string> visited,
+            IList<string> activePath,
+            ISet<string> activeSet)
+        {
+            if (visited.Contains(groupName))
+            {
+                return;
+            }
+
+            if (activeSet.Contains(groupName))
+            {
+                var cycleStart = activePath.IndexOf(groupName);
+                var cycle = cycleStart >= 0
+                    ? string.Join(" -> ", activePath.Skip(cycleStart).Append(groupName))
+                    : groupName;
+                errors.Add(new("InventoryGroupCycle", $"Inventory group children contain a cycle: {cycle}."));
+                return;
+            }
+
+            if (!groups.TryGetValue(groupName, out var group))
+            {
+                return;
+            }
+
+            activeSet.Add(groupName);
+            activePath.Add(groupName);
+
+            foreach (var child in group.Children)
+            {
+                ValidateGroupAcyclic(child, groups, errors, visited, activePath, activeSet);
+            }
+
+            activePath.RemoveAt(activePath.Count - 1);
+            activeSet.Remove(groupName);
+            visited.Add(groupName);
+        }
     }
 
     private sealed record InventoryHost(string Name, string Source, TransportKind? Transport);
+    private sealed record InventoryGroup(List<string> Hosts, List<string> Children);
 }

@@ -157,6 +157,36 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void ResolvesNestedInventoryGroupsAndInheritedTransport()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: winrm
+            groups:
+              prod:
+                vars:
+                  transport: psrp
+                children:
+                  - web
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["prod"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["WEB01", "WEB02"], result.Targets.Select(static target => target.Name));
+        Assert.Equal(TransportKind.Psrp, result.InventoryTransport);
+        Assert.All(result.Targets, target => Assert.Equal($"inventory:{inventory.Path}", target.Source));
+    }
+
+    [Fact]
     public void ResolvesInventoryDefaultTransportForInventoryHostWithoutOverrides()
     {
         using var inventory = TemporaryTargetFile.Create("""
@@ -301,15 +331,16 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
-    public void UnsupportedInventoryGroupFieldFailsClearly()
+    public void InventoryGroupCycleFailsClearly()
     {
         using var inventory = TemporaryTargetFile.Create("""
             groups:
               web:
                 children:
                   - prod
-                hosts:
-                  - WEB01
+              prod:
+                children:
+                  - web
             """);
 
         var result = TargetResolver.Resolve(new TargetResolutionInput(
@@ -319,7 +350,7 @@ public sealed class TargetResolutionTests
             InventoryPath: inventory.Path));
 
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryGroupCycle");
     }
 
     [Fact]

@@ -109,6 +109,8 @@ tag:name
 file:path
 ```
 
+For the current `run ps` path, a group selector expands nested YAML `groups.<group>.children` transitively, with duplicate hosts removed in first-seen order. Child-group references must resolve to defined groups, and cyclic child-group graphs fail validation before planning.
+
 Advanced selector expressions such as `web:&prod` and `web:!canary` are not part of the initial selector set and must fail validation clearly.
 
 Initial documented job schema direction:
@@ -128,7 +130,7 @@ tasks
 
 Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
 
-Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation supports a small YAML inventory subset for `defaults`, `groups`, `hosts`, host `tags`, explicit `--config <path>` defaults for `inventory`, `target`, `exclude`, and `DefaultTransport`, and inventory transport precedence from YAML defaults/group vars/host vars. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly. Broader inventory schema behavior, additional host/group vars, credential references, and the remaining job/user-config/machine-config precedence chain remain roadmap work.
+Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation supports a small YAML inventory subset for `defaults`, `groups`, `hosts`, host `tags`, explicit `--config <path>` defaults for `inventory`, `target`, `exclude`, and `DefaultTransport`, nested `groups.<group>.children`, and inventory transport precedence from YAML defaults/group vars/host vars across inherited group membership. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly. Broader inventory schema behavior, additional host/group vars, credential references, and the remaining job/user-config/machine-config precedence chain remain roadmap work.
 
 Initial YAML job task vocabulary:
 
