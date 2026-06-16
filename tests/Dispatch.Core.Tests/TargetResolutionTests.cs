@@ -1,4 +1,5 @@
 using Dispatch.Core.Targeting;
+using Dispatch.Core.Models;
 
 namespace Dispatch.Core.Tests;
 
@@ -115,6 +116,107 @@ public sealed class TargetResolutionTests
         Assert.True(result.IsValid);
         Assert.Equal(["WEB01", "DB01"], result.Targets.Select(static target => target.Name));
         Assert.All(result.Targets, target => Assert.Equal($"inventory:{inventory.Path}", target.Source));
+    }
+
+    [Fact]
+    public void ResolvesInventoryTransportFromHostGroupVarsAndDefaults()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: winrm
+            groups:
+              web:
+                vars:
+                  transport: psrp
+                hosts:
+                  - WEB01
+                  - WEB02
+            hosts:
+              WEB01:
+                vars:
+                  transport: psexec
+              WEB02:
+                tags: [prod]
+            """);
+
+        var hostOverride = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+        var groupOverride = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB02"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(hostOverride.IsValid);
+        Assert.Equal(TransportKind.PsExec, hostOverride.InventoryTransport);
+        Assert.True(groupOverride.IsValid);
+        Assert.Equal(TransportKind.Psrp, groupOverride.InventoryTransport);
+    }
+
+    [Fact]
+    public void ResolvesInventoryDefaultTransportForInventoryHostWithoutOverrides()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(TransportKind.WinRm, result.InventoryTransport);
+    }
+
+    [Fact]
+    public void ConflictingInventoryTransportPoliciesFailClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            hosts:
+              WEB01:
+                transport: winrm
+              WEB02:
+                transport: psrp
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01,WEB02"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryTransportConflict");
+    }
+
+    [Fact]
+    public void UnsupportedInventoryTransportFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: ssh
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryTransportInvalid");
     }
 
     [Fact]

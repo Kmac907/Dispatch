@@ -45,12 +45,19 @@ public static class TargetResolver
             ExcludeSelectorTargets(selector, inventory, targets, errors);
         }
 
+        var inventoryTransportPolicies = errors.Count == 0
+            ? inventory.ResolveTransportPoliciesForTargets(targets, errors)
+            : new Dictionary<string, TransportKind?>(StringComparer.OrdinalIgnoreCase);
+        var inventoryTransport = errors.Count == 0
+            ? ResolveCommonInventoryTransport(inventoryTransportPolicies, errors)
+            : null;
+
         if (targets.Count == 0 && errors.Count == 0)
         {
             errors.Add(new("TargetsRequired", "At least one target is required from --target, --inventory, --computer-name, or --target-file."));
         }
 
-        return new TargetResolutionResult(targets, errors);
+        return new TargetResolutionResult(targets, errors, inventoryTransport, inventoryTransportPolicies);
     }
 
     private static void AddComputerNameTargets(
@@ -283,7 +290,7 @@ public static class TargetResolver
 
         var lines = File.ReadAllLines(inventoryPath);
         return LooksLikeYaml(lines)
-            ? InventoryTargets.FromYaml(inventoryPath, lines)
+            ? InventoryTargets.FromYaml(inventoryPath, lines, errors)
             : InventoryTargets.FromText(inventoryPath, lines);
     }
 
@@ -306,6 +313,37 @@ public static class TargetResolver
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Where(static target => !string.IsNullOrWhiteSpace(target));
 
+    private static TransportKind? ResolveCommonInventoryTransport(
+        IReadOnlyDictionary<string, TransportKind?> inventoryTransportPolicies,
+        ICollection<DispatchValidationError> errors)
+    {
+        TransportKind? resolvedTransport = null;
+
+        foreach (var policy in inventoryTransportPolicies.Values)
+        {
+            if (policy is null)
+            {
+                continue;
+            }
+
+            if (resolvedTransport is null)
+            {
+                resolvedTransport = policy.Value;
+                continue;
+            }
+
+            if (resolvedTransport != policy.Value)
+            {
+                errors.Add(new(
+                    "InventoryTransportConflict",
+                    $"Selected targets resolved conflicting inventory transport policies '{resolvedTransport.Value.ToDispatchString()}' and '{policy.Value.ToDispatchString()}'. Use --transport to override or align the inventory transport settings."));
+                return null;
+            }
+        }
+
+        return resolvedTransport;
+    }
+
     private static void AddTarget(
         string target,
         string source,
@@ -325,21 +363,29 @@ public static class TargetResolver
         private readonly Dictionary<string, InventoryHost> hosts;
         private readonly Dictionary<string, List<string>> groups;
         private readonly Dictionary<string, List<string>> tags;
+        private readonly Dictionary<string, TransportKind> groupTransports;
+        private readonly TransportKind? defaultTransport;
 
         private InventoryTargets(
             Dictionary<string, InventoryHost> hosts,
             Dictionary<string, List<string>> groups,
-            Dictionary<string, List<string>> tags)
+            Dictionary<string, List<string>> tags,
+            Dictionary<string, TransportKind> groupTransports,
+            TransportKind? defaultTransport)
         {
             this.hosts = hosts;
             this.groups = groups;
             this.tags = tags;
+            this.groupTransports = groupTransports;
+            this.defaultTransport = defaultTransport;
         }
 
         public static InventoryTargets Empty { get; } = new(
             new(StringComparer.OrdinalIgnoreCase),
             new(StringComparer.OrdinalIgnoreCase),
-            new(StringComparer.OrdinalIgnoreCase));
+            new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            null);
 
         public IEnumerable<InventoryHost> AllHosts => hosts.Values;
 
@@ -358,23 +404,32 @@ public static class TargetResolver
 
                 foreach (var target in SplitTargets(trimmed))
                 {
-                    hosts.TryAdd(target, new(target, $"inventory:{path}:{lineNumber}"));
+                    hosts.TryAdd(target, new(target, $"inventory:{path}:{lineNumber}", null));
                 }
             }
 
-            return new(hosts, new(StringComparer.OrdinalIgnoreCase), new(StringComparer.OrdinalIgnoreCase));
+            return new(
+                hosts,
+                new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                null);
         }
 
-        public static InventoryTargets FromYaml(string path, IReadOnlyList<string> lines)
+        public static InventoryTargets FromYaml(string path, IReadOnlyList<string> lines, ICollection<DispatchValidationError> errors)
         {
             var hosts = new Dictionary<string, InventoryHost>(StringComparer.OrdinalIgnoreCase);
             var groups = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var tags = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+            var groupTransports = new Dictionary<string, TransportKind>(StringComparer.OrdinalIgnoreCase);
+            TransportKind? defaultTransport = null;
             string? section = null;
             string? currentGroup = null;
             string? currentHost = null;
             var inGroupHosts = false;
+            var inGroupVars = false;
             var inHostTags = false;
+            var inHostVars = false;
 
             foreach (var rawLine in lines)
             {
@@ -392,7 +447,25 @@ public static class TargetResolver
                     currentGroup = null;
                     currentHost = null;
                     inGroupHosts = false;
+                    inGroupVars = false;
                     inHostTags = false;
+                    inHostVars = false;
+                    continue;
+                }
+
+                if (section?.Equals("defaults", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (indent == 2 && TryParseTransportAssignment(trimmed, out var parsedTransport))
+                    {
+                        if (parsedTransport is null)
+                        {
+                            errors.Add(new("InventoryTransportInvalid", $"Inventory default transport '{ReadAssignedValue(trimmed)}' is not supported."));
+                            continue;
+                        }
+
+                        defaultTransport = parsedTransport.Value;
+                    }
+
                     continue;
                 }
 
@@ -403,18 +476,42 @@ public static class TargetResolver
                         currentGroup = trimmed.TrimEnd(':');
                         groups.TryAdd(currentGroup, []);
                         inGroupHosts = false;
+                        inGroupVars = false;
                         continue;
                     }
 
                     if (indent >= 4 && trimmed.Equals("hosts:", StringComparison.OrdinalIgnoreCase))
                     {
                         inGroupHosts = currentGroup is not null;
+                        inGroupVars = false;
+                        continue;
+                    }
+
+                    if (indent >= 4 && trimmed.Equals("vars:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inGroupVars = currentGroup is not null;
+                        inGroupHosts = false;
                         continue;
                     }
 
                     if (inGroupHosts && trimmed.StartsWith("- ", StringComparison.Ordinal))
                     {
                         AddInventoryGroupHost(path, hosts, groups, currentGroup!, trimmed[2..].Trim());
+                        continue;
+                    }
+
+                    if (currentGroup is not null && indent >= 4 && TryParseTransportAssignment(trimmed, out var parsedGroupTransport))
+                    {
+                        if (parsedGroupTransport is null)
+                        {
+                            errors.Add(new("InventoryTransportInvalid", $"Group '{currentGroup}' has unsupported transport '{ReadAssignedValue(trimmed)}'."));
+                            continue;
+                        }
+
+                        if (inGroupVars || indent == 4)
+                        {
+                            groupTransports[currentGroup] = parsedGroupTransport.Value;
+                        }
                     }
 
                     continue;
@@ -427,6 +524,7 @@ public static class TargetResolver
                         currentHost = trimmed[2..].Trim();
                         AddInventoryHost(path, hosts, currentHost);
                         inHostTags = false;
+                        inHostVars = false;
                         continue;
                     }
 
@@ -435,6 +533,7 @@ public static class TargetResolver
                         currentHost = trimmed.TrimEnd(':');
                         AddInventoryHost(path, hosts, currentHost);
                         inHostTags = false;
+                        inHostVars = false;
                         continue;
                     }
 
@@ -446,17 +545,40 @@ public static class TargetResolver
                         }
 
                         inHostTags = true;
+                        inHostVars = false;
                         continue;
                     }
 
                     if (currentHost is not null && inHostTags && trimmed.StartsWith("- ", StringComparison.Ordinal))
                     {
                         AddInventoryTag(tags, trimmed[2..].Trim(), currentHost);
+                        continue;
+                    }
+
+                    if (currentHost is not null && indent >= 4 && trimmed.Equals("vars:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        inHostVars = true;
+                        inHostTags = false;
+                        continue;
+                    }
+
+                    if (currentHost is not null && indent >= 4 && TryParseTransportAssignment(trimmed, out var parsedHostTransport))
+                    {
+                        if (parsedHostTransport is null)
+                        {
+                            errors.Add(new("InventoryTransportInvalid", $"Host '{currentHost}' has unsupported transport '{ReadAssignedValue(trimmed)}'."));
+                            continue;
+                        }
+
+                        if (indent == 4 || inHostVars)
+                        {
+                            hosts[currentHost] = hosts[currentHost] with { Transport = parsedHostTransport };
+                        }
                     }
                 }
             }
 
-            return new(hosts, groups, tags);
+            return new(hosts, groups, tags, groupTransports, defaultTransport);
         }
 
         public bool ContainsGroupOrHost(string selector) =>
@@ -499,6 +621,82 @@ public static class TargetResolver
             }
         }
 
+        public IReadOnlyDictionary<string, TransportKind?> ResolveTransportPoliciesForTargets(
+            IEnumerable<TargetSpec> targets,
+            ICollection<DispatchValidationError> errors)
+        {
+            var resolvedPolicies = new Dictionary<string, TransportKind?>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var target in targets)
+            {
+                if (!TryResolveTransportForHost(target.Name, errors, out var hostTransport) || hostTransport is null)
+                {
+                    continue;
+                }
+
+                resolvedPolicies[target.Name] = hostTransport.Value;
+            }
+
+            return resolvedPolicies;
+        }
+
+        private bool TryResolveTransportForHost(
+            string hostName,
+            ICollection<DispatchValidationError> errors,
+            out TransportKind? transport)
+        {
+            transport = null;
+
+            if (!hosts.TryGetValue(hostName, out var host))
+            {
+                return false;
+            }
+
+            if (host.Transport is not null)
+            {
+                transport = host.Transport.Value;
+                return true;
+            }
+
+            TransportKind? groupTransport = null;
+            foreach (var group in groups)
+            {
+                if (!group.Value.Contains(hostName, StringComparer.OrdinalIgnoreCase)
+                    || !groupTransports.TryGetValue(group.Key, out var candidateTransport))
+                {
+                    continue;
+                }
+
+                if (groupTransport is null)
+                {
+                    groupTransport = candidateTransport;
+                    continue;
+                }
+
+                if (groupTransport != candidateTransport)
+                {
+                    errors.Add(new(
+                        "InventoryTransportConflict",
+                        $"Host '{hostName}' inherits conflicting group transport policies '{groupTransport.Value.ToDispatchString()}' and '{candidateTransport.ToDispatchString()}'."));
+                    return false;
+                }
+            }
+
+            if (groupTransport is not null)
+            {
+                transport = groupTransport.Value;
+                return true;
+            }
+
+            if (defaultTransport is not null)
+            {
+                transport = defaultTransport.Value;
+                return true;
+            }
+
+            return false;
+        }
+
         private static void AddInventoryGroupHost(
             string path,
             IDictionary<string, InventoryHost> hosts,
@@ -514,7 +712,7 @@ public static class TargetResolver
         {
             if (!string.IsNullOrWhiteSpace(host))
             {
-                hosts.TryAdd(host, new(host, $"inventory:{path}"));
+                hosts.TryAdd(host, new(host, $"inventory:{path}", null));
             }
         }
 
@@ -538,7 +736,35 @@ public static class TargetResolver
             value.Trim()
                 .Trim('[', ']')
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        private static bool TryParseTransportAssignment(string value, out TransportKind? transport)
+        {
+            transport = null;
+            if (!value.StartsWith("transport:", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var assigned = ReadAssignedValue(value);
+            if (assigned.Equals("psexec", StringComparison.OrdinalIgnoreCase))
+            {
+                transport = TransportKind.PsExec;
+            }
+            else if (assigned.Equals("psrp", StringComparison.OrdinalIgnoreCase))
+            {
+                transport = TransportKind.Psrp;
+            }
+            else if (assigned.Equals("winrm", StringComparison.OrdinalIgnoreCase))
+            {
+                transport = TransportKind.WinRm;
+            }
+
+            return true;
+        }
+
+        private static string ReadAssignedValue(string value) =>
+            value["transport:".Length..].Trim();
     }
 
-    private sealed record InventoryHost(string Name, string Source);
+    private sealed record InventoryHost(string Name, string Source, TransportKind? Transport);
 }

@@ -19,7 +19,7 @@ internal sealed class DispatchRunCommandParser
         string? scriptPath = null;
         var computerNameValues = new List<string>();
         string? targetFile = null;
-        var transport = defaultTransport;
+        TransportKind? transportOverride = null;
         var expectedExitCodes = defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
         int? throttle = null;
         string? localRunRoot = null;
@@ -125,7 +125,7 @@ internal sealed class DispatchRunCommandParser
                         return false;
                     }
 
-                    if (!TryParseTransport(transportValue, defaultTransport, out transport))
+                    if (!TryParseTransport(transportValue, out transportOverride))
                     {
                         error = $"Unsupported transport '{transportValue}'.";
                         return false;
@@ -222,12 +222,17 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
+        if (!TryResolveTransport(targetResolution, transportOverride, defaultTransport, out var resolvedTransport, out error))
+        {
+            return false;
+        }
+
         command = new DispatchRunCommand(
             DryRun: dryRun,
             ScriptPath: scriptPath,
             ScriptArguments: scriptArguments,
             Targets: targetResolution.Targets,
-            Transport: transport,
+            Transport: resolvedTransport,
             ExpectedExitCodes: expectedExitCodes,
             Throttle: throttle,
             LocalRunRoot: localRunRoot,
@@ -266,15 +271,60 @@ internal sealed class DispatchRunCommandParser
     private static IEnumerable<string> SplitCommaSeparatedValues(string value) =>
         value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-    private static bool TryParseTransport(string value, TransportKind defaultTransport, out TransportKind transport)
+    private static bool TryResolveTransport(
+        TargetResolutionResult targetResolution,
+        TransportKind? transportOverride,
+        TransportKind defaultTransport,
+        out TransportKind transport,
+        out string error)
+    {
+        if (transportOverride is not null)
+        {
+            transport = transportOverride.Value;
+            error = string.Empty;
+            return true;
+        }
+
+        var effectiveTargetsByTransport = new Dictionary<TransportKind, List<string>>();
+        foreach (var target in targetResolution.Targets)
+        {
+            var effectiveTransport = targetResolution.InventoryTransportPolicies?.TryGetValue(target.Name, out var inventoryTransport) == true
+                                     && inventoryTransport is not null
+                ? inventoryTransport.Value
+                : defaultTransport;
+            if (!effectiveTargetsByTransport.TryGetValue(effectiveTransport, out var targets))
+            {
+                targets = [];
+                effectiveTargetsByTransport[effectiveTransport] = targets;
+            }
+
+            targets.Add(target.Name);
+        }
+
+        if (effectiveTargetsByTransport.Count <= 1)
+        {
+            transport = effectiveTargetsByTransport.Keys.SingleOrDefault(defaultTransport);
+            error = string.Empty;
+            return true;
+        }
+
+        var transports = effectiveTargetsByTransport
+            .OrderBy(static entry => entry.Key.ToDispatchString(), StringComparer.Ordinal)
+            .Select(static entry => $"'{entry.Key.ToDispatchString()}' for [{string.Join(", ", entry.Value)}]");
+        transport = defaultTransport;
+        error = $"InventoryTransportConflict: Selected targets resolved conflicting transport policies {string.Join(" and ", transports)}. Use --transport to override or align the inventory transport settings.";
+        return false;
+    }
+
+    private static bool TryParseTransport(string value, out TransportKind? transport)
     {
         transport = value.ToLowerInvariant() switch
         {
-            "auto" => defaultTransport,
+            "auto" => null,
             "psexec" => TransportKind.PsExec,
             "psrp" => TransportKind.Psrp,
             "winrm" => TransportKind.WinRm,
-            _ => default
+            _ => null
         };
 
         return value.Equals("auto", StringComparison.OrdinalIgnoreCase)

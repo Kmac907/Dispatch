@@ -1139,7 +1139,8 @@ Definition of done:
 
 Current implementation note:
 - `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, groups, host names, `tag:<name>`, and `file:<path>`.
-- Advanced selectors, job/config precedence, and broader YAML inventory schema behavior remain pending.
+- The current YAML inventory subset now includes transport precedence from inventory defaults, group vars, and host vars when CLI transport is not explicitly set.
+- Advanced selectors, broader YAML inventory schema behavior, credential references, and remaining job/config precedence work remain pending.
 
 #### 6.3 Structured Run Logs And Log Commands
 

@@ -347,6 +347,220 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteUsesInventoryTransportWhenTransportIsNotSpecified()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "WEB01",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteAutoTransportUsesInventoryTransportBeforeConfiguredDefault()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "WEB01",
+                    "--transport",
+                    "auto",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteExplicitTransportOverridesInventoryTransport()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "WEB01",
+                    "--transport",
+                    "psexec",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteRejectsConflictingInventoryTransportsBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            hosts:
+              WEB01:
+                transport: winrm
+              WEB02:
+                transport: psrp
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "WEB01,WEB02",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("InventoryTransportConflict", output + error, StringComparison.Ordinal);
+            Assert.Null(planner.LastRequest);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteRejectsMixedInventoryAndDefaultTransportsBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "PC001,WEB01",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("InventoryTransportConflict", output + error, StringComparison.Ordinal);
+            Assert.Null(planner.LastRequest);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteUsesInventoryTargetSelectorAndExclude()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

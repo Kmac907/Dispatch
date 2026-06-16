@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, and initial inventory/target selectors for `run ps`, and keeps YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work. Transport execution is still PsExec-only today; raw WinRM and PSRP are the next roadmap slices because the current validation environment has working WinRM targets and unreliable `\\<device>\C$` admin-share staging for PsExec-first validation.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, initial inventory/target selectors for `run ps`, and initial inventory transport precedence from YAML defaults/group vars/host vars, and keeps YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work. Transport execution is still PsExec-only today; raw WinRM and PSRP are the next transport roadmap slices because the current validation environment has working WinRM targets and unreliable `\\<device>\C$` admin-share staging for PsExec-first validation.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -128,7 +128,7 @@ tasks
 
 Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
 
-Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation only supports a small YAML inventory subset for `hosts`, `groups`, and host `tags`; broader inventory schema behavior, host/group vars, transport policy, credential references, and precedence remain roadmap work.
+Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation supports a small YAML inventory subset for `hosts`, `groups`, host `tags`, and inventory transport precedence from YAML defaults/group vars/host vars. Broader inventory schema behavior, additional host/group vars, credential references, and job/config precedence remain roadmap work.
 
 Initial YAML job task vocabulary:
 
