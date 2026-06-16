@@ -178,6 +178,43 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void DefaultsOnlyYamlInventoryDoesNotInventHostsAndRequiresRealTargets()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: winrm
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Empty(result.Targets);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetsRequired");
+    }
+
+    [Fact]
+    public void DefaultsOnlyYamlInventoryAllSelectorFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: winrm
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["all"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Empty(result.Targets);
+        Assert.Contains(result.Errors, static error => error.Code == "TargetSelectorMatchedNoTargets");
+    }
+
+    [Fact]
     public void ConflictingInventoryTransportPoliciesFailClearly()
     {
         using var inventory = TemporaryTargetFile.Create("""

@@ -297,8 +297,16 @@ public static class TargetResolver
     private static bool LooksLikeYaml(IEnumerable<string> lines) =>
         lines.Any(static line =>
         {
-            var trimmed = line.Trim();
-            return trimmed is "hosts:" or "groups:" || trimmed.StartsWith("tags:", StringComparison.OrdinalIgnoreCase);
+            var trimmed = line.Split('#', 2)[0].Trim();
+            if (!trimmed.EndsWith(':'))
+            {
+                return trimmed.StartsWith("tags:", StringComparison.OrdinalIgnoreCase);
+            }
+
+            var sectionName = trimmed.TrimEnd(':');
+            return sectionName.Equals("defaults", StringComparison.OrdinalIgnoreCase)
+                || sectionName.Equals("groups", StringComparison.OrdinalIgnoreCase)
+                || sectionName.Equals("hosts", StringComparison.OrdinalIgnoreCase);
         });
 
     private static bool IsUnsupportedSelectorExpression(string selector) =>
