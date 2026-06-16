@@ -220,6 +220,91 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void UnsupportedInventorySectionFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              transport: winrm
+            metadata:
+              owner: ops
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventorySectionUnsupported");
+    }
+
+    [Fact]
+    public void UnsupportedInventoryDefaultsFieldFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults:
+              credential: prod-admin
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+    }
+
+    [Fact]
+    public void UnsupportedInventoryGroupFieldFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            groups:
+              web:
+                children:
+                  - prod
+                hosts:
+                  - WEB01
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["web"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+    }
+
+    [Fact]
+    public void UnsupportedInventoryHostFieldFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            hosts:
+              WEB01:
+                credential: prod-admin
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+    }
+
+    [Fact]
     public void SelectorFileCanBeUsedWithoutInventory()
     {
         using var targetFile = TemporaryTargetFile.Create("PC200\r\nPC201");

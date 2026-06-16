@@ -636,6 +636,46 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteRejectsUnsupportedInventoryFieldBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            hosts:
+              WEB01:
+                credential: prod-admin
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "WEB01",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("InventoryFieldUnsupported", output + error, StringComparison.Ordinal);
+            Assert.Null(planner.LastRequest);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
     public async Task QuietRunPowerShellPlanSuppressesRichOutputAndAcceptsDiagnosticFlags()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

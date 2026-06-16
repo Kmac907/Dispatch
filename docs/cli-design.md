@@ -128,7 +128,7 @@ tasks
 
 Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
 
-Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation supports a small YAML inventory subset for `hosts`, `groups`, host `tags`, and inventory transport precedence from YAML defaults/group vars/host vars. Broader inventory schema behavior, additional host/group vars, credential references, and job/config precedence remain roadmap work.
+Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation supports a small YAML inventory subset for `defaults`, `groups`, `hosts`, host `tags`, and inventory transport precedence from YAML defaults/group vars/host vars. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly. Broader inventory schema behavior, additional host/group vars, credential references, and job/config precedence remain roadmap work.
 
 Initial YAML job task vocabulary:
 

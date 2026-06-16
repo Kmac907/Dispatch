@@ -443,13 +443,33 @@ public static class TargetResolver
                 var indent = line.Length - line.TrimStart().Length;
                 if (indent == 0 && trimmed.EndsWith(':'))
                 {
-                    section = trimmed.TrimEnd(':');
+                    var sectionName = trimmed.TrimEnd(':');
+                    if (!IsSupportedTopLevelSection(sectionName))
+                    {
+                        errors.Add(new("InventorySectionUnsupported", $"Inventory section '{sectionName}' is not supported."));
+                        section = null;
+                        currentGroup = null;
+                        currentHost = null;
+                        inGroupHosts = false;
+                        inGroupVars = false;
+                        inHostTags = false;
+                        inHostVars = false;
+                        continue;
+                    }
+
+                    section = sectionName;
                     currentGroup = null;
                     currentHost = null;
                     inGroupHosts = false;
                     inGroupVars = false;
                     inHostTags = false;
                     inHostVars = false;
+                    continue;
+                }
+
+                if (indent == 0)
+                {
+                    errors.Add(new("InventorySchemaInvalid", $"Inventory line '{trimmed}' is not a supported top-level mapping."));
                     continue;
                 }
 
@@ -464,8 +484,10 @@ public static class TargetResolver
                         }
 
                         defaultTransport = parsedTransport.Value;
+                        continue;
                     }
 
+                    errors.Add(new("InventoryFieldUnsupported", $"Inventory defaults field '{ReadFieldName(trimmed)}' is not supported."));
                     continue;
                 }
 
@@ -512,8 +534,35 @@ public static class TargetResolver
                         {
                             groupTransports[currentGroup] = parsedGroupTransport.Value;
                         }
+
+                        continue;
                     }
 
+                    if (currentGroup is null)
+                    {
+                        errors.Add(new("InventorySchemaInvalid", $"Inventory groups entry '{trimmed}' appears before a group name."));
+                        continue;
+                    }
+
+                    if (inGroupHosts)
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' only supports host list entries under 'hosts:'."));
+                        continue;
+                    }
+
+                    if (inGroupVars)
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' var '{ReadFieldName(trimmed)}' is not supported."));
+                        continue;
+                    }
+
+                    if (indent >= 4 && TryReadFieldName(trimmed, out var groupFieldName))
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' field '{groupFieldName}' is not supported."));
+                        continue;
+                    }
+
+                    errors.Add(new("InventorySchemaInvalid", $"Group '{currentGroup}' entry '{trimmed}' is not supported."));
                     continue;
                 }
 
@@ -574,7 +623,35 @@ public static class TargetResolver
                         {
                             hosts[currentHost] = hosts[currentHost] with { Transport = parsedHostTransport };
                         }
+
+                        continue;
                     }
+
+                    if (currentHost is null)
+                    {
+                        errors.Add(new("InventorySchemaInvalid", $"Inventory host entry '{trimmed}' appears before a host name."));
+                        continue;
+                    }
+
+                    if (inHostTags)
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' only supports tag list entries under 'tags:'."));
+                        continue;
+                    }
+
+                    if (inHostVars)
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' var '{ReadFieldName(trimmed)}' is not supported."));
+                        continue;
+                    }
+
+                    if (indent >= 4 && TryReadFieldName(trimmed, out var hostFieldName))
+                    {
+                        errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' field '{hostFieldName}' is not supported."));
+                        continue;
+                    }
+
+                    errors.Add(new("InventorySchemaInvalid", $"Host '{currentHost}' entry '{trimmed}' is not supported."));
                 }
             }
 
@@ -737,6 +814,11 @@ public static class TargetResolver
                 .Trim('[', ']')
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+        private static bool IsSupportedTopLevelSection(string sectionName) =>
+            sectionName.Equals("defaults", StringComparison.OrdinalIgnoreCase)
+            || sectionName.Equals("groups", StringComparison.OrdinalIgnoreCase)
+            || sectionName.Equals("hosts", StringComparison.OrdinalIgnoreCase);
+
         private static bool TryParseTransportAssignment(string value, out TransportKind? transport)
         {
             transport = null;
@@ -761,6 +843,24 @@ public static class TargetResolver
 
             return true;
         }
+
+        private static bool TryReadFieldName(string value, out string fieldName)
+        {
+            fieldName = string.Empty;
+            var separatorIndex = value.IndexOf(':', StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+            {
+                return false;
+            }
+
+            fieldName = value[..separatorIndex].Trim();
+            return fieldName.Length > 0;
+        }
+
+        private static string ReadFieldName(string value) =>
+            TryReadFieldName(value, out var fieldName)
+                ? fieldName
+                : value.Trim();
 
         private static string ReadAssignedValue(string value) =>
             value["transport:".Length..].Trim();
