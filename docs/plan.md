@@ -18,9 +18,10 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - Automation CLI for v1 PowerShell script execution through `dispatch run ps <script.ps1>` and compatibility routing for the existing `dispatch run --script ...` shape until module/install callers migrate.
 - Target selection through inventory, direct host selectors, comma-separated selectors, and simple host files.
 - Target input from `--computer-name` and `--target-file`.
-- PsExec transport.
+- Raw WinRM transport.
+- PSRP transport.
 - Direct PowerShell script execution by default.
-- Script transfer/preparation under `C:\ProgramData\Dispatch`.
+- Script transfer/preparation under `C:\ProgramData\Dispatch` when the selected transport requires an endpoint-local script path.
 - Throttled multi-target execution.
 - Expected exit code handling, default `[0]`, with installer-friendly support for `[0,3010]`.
 - Local run/log folder with admin logs, CSV summary, JSON summary, per-target outputs, and an event stream suitable for live rendering and NDJSON output.
@@ -40,8 +41,8 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 ### Out of scope for v1
 
-- PSRP transport.
-- Raw WinRM transport.
+- Additional PsExec transport expansion beyond the current partial implementation and existing regression coverage.
+- PsExec-first live validation in environments where `\\<device>\C$` admin-share staging is unavailable.
 - Installer/media payload staging.
 - Azure Blob payload download, SAS generation, or SAS management.
 - Azure Key Vault secret retrieval or runtime secret handoff.
@@ -51,6 +52,10 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - MSI installer.
 - Azure Artifacts publishing.
 - Binary PowerShell cmdlets.
+
+### Current transport priority
+
+As of 2026-06-16, the next transport implementation priority is WinRM-based execution: raw WinRM first, then PSRP. The current codebase still implements only the PsExec execution path, but further PsExec-first roadmap work is deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging. Test hosts `82H9704` and `92H9704` are now reserved for WinRM-based live validation rather than PsExec-first validation.
 
 ## 3. Non-Goals
 
@@ -71,8 +76,8 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 - `Dispatch.Core` owns planning, target normalization, script transfer/preparation, orchestration, result models, logging abstractions, artifact collection, and transport interfaces.
 - `Dispatch.Transports.PsExec` owns PsExec command construction and captured process execution.
-- `Dispatch.Transports.Psrp` is a post-MVP transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
-- `Dispatch.Transports.WinRm` is a post-MVP raw WinRM transport using WS-Management shell/command semantics.
+- `Dispatch.Transports.Psrp` is a planned transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
+- `Dispatch.Transports.WinRm` is a planned raw WinRM transport using WS-Management shell/command semantics.
 - `Dispatch.Cli` owns `dispatch.exe`, Spectre.Console.Cli command routing, automation commands, operator output, live rendering, and structured output modes.
 - `Dispatch.PowerShell` owns wrapper functions such as `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 
@@ -162,12 +167,12 @@ v1 focuses on PowerShell script execution. Command execution is part of the shar
 Dispatch has one request model, but each transport/payload combination must be explicitly enabled.
 
 ```text
-psexec + ScriptPayload   = v1 supported
-psexec + CommandPayload  = modeled; post-MVP unless explicitly enabled
-psrp   + ScriptPayload   = post-MVP
-psrp   + CommandPayload  = post-MVP
-winrm  + ScriptPayload   = post-MVP
-winrm  + CommandPayload  = post-MVP
+psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
+psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
+psrp   + ScriptPayload   = next transport roadmap work after raw WinRM
+psrp   + CommandPayload  = same transport family; not yet implemented
+winrm  + ScriptPayload   = next transport roadmap work
+winrm  + CommandPayload  = same transport family; not yet implemented
 ```
 
 `DispatchRequest` may represent script and command payloads from the beginning, but v1 validation must reject unsupported transport/payload combinations before probing or touching endpoints. This keeps v1 focused on script orchestration while preserving the future Ansible-style command execution surface.
@@ -377,7 +382,7 @@ Raw WinRM:
 
 #### PsExec transport
 
-PsExec is the v1 transport. It uses SMB/admin-share file preparation and PsExec process execution from the admin workstation.
+PsExec is the only implemented execution transport today. It uses SMB/admin-share file preparation and PsExec process execution from the admin workstation, but further PsExec-first roadmap work is deferred behind WinRM-based transports because the current validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
 PsExec example:
 
@@ -416,7 +421,7 @@ PsExec SAS/secret handoff model:
 
 #### PSRP transport
 
-PSRP is the preferred post-MVP remoting transport for PowerShell-native execution. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH.
+PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH.
 
 Script example:
 
@@ -454,7 +459,7 @@ PSRP credential model:
 
 PSRP SAS/secret handoff model:
 
-- v1 has no PSRP transport and no supported PSRP SAS token handoff.
+- Dispatch does not yet have a PSRP transport or supported PSRP SAS token handoff.
 - Post-MVP preferred handoff is still the protected secret-file model so scripts receive a file path instead of a raw token.
 - For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, transfers the protected secret file to the endpoint over the PSRP remoting channel, and invokes the script with only the protected secret-file path.
 - PSRP invocation must pass a secret reference, not the raw secret value, for the default model.
@@ -476,7 +481,7 @@ Invoke-Command -ComputerName PC001 -ScriptBlock {
 
 #### Raw WinRM transport
 
-Raw WinRM is a separate post-MVP command/shell transport for environments that want Ansible-style WinRM behavior without depending on PowerShell runspace semantics. It uses WS-Management shell/command operations and maps process stdout, stderr, and exit code into the common Dispatch result model.
+Raw WinRM is the next transport implementation priority for environments that want Ansible-style WinRM behavior without depending on PowerShell runspace semantics. It uses WS-Management shell/command operations and maps process stdout, stderr, and exit code into the common Dispatch result model.
 
 Raw WinRM implementation choice:
 
@@ -517,7 +522,7 @@ Raw WinRM credential model:
 
 Raw WinRM SAS/secret handoff model:
 
-- v1 has no raw WinRM transport and no supported raw WinRM SAS token handoff.
+- Dispatch does not yet have a raw WinRM transport or supported raw WinRM SAS token handoff.
 - Post-MVP preferred handoff is the protected secret-file model transferred over the WinRM channel through streamed/chunked content.
 - For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, uploads the protected secret file through chunked WinRM content transfer, and invokes the remote process with only the protected secret-file path.
 - Raw SAS tokens must not be rendered into remote command lines, local logs, dry-run output, result JSON, CSV summaries, or terminal output.
@@ -947,7 +952,7 @@ Dependencies:
 Definition of done:
 - PsExec invocation is test-covered without requiring live endpoints.
 - Localhost or shim-based execution can validate success/failure classification.
-- Release and validation claims for PsExec execution must also include at least one successful live run against a user-approved reachable Windows endpoint when the environment allows it.
+- Release and validation claims for PsExec execution must include either at least one successful live run against a user-approved reachable Windows endpoint or an explicit blocker showing why the available environment cannot satisfy the required `\\<device>\C$` admin-share staging path.
 - Live PsExec verification should use the least invasive script practical, preferably stdout-only behavior or a temporary file under the Dispatch run folder, and must avoid unrelated endpoint changes.
 - Nonzero unexpected exit codes fail the target with clear reason.
 - Dry-run and command rendering cannot expose credentials, SAS tokens, protected file content, or decrypted values.
@@ -1358,12 +1363,12 @@ Definition of done:
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.
 - Pipeline or build script can create the optional ZIP without manual assembly.
 
-### Post-MVP Roadmap
+### Remaining Transport And Post-MVP Roadmap
 
 #### 9. PSRP Transport
 
 Objective:
-Add PowerShell Remoting Protocol execution while preserving the same job, script execution, command execution, result, and artifact model.
+Add PowerShell Remoting Protocol execution as a first-class WinRM-based transport while preserving the same job, script execution, command execution, result, and artifact model.
 
 Scope:
 - Implement `Dispatch.Transports.Psrp` using `Microsoft.PowerShell.SDK`.
@@ -1387,7 +1392,7 @@ Non-goals:
 - No endpoint-side Key Vault login requirement.
 
 Dependencies:
-- 8.
+- 6.1.
 
 Definition of done:
 - The same request can run through `--transport psrp`.
@@ -1395,11 +1400,12 @@ Definition of done:
 - Command and script execution both work through the same request/execution path.
 - Tests cover runspace connection planning, configuration name handling, stream mapping, error mapping, and result serialization.
 - Tests cover the common transport result contract for PSRP.
+- Live validation includes at least one successful PSRP run against a user-approved WinRM-reachable Windows endpoint.
 
 #### 9.1 Raw WinRM Transport
 
 Objective:
-Add Ansible-style raw WinRM shell/command execution while preserving the same job, script execution, command execution, result, and artifact model.
+Add Ansible-style raw WinRM shell/command execution as the next transport implementation priority while preserving the same job, script execution, command execution, result, and artifact model.
 
 Scope:
 - Implement `Dispatch.Transports.WinRm` as a raw WS-Management shell/command transport.
@@ -1425,13 +1431,14 @@ Non-goals:
 - No Linux/macOS target support.
 
 Dependencies:
-- 9.
+- 6.1.
 
 Definition of done:
 - The same request can run through `--transport winrm`.
 - Raw WinRM results map into the same target result model as PsExec and PSRP.
 - Command and script execution both work through the same request/execution path.
 - Tests cover shell/command planning, timeout classification, chunked transfer planning, stdout/stderr/exit-code mapping, and result serialization.
+- Live validation includes at least one successful raw WinRM run against a user-approved WinRM-reachable Windows endpoint.
 
 #### 10. Script-Owned Payload Documentation And Guardrails
 
@@ -1555,7 +1562,8 @@ Definition of done:
 - `dispatch` starts the active CLI.
 - `dispatch run ps <script.ps1> --plan` or the compatibility dry-run path produces a complete execution plan.
 - `dispatch run` can run a prepared script through PsExec against a test target or shim.
-- Endpoint execution validation must include at least one successful live PsExec verification against a user-approved reachable Windows endpoint, or an explicit blocker stating why the supplied host could not be resolved or reached.
+- WinRM-based endpoint execution validation must include at least one successful live raw WinRM or PSRP verification against a user-approved reachable Windows endpoint before those transports are claimed.
+- PsExec validation may remain blocked when the supplied environment does not provide working `\\<device>\C$` admin-share staging, but that blocker must be recorded explicitly before any PsExec-first claim is made.
 - `dispatch --help` shows the documented Spectre command tree.
 - Rich terminal output uses Spectre.Console, and JSON/NDJSON output modes are non-decorative.
 - Multi-target execution respects throttle limit.
@@ -1583,16 +1591,16 @@ Definition of done:
 13. Spectre.Console.Cli product surface.
 14. Spectre live rendering and output modes.
 15. Inventory and target selection.
-16. Structured run logs and log commands.
-17. Credential references.
-18. YAML apply and job model.
-19. Push, hosts, doctor, and init command surfaces.
-20. CLI safety, policy, and exit codes.
-21. Operator diagnostics migration.
-22. PowerShell module wrapper.
-23. Source install and local packaging.
-24. PSRP transport.
-25. Raw WinRM transport.
+16. Raw WinRM transport.
+17. PSRP transport.
+18. Structured run logs and log commands.
+19. Credential references.
+20. YAML apply and job model.
+21. Push, hosts, doctor, and init command surfaces.
+22. CLI safety, policy, and exit codes.
+23. Operator diagnostics migration.
+24. PowerShell module wrapper.
+25. Source install and local packaging.
 26. Script-owned payload documentation and guardrails.
 27. Managed execution mode.
 28. Advanced job features.

@@ -2,9 +2,9 @@
 
 Dispatch is a Windows-native, push-style remote script execution tool for endpoint administrators. It is inspired by the operational idea of Ansible, but v1 is intentionally narrower: Dispatch is a script orchestrator and executor, not a playbook engine, package manager, configuration-management platform, or endpoint agent.
 
-The v1 goal is to let an administrator run a PowerShell script on one or more Windows endpoints through PsExec, collect logs and structured results, and expose the workflow through both `dispatch.exe` and a PowerShell module. Post-MVP transports will add separate Ansible-style `psrp` and raw `winrm` protocol integrations for script and command execution.
+The active roadmap goal is to let an administrator run a PowerShell script on one or more Windows endpoints through WinRM-based transports first, collect logs and structured results, and expose the workflow through both `dispatch.exe` and a PowerShell module. Raw `winrm` is the next transport priority, PSRP follows it, and the existing PsExec path is deferred behind them because the current validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
-V1 intentionally does not implement command execution, PSRP/raw WinRM transports, or Dispatch-managed credential/SAS handoff. Those surfaces are modeled so the architecture stays consistent, but they are post-MVP.
+The current implementation still does not provide command execution, PSRP transport behavior, raw WinRM transport behavior, or Dispatch-managed credential/SAS handoff. Those surfaces are modeled in the contracts and roadmap, but only the PsExec execution path is implemented today.
 
 ## V1 Distribution Roadmap
 
@@ -38,7 +38,7 @@ Start-Dispatch
 
 ## Project Status
 
-Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, local operator diagnostics, a Spectre.Console.Cli route for the documented command tree, initial structured output modes, current-path output-control flags, current-path NDJSON event streaming, initial inventory/target selectors for `run ps`, and a Spectre.Console live run surface. The legacy Terminal.Gui command-service implementation has been removed from the active CLI. The remaining CLI roadmap includes durable run logs, deeper inventory selectors, YAML jobs, logs, credentials, push/hosts/init behavior, and the documented enterprise exit-code/policy behavior. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
+Dispatch has an initial .NET foundation, dry-run request planning, deterministic target resolution, local run layout planning, script preparation contracts, a script-owned external payload boundary, local operator diagnostics, a Spectre.Console.Cli route for the documented command tree, initial structured output modes, current-path output-control flags, current-path NDJSON event streaming, initial inventory/target selectors for `run ps`, and a Spectre.Console live run surface. The legacy Terminal.Gui command-service implementation has been removed from the active CLI. The only implemented transport execution path today is PsExec. The next roadmap work is raw WinRM first, then PSRP, because current test hosts can be validated through WinRM while PsExec remains dependent on broken remote admin-share access in the target environment. The remaining CLI roadmap includes durable run logs, deeper inventory selectors, YAML jobs, logs, credentials, push/hosts/init behavior, and the documented enterprise exit-code/policy behavior. The product roadmap lives in `docs/plan.md`, the CLI design contract lives in `docs/cli-design.md`, and the local implementation tracker lives in `workflow/build/implementation-plan.md`.
 
 ## Operator Diagnostics
 

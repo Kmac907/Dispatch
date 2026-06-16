@@ -23,7 +23,7 @@ internal static class SpectreConsoleRenderer
     {
         var console = CreateConsole(writer);
         console.MarkupLine("[bold]Dispatch[/]");
-        console.WriteLine("Windows-native automation runner for PowerShell, WinRM, and PsExec.");
+        console.WriteLine("Windows-native automation runner for PowerShell scripts; PsExec executes today, WinRM-based transports are planned.");
         console.WriteLine();
         console.WriteLine("Usage:");
         console.WriteLine("  dispatch <command> [arguments] [options]");
@@ -64,6 +64,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("  dispatch run ps <script.ps1> [options]");
         console.WriteLine("  dispatch run cmd <command> [options]");
         console.WriteLine("  dispatch run exe <path> [-- <args>]");
+        console.WriteLine("  Current execution support: run ps only");
         console.WriteLine();
         console.WriteLine("Progress options:");
         console.WriteLine("      --no-progress          Disable live progress rendering");
@@ -79,8 +80,6 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
         console.WriteLine("Examples:");
         console.WriteLine(@"  dispatch run ps .\scripts\Collect-Disk.ps1 --target web -i .\hosts\prod.yml");
-        console.WriteLine(@"  dispatch run ps --inline ""Get-Service WinRM"" --target all");
-        console.WriteLine(@"  dispatch run cmd ""whoami /all"" --target srv01 --transport winrm");
         console.WriteLine();
         console.WriteLine("Compatibility:");
         console.WriteLine(@"  dispatch run --script .\Fix.ps1 --computer-name PC001 --transport psexec");

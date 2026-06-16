@@ -1,12 +1,14 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, and initial inventory/target selectors for `run ps`, and keeps YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, and initial inventory/target selectors for `run ps`, and keeps YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work. Transport execution is still PsExec-only today; raw WinRM and PSRP are the next roadmap slices because the current validation environment has working WinRM targets and unreliable `\\<device>\C$` admin-share staging for PsExec-first validation.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
 ## Product Shape
 
 Dispatch is a Windows-native C# automation runner for Windows hosts. The product design covers ad-hoc execution, declared jobs, host inventories, structured logs, credential references, and explicit transports. Current implementation status is tracked in `docs/plan.md` and `workflow/build/implementation-plan.md`.
+
+Current transport priority is raw WinRM first, then PSRP. PsExec remains an explicit transport in the command contract and the only implemented executor today, but additional PsExec-first roadmap work is deferred until the target environment provides reliable admin-share staging.
 
 The operator model is:
 
@@ -35,6 +37,8 @@ Transports are not top-level commands. They are selected with:
 ```text
 --transport auto|psrp|winrm|psexec
 ```
+
+Accepted transport names are broader than the currently implemented executors. At the moment, `psrp` and `winrm` are command-contract values and roadmap targets, not working execution paths.
 
 ## Global Options
 
