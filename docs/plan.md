@@ -1139,10 +1139,12 @@ Definition of done:
 
 Current implementation note:
 - `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, groups, host names, `tag:<name>`, and `file:<path>`.
+- Explicit `--config <path>` currently provides `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path when the corresponding CLI flags are omitted.
 - The current YAML inventory subset now includes transport precedence from inventory defaults, group vars, and host vars when CLI transport is not explicitly set.
+- Inventory transport policy still overrides config/default transport when CLI transport is omitted.
 - Defaults-only inventories are treated as YAML and fail clearly when they do not resolve any real hosts, rather than being parsed as text host files.
 - Unsupported inventory sections and unsupported fields inside the current YAML subset now fail validation clearly before planning.
-- Advanced selectors, broader YAML inventory schema behavior, credential references, and remaining job/config precedence work remain pending.
+- Advanced selectors, broader YAML inventory schema behavior, credential references, and the remaining job/user-config/machine-config precedence work remain pending.
 
 #### 6.3 Structured Run Logs And Log Commands
 

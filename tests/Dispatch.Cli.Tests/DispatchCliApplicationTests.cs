@@ -637,6 +637,235 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteUsesExplicitConfigForInventoryTargetExcludeAndTransportDefault()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            """);
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(new
+        {
+            Dispatch = new
+            {
+                Inventory = inventoryPath,
+                Target = "web",
+                Exclude = "WEB02",
+                DefaultTransport = "psexec"
+            }
+        }));
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--config",
+                    configPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+            Assert.Equal(["WEB01"], planner.LastRequest.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteCliFlagsOverrideExplicitConfig()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            hosts:
+              WEB01:
+                tags: [prod]
+              WEB02:
+                tags: [prod]
+            """);
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(new
+        {
+            Dispatch = new
+            {
+                Inventory = inventoryPath,
+                Target = "WEB01",
+                Exclude = "WEB02",
+                DefaultTransport = "winrm"
+            }
+        }));
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--config",
+                    configPath,
+                    "--target",
+                    "WEB02",
+                    "--exclude",
+                    "WEB01",
+                    "--transport",
+                    "psexec",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+            Assert.Equal(["WEB02"], planner.LastRequest.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteInventoryTransportBeatsExplicitConfigTransport()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(new
+        {
+            Dispatch = new
+            {
+                Inventory = inventoryPath,
+                Target = "WEB01",
+                DefaultTransport = "psexec"
+            }
+        }));
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--config",
+                    configPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteMissingExplicitConfigFailsBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--config",
+                    configPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Config file", output + error, StringComparison.Ordinal);
+            Assert.Null(planner.LastRequest);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteInvalidExplicitConfigFailsBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(configPath, "{");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--config",
+                    configPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Config file", output + error, StringComparison.Ordinal);
+            Assert.Null(planner.LastRequest);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteUsesInventoryTargetSelectorAndExclude()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

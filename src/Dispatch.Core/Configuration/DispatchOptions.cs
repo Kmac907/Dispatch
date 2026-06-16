@@ -7,6 +7,12 @@ public sealed class DispatchOptions
 {
     public const string SectionName = "Dispatch";
 
+    public string? Inventory { get; set; }
+
+    public string? Target { get; set; }
+
+    public string? Exclude { get; set; }
+
     public string LocalRunRoot { get; set; } = DispatchDefaults.LocalRunRoot;
 
     public string RemoteRunRoot { get; set; } = DispatchDefaults.RemoteRunRoot;

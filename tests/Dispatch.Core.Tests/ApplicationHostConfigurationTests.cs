@@ -17,6 +17,9 @@ public sealed class ApplicationHostConfigurationTests
 
         var options = provider.GetRequiredService<IOptions<DispatchOptions>>().Value;
 
+        Assert.Null(options.Inventory);
+        Assert.Null(options.Target);
+        Assert.Null(options.Exclude);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs", options.LocalRunRoot);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs", options.RemoteRunRoot);
         Assert.Equal(TransportKind.PsExec, options.DefaultTransport);
@@ -32,6 +35,9 @@ public sealed class ApplicationHostConfigurationTests
     {
         using var provider = BuildProvider(new Dictionary<string, string?>
         {
+            ["Dispatch:Inventory"] = "hosts\\prod.yml",
+            ["Dispatch:Target"] = "web",
+            ["Dispatch:Exclude"] = "tag:canary",
             ["Dispatch:LocalRunRoot"] = "D:\\Dispatch\\Runs",
             ["Dispatch:RemoteRunRoot"] = "D:\\RemoteDispatch",
             ["Dispatch:DefaultTransport"] = "PsExec",
@@ -43,6 +49,9 @@ public sealed class ApplicationHostConfigurationTests
 
         var options = provider.GetRequiredService<IOptions<DispatchOptions>>().Value;
 
+        Assert.Equal("hosts\\prod.yml", options.Inventory);
+        Assert.Equal("web", options.Target);
+        Assert.Equal("tag:canary", options.Exclude);
         Assert.Equal("D:\\Dispatch\\Runs", options.LocalRunRoot);
         Assert.Equal("D:\\RemoteDispatch", options.RemoteRunRoot);
         Assert.Equal(TransportKind.PsExec, options.DefaultTransport);

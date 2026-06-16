@@ -1,5 +1,7 @@
+using Dispatch.Core.Configuration;
 using Dispatch.Core.Models;
 using Dispatch.Core.Targeting;
+using Microsoft.Extensions.Configuration;
 
 namespace Dispatch.Cli;
 
@@ -35,6 +37,7 @@ internal sealed class DispatchRunCommandParser
         var targetSelectors = new List<string>();
         var excludeSelectors = new List<string>();
         string? inventoryPath = null;
+        string? configPath = null;
         var scriptArguments = new List<string>();
 
         for (var index = 0; index < args.Count; index++)
@@ -101,6 +104,13 @@ internal sealed class DispatchRunCommandParser
                 case "-i":
                 case "--inventory":
                     if (!TryReadValue(args, ref index, arg, out inventoryPath, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--config":
+                    if (!TryReadValue(args, ref index, arg, out configPath, out error))
                     {
                         return false;
                     }
@@ -210,6 +220,23 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
+        if (!TryLoadConfig(configPath, out var config, out error))
+        {
+            return false;
+        }
+
+        inventoryPath ??= config.Inventory;
+        if (targetSelectors.Count == 0 && !string.IsNullOrWhiteSpace(config.Target))
+        {
+            targetSelectors.Add(config.Target);
+        }
+
+        if (excludeSelectors.Count == 0 && !string.IsNullOrWhiteSpace(config.Exclude))
+        {
+            excludeSelectors.Add(config.Exclude);
+        }
+
+        var effectiveDefaultTransport = config.DefaultTransport ?? defaultTransport;
         var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(
             computerNameValues,
             targetFile,
@@ -222,7 +249,7 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
-        if (!TryResolveTransport(targetResolution, transportOverride, defaultTransport, out var resolvedTransport, out error))
+        if (!TryResolveTransport(targetResolution, transportOverride, effectiveDefaultTransport, out var resolvedTransport, out error))
         {
             return false;
         }
@@ -270,6 +297,60 @@ internal sealed class DispatchRunCommandParser
 
     private static IEnumerable<string> SplitCommaSeparatedValues(string value) =>
         value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool TryLoadConfig(
+        string? configPath,
+        out DispatchRunConfig config,
+        out string error)
+    {
+        config = new DispatchRunConfig();
+        error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            return true;
+        }
+
+        if (!File.Exists(configPath))
+        {
+            error = $"Config file '{configPath}' does not exist.";
+            return false;
+        }
+
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile(configPath, optional: false)
+                .Build();
+            var section = configuration.GetSection(DispatchOptions.SectionName);
+
+            config = new DispatchRunConfig
+            {
+                Inventory = section["Inventory"],
+                Target = section["Target"],
+                Exclude = section["Exclude"]
+            };
+
+            var configuredTransport = section["DefaultTransport"];
+            if (!string.IsNullOrWhiteSpace(configuredTransport))
+            {
+                if (!TryParseTransport(configuredTransport, out var parsedTransport) || parsedTransport is null)
+                {
+                    error = $"Config file '{configPath}' contains unsupported transport '{configuredTransport}'.";
+                    return false;
+                }
+
+                config.DefaultTransport = parsedTransport.Value;
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is InvalidDataException or FormatException)
+        {
+            error = $"Config file '{configPath}' is invalid: {exception.Message}";
+            return false;
+        }
+    }
 
     private static bool TryResolveTransport(
         TargetResolutionResult targetResolution,
@@ -368,5 +449,16 @@ internal sealed class DispatchRunCommandParser
 
         exitCodes = parsed;
         return parsed.Count > 0;
+    }
+
+    private sealed class DispatchRunConfig
+    {
+        public string? Inventory { get; init; }
+
+        public string? Target { get; init; }
+
+        public string? Exclude { get; init; }
+
+        public TransportKind? DefaultTransport { get; set; }
     }
 }

@@ -270,6 +270,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         [CommandOption("-i|--inventory <path>")]
         public string? Inventory { get; init; }
 
+        [CommandOption("--config <path>")]
+        public string? Config { get; init; }
+
         [CommandOption("--exclude <selector>")]
         public string? Exclude { get; init; }
 
@@ -406,6 +409,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         AddSharedArgs(mapped, settings);
         AddValue(mapped, "--target", settings.Target);
         AddValue(mapped, "--inventory", settings.Inventory);
+        AddValue(mapped, "--config", settings.Config);
         AddValue(mapped, "--exclude", settings.Exclude);
         AddValue(mapped, "--throttle", settings.Concurrency);
         if (settings.Plan)
