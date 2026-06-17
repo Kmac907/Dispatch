@@ -81,7 +81,7 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
-    public async Task PlannerRejectsUnsupportedTransportPayloadBeforeEndpointWork()
+    public async Task PlannerAllowsPsrpScriptPayloadForCurrentSharedTransportSlice()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
         using var provider = BuildProvider();
@@ -92,10 +92,11 @@ public sealed class RequestPlanningTests
             transport: TransportKind.Psrp,
             dryRun: true);
 
-        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
-            () => planner.CreatePlanAsync(request, CancellationToken.None));
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
 
-        Assert.Contains(exception.Errors, static error => error.Code == "UnsupportedTransportPayload");
+        Assert.Equal(TransportKind.Psrp, plan.Job.Transport);
+        Assert.False(plan.Job.ScriptTransferPolicy.RequiresEndpointLocalScriptPath);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", Assert.Single(plan.Targets).PlannedRemoteScriptPath);
     }
 
     [Fact]

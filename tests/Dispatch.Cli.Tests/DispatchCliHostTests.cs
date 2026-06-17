@@ -9,7 +9,7 @@ namespace Dispatch.Cli.Tests;
 public sealed class DispatchCliHostTests
 {
     [Fact]
-    public void HostRegistersWinRmTransportServices()
+    public void HostRegistersWinRmAndPsrpTransportServices()
     {
         using var host = DispatchCliHost.Build([]);
 
@@ -29,5 +29,7 @@ public sealed class DispatchCliHostTests
         Assert.Contains(TransportKind.WinRm, executorKinds);
         Assert.Contains(TransportKind.WinRm, probeKinds);
         Assert.Contains(TransportKind.WinRm, descriptorKinds);
+        Assert.Contains(TransportKind.Psrp, executorKinds);
+        Assert.Contains(TransportKind.Psrp, descriptorKinds);
     }
 }

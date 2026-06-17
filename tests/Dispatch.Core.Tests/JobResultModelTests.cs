@@ -97,11 +97,17 @@ public sealed class JobResultModelTests
             targets: [new TargetSpec("PC001")],
             transport: TransportKind.Psrp));
 
+        var psrpCommand = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new CommandPayload("Get-Date", "powershell", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp));
+
         Assert.True(psexecScript.IsValid);
         Assert.True(winrmScript.IsValid);
         Assert.True(winrmCommand.IsValid);
+        Assert.True(psrpScript.IsValid);
+        Assert.True(psrpCommand.IsValid);
         Assert.Contains(psexecCommand.Errors, error => error.Code == "UnsupportedTransportPayload");
-        Assert.Contains(psrpScript.Errors, error => error.Code == "UnsupportedTransportPayload");
     }
 
     [Fact]

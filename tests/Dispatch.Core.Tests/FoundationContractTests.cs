@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dispatch.Core;
 using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
+using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
 
 namespace Dispatch.Core.Tests;
@@ -89,6 +90,20 @@ public sealed class FoundationContractTests
         Assert.True(descriptor.Capabilities.RequiresEndpointLocalScriptPath);
         Assert.False(descriptor.Capabilities.SupportsNativeFileCopy);
         Assert.True(descriptor.Capabilities.SupportsStreamedFileTransfer);
+        Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
+        Assert.False(descriptor.Capabilities.SupportsExplicitCredential);
+    }
+
+    [Fact]
+    public void PsrpDescriptorAdvertisesCurrentSliceCapabilities()
+    {
+        var descriptor = new PsrpTransportDescriptor();
+
+        Assert.Equal(TransportKind.Psrp, descriptor.Kind);
+        Assert.True(descriptor.Capabilities.SupportsScriptExecution);
+        Assert.True(descriptor.Capabilities.SupportsCommandExecution);
+        Assert.False(descriptor.Capabilities.RequiresEndpointLocalScriptPath);
+        Assert.True(descriptor.Capabilities.SupportsPowerShellStreams);
         Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
         Assert.False(descriptor.Capabilities.SupportsExplicitCredential);
     }

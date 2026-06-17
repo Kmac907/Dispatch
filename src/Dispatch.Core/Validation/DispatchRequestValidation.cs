@@ -50,6 +50,8 @@ public static class DispatchRequestValidator
         (transport, payload) switch
         {
             (TransportKind.PsExec, PayloadKind.Script) => true,
+            (TransportKind.Psrp, PayloadKind.Script) => true,
+            (TransportKind.Psrp, PayloadKind.Command) => true,
             (TransportKind.WinRm, PayloadKind.Script) => true,
             (TransportKind.WinRm, PayloadKind.Command) => true,
             _ => false

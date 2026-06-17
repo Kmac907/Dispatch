@@ -55,7 +55,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 ### Current transport priority
 
-As of 2026-06-17, raw WinRM is implemented and live-validated, and PSRP is now the next transport implementation priority. The current codebase has two completed transport paths: PsExec and raw WinRM. Raw WinRM now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, and artifact collection over the WinRM channel. An elevated live raw WinRM `run cmd whoami` validation succeeds against `82H9704` and `92H9704`. Further PsExec-first roadmap work remains deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging.
+As of 2026-06-17, raw WinRM is implemented and live-validated, and PSRP has an initial shared-transport slice in place while real PSRP runspace execution remains the next transport implementation priority. The current codebase has two completed transport paths: PsExec and raw WinRM. The new PSRP slice accepts `psrp` requests for script and command payloads, registers PSRP services in the host, advertises the planned capability surface, and returns a structured not-yet-implemented execution failure instead of failing as an unknown executor. Raw WinRM now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, and artifact collection over the WinRM channel. An elevated live raw WinRM `run cmd whoami` validation succeeds against `82H9704` and `92H9704`. Further PsExec-first roadmap work remains deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
 ## 3. Non-Goals
 
@@ -169,8 +169,8 @@ Dispatch has one request model, but each transport/payload combination must be e
 ```text
 psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
 psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
-psrp   + ScriptPayload   = next transport roadmap work after raw WinRM
-psrp   + CommandPayload  = same transport family; not yet implemented
+psrp   + ScriptPayload   = initial validation/DI slice implemented; real runspace execution remains roadmap work
+psrp   + CommandPayload  = initial validation/DI slice implemented; real runspace execution remains roadmap work
 winrm  + ScriptPayload   = implemented; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, timeout classification, artifact collection, and elevated live validation completed
 winrm  + CommandPayload  = implemented; planning, probe, raw-shell-backed direct command execution, timeout classification, artifact collection, and elevated live validation completed
 ```
@@ -421,7 +421,7 @@ PsExec SAS/secret handoff model:
 
 #### PSRP transport
 
-PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH.
+PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slice only wires `psrp` into the shared request/validation/DI surface and returns a structured not-yet-implemented execution failure; the real runspace path described below is still roadmap work.
 
 Script example:
 
@@ -459,7 +459,7 @@ PSRP credential model:
 
 PSRP SAS/secret handoff model:
 
-- Dispatch does not yet have a PSRP transport or supported PSRP SAS token handoff.
+- Dispatch does not yet have a working PSRP runspace executor or supported PSRP SAS token handoff.
 - Post-MVP preferred handoff is still the protected secret-file model so scripts receive a file path instead of a raw token.
 - For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, transfers the protected secret file to the endpoint over the PSRP remoting channel, and invokes the script with only the protected secret-file path.
 - PSRP invocation must pass a secret reference, not the raw secret value, for the default model.
