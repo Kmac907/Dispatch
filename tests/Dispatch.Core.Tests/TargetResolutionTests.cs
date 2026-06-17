@@ -85,6 +85,20 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void ResolvesInlineListTopLevelHostInventoryWhenNoSelectorIsProvided()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            hosts: [WEB01, WEB02]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput([], null, InventoryPath: inventory.Path));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["WEB01", "WEB02"], result.Targets.Select(static target => target.Name));
+        Assert.All(result.Targets, target => Assert.Equal($"inventory:{inventory.Path}", target.Source));
+    }
+
+    [Fact]
     public void ResolvesYamlInventoryGroupsHostsTagsAndExcludes()
     {
         using var inventory = TemporaryTargetFile.Create("""

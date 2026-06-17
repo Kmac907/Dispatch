@@ -297,7 +297,14 @@ public static class TargetResolver
     private static bool LooksLikeYaml(IEnumerable<string> lines) =>
         lines.Any(static line =>
         {
-            var trimmed = line.Split('#', 2)[0].Trim();
+            var withoutComments = line.Split('#', 2)[0].TrimEnd();
+            var trimmed = withoutComments.Trim();
+            if (withoutComments.Length == trimmed.Length
+                && TryParseInlineTopLevelHostsSection(trimmed, out _))
+            {
+                return true;
+            }
+
             if (!trimmed.EndsWith(':'))
             {
                 return trimmed.StartsWith("tags:", StringComparison.OrdinalIgnoreCase);
@@ -320,6 +327,26 @@ public static class TargetResolver
         value
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Where(static target => !string.IsNullOrWhiteSpace(target));
+
+    private static bool TryParseInlineTopLevelHostsSection(string value, out IReadOnlyList<string> hosts)
+    {
+        hosts = [];
+        if (!value.StartsWith("hosts:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var assigned = value["hosts:".Length..].Trim();
+        if (!assigned.StartsWith('[') || !assigned.EndsWith(']'))
+        {
+            return false;
+        }
+
+        hosts = assigned
+            .Trim('[', ']')
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return true;
+    }
 
     private static TransportKind? ResolveCommonInventoryTransport(
         IReadOnlyDictionary<string, TransportKind?> inventoryTransportPolicies,
@@ -450,6 +477,25 @@ public static class TargetResolver
                 }
 
                 var indent = line.Length - line.TrimStart().Length;
+                if (indent == 0 && TryParseInlineTopLevelHostsSection(trimmed, out var inlineTopLevelHosts))
+                {
+                    section = "hosts";
+                    currentGroup = null;
+                    currentHost = null;
+                    inGroupHosts = false;
+                    inGroupChildren = false;
+                    inGroupVars = false;
+                    inHostTags = false;
+                    inHostVars = false;
+
+                    foreach (var host in inlineTopLevelHosts)
+                    {
+                        AddInventoryHost(path, hosts, host);
+                    }
+
+                    continue;
+                }
+
                 if (indent == 0 && trimmed.EndsWith(':'))
                 {
                     var sectionName = trimmed.TrimEnd(':');

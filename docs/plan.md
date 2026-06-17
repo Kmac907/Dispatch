@@ -1138,7 +1138,7 @@ Definition of done:
 - Tests cover groups, hosts, simple files, excludes, and duplicate handling.
 
 Current implementation note:
-- `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, groups, nested `groups.<group>.children`, block-list, inline-list, and mapping-form group members under `groups.<group>.hosts`/`children`, host names, `tag:<name>`, and `file:<path>`.
+- `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, top-level `hosts:` block-list, inline-list, and mapping-form host entries, groups, nested `groups.<group>.children`, block-list, inline-list, and mapping-form group members under `groups.<group>.hosts`/`children`, host names, `tag:<name>`, and `file:<path>`.
 - Ambient bound `Dispatch` config values now provide `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path when the corresponding CLI flags are omitted and no explicit `--config <path>` is supplied.
 - Explicit `--config <path>` currently provides the same `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path and overrides ambient config values where it supplies them.
 - The current YAML inventory subset now includes transport precedence from inventory defaults, group vars, and host vars when CLI transport is not explicitly set, including inherited group membership through nested child groups.
