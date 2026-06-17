@@ -55,7 +55,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 ### Current transport priority
 
-As of 2026-06-16, the next transport implementation priority is WinRM-based execution: raw WinRM first, then PSRP. The current codebase still has PsExec as the only fully completed transport path, but it now includes a narrow raw WinRM slice for request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, and artifact collection over the WinRM channel. Raw WinRM command execution and successful live validation remain roadmap work, and further PsExec-first roadmap work is deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging. Test hosts `82H9704` and `92H9704` are now reserved for WinRM-based live validation rather than PsExec-first validation.
+As of 2026-06-16, the next transport implementation priority is WinRM-based execution: raw WinRM first, then PSRP. The current codebase still has PsExec as the only fully completed transport path, but it now includes a narrow raw WinRM slice for request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, and artifact collection over the WinRM channel. Successful live validation remains roadmap work, and further PsExec-first roadmap work is deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging. Test hosts `82H9704` and `92H9704` are now reserved for WinRM-based live validation rather than PsExec-first validation.
 
 ## 3. Non-Goals
 
@@ -77,7 +77,7 @@ As of 2026-06-16, the next transport implementation priority is WinRM-based exec
 - `Dispatch.Core` owns planning, target normalization, script transfer/preparation, orchestration, result models, logging abstractions, artifact collection, and transport interfaces.
 - `Dispatch.Transports.PsExec` owns PsExec command construction and captured process execution.
 - `Dispatch.Transports.Psrp` is a planned transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
-- `Dispatch.Transports.WinRm` is a partially implemented raw WinRM transport with current request-validation, planning, DI, endpoint-probe coverage, chunked script-transfer preparation planning, remote script upload, raw-shell-backed PowerShell script execution, and artifact collection; direct command execution and successful live validation remain roadmap work.
+- `Dispatch.Transports.WinRm` is a partially implemented raw WinRM transport with current request-validation, planning, DI, endpoint-probe coverage, chunked script-transfer preparation planning, remote script upload, raw-shell-backed PowerShell script execution, direct command execution, and artifact collection; successful live validation remains roadmap work.
 - `Dispatch.Cli` owns `dispatch.exe`, Spectre.Console.Cli command routing, automation commands, operator output, live rendering, and structured output modes.
 - `Dispatch.PowerShell` owns wrapper functions such as `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 
@@ -171,8 +171,8 @@ psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
 psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
 psrp   + ScriptPayload   = next transport roadmap work after raw WinRM
 psrp   + CommandPayload  = same transport family; not yet implemented
-winrm  + ScriptPayload   = partial; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, and artifact collection implemented; command execution and live validation remain
-winrm  + CommandPayload  = same transport family; not yet implemented
+winrm  + ScriptPayload   = partial; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, and artifact collection implemented; live validation remains
+winrm  + CommandPayload  = partial; planning, probe, raw-shell-backed direct command execution, and artifact collection implemented; live validation remains
 ```
 
 `DispatchRequest` may represent script and command payloads from the beginning, but v1 validation must reject unsupported transport/payload combinations before probing or touching endpoints. This keeps v1 focused on script orchestration while preserving the future Ansible-style command execution surface.
@@ -1051,7 +1051,7 @@ Scope:
 Current implementation note:
 - `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version` are registered through Spectre.Console.Cli.
 - Existing `dispatch run --script <path> --computer-name <names>` callers are preserved through the compatibility parser because that syntax predates the new command tree.
-- `run cmd`, `run exe`, `apply`, `push`, `hosts`, `logs`, `creds`, and `init` route through Spectre.Console.Cli and return planned-feature errors until their specific roadmap items are implemented.
+- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `apply`, `push`, `hosts`, `logs`, `creds`, and `init` still return planned-feature errors until their specific roadmap items are implemented.
 
 Non-goals:
 - No separate interactive execution engine.

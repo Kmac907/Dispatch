@@ -140,25 +140,7 @@ internal sealed class DispatchExecutor(
                 }
             }
 
-            await NotifyTargetStateAsync(plan, target, TargetExecutionState.PreparingScript, observer, cancellationToken).ConfigureAwait(false);
-            var targetPlan = plan with { Targets = [target] };
-            var preparation = await scriptPreparationService.PrepareAsync(targetPlan, cancellationToken).ConfigureAwait(false);
-            var targetPreparation = preparation.Targets.SingleOrDefault(result =>
-                result.Target.Name.Equals(target.Target.Name, StringComparison.OrdinalIgnoreCase));
-
-            if (targetPreparation is null)
-            {
-                var failure = CreateFailureResult(
-                    plan,
-                    target,
-                    clock.UtcNow,
-                    clock.UtcNow,
-                    FailureCategory.PayloadPreparationFailed,
-                    $"No script preparation result exists for target '{target.Target.Name}'.");
-                await NotifyTargetStateAsync(observer, failure, clock.UtcNow, cancellationToken).ConfigureAwait(false);
-                return failure;
-            }
-
+            var targetPreparation = await PrepareTargetAsync(plan, target, observer, cancellationToken).ConfigureAwait(false);
             if (!targetPreparation.Succeeded)
             {
                 var failure = CreateFailureResult(
@@ -202,6 +184,40 @@ internal sealed class DispatchExecutor(
             return failure;
         }
     }
+
+    private async Task<TargetScriptPreparationResult> PrepareTargetAsync(
+        ExecutionPlan plan,
+        TargetExecution target,
+        IDispatchExecutionObserver observer,
+        CancellationToken cancellationToken)
+    {
+        if (!RequiresPreparation(plan))
+        {
+            return new TargetScriptPreparationResult(
+                Target: target.Target,
+                RemoteScriptPath: target.PlannedRemoteScriptPath ?? string.Empty,
+                AdminShareScriptPath: null,
+                Succeeded: true);
+        }
+
+        await NotifyTargetStateAsync(plan, target, TargetExecutionState.PreparingScript, observer, cancellationToken).ConfigureAwait(false);
+        var targetPlan = plan with { Targets = [target] };
+        var preparation = await scriptPreparationService.PrepareAsync(targetPlan, cancellationToken).ConfigureAwait(false);
+        var targetPreparation = preparation.Targets.SingleOrDefault(result =>
+            result.Target.Name.Equals(target.Target.Name, StringComparison.OrdinalIgnoreCase));
+
+        return targetPreparation ?? new TargetScriptPreparationResult(
+            Target: target.Target,
+            RemoteScriptPath: target.PlannedRemoteScriptPath ?? string.Empty,
+            AdminShareScriptPath: null,
+            Succeeded: false,
+            FailureCategory: FailureCategory.PayloadPreparationFailed,
+            FailureMessage: $"No script preparation result exists for target '{target.Target.Name}'.");
+    }
+
+    private static bool RequiresPreparation(ExecutionPlan plan) =>
+        plan.Job.Payload is ScriptPayload
+        && plan.Job.ScriptTransferPolicy.RequiresEndpointLocalScriptPath;
 
     private static async Task NotifyTargetStateAsync(
         ExecutionPlan plan,

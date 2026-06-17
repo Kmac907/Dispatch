@@ -19,6 +19,9 @@ internal sealed class DispatchRunCommandParser
 
         var dryRun = false;
         string? scriptPath = null;
+        string? commandLine = null;
+        string? commandShell = null;
+        string? workingDirectory = null;
         var computerNameValues = new List<string>();
         string? targetFile = null;
         TransportKind? transportOverride = null;
@@ -71,6 +74,27 @@ internal sealed class DispatchRunCommandParser
                     break;
                 case "--script":
                     if (!TryReadValue(args, ref index, arg, out scriptPath, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--command":
+                    if (!TryReadValue(args, ref index, arg, out commandLine, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--shell":
+                    if (!TryReadValue(args, ref index, arg, out commandShell, out error))
+                    {
+                        return false;
+                    }
+
+                    break;
+                case "--working-directory":
+                    if (!TryReadValue(args, ref index, arg, out workingDirectory, out error))
                     {
                         return false;
                     }
@@ -214,10 +238,32 @@ internal sealed class DispatchRunCommandParser
             }
         }
 
-        if (string.IsNullOrWhiteSpace(scriptPath))
+        if (!string.IsNullOrWhiteSpace(scriptPath) && !string.IsNullOrWhiteSpace(commandLine))
         {
-            error = "--script is required.";
+            error = "Specify either --script or --command, not both.";
             return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(scriptPath) && string.IsNullOrWhiteSpace(commandLine))
+        {
+            error = "Either --script or --command is required.";
+            return false;
+        }
+
+        DispatchPayload payload;
+        if (!string.IsNullOrWhiteSpace(scriptPath))
+        {
+            payload = new ScriptPayload(scriptPath, scriptArguments);
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(commandShell))
+            {
+                error = "--shell is required when using --command.";
+                return false;
+            }
+
+            payload = new CommandPayload(commandLine!, commandShell, workingDirectory);
         }
 
         if (!TryLoadConfig(configPath, ambientConfig, out var config, out error))
@@ -256,8 +302,7 @@ internal sealed class DispatchRunCommandParser
 
         command = new DispatchRunCommand(
             DryRun: dryRun,
-            ScriptPath: scriptPath,
-            ScriptArguments: scriptArguments,
+            Payload: payload,
             Targets: targetResolution.Targets,
             Transport: resolvedTransport,
             ExpectedExitCodes: expectedExitCodes,

@@ -1,4 +1,5 @@
 using Dispatch.Core;
+using Dispatch.Core.Models;
 using Spectre.Console.Cli;
 
 namespace Dispatch.Cli;
@@ -132,12 +133,12 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
             if (type == typeof(RunCmdCommand))
             {
-                return new RunCmdCommand();
+                return new RunCmdCommand(application);
             }
 
             if (type == typeof(RunExeCommand))
             {
-                return new RunExeCommand();
+                return new RunExeCommand(application);
             }
 
             if (PlannedCommandTypes.Contains(type))
@@ -193,16 +194,24 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 .ConfigureAwait(false);
     }
 
-    private sealed class RunCmdCommand : Command<RunCmdSettings>
+    private sealed class RunCmdCommand(DispatchCliApplication application) : AsyncCommand<RunCmdSettings>
     {
-        protected override int Execute(CommandContext context, RunCmdSettings settings, CancellationToken cancellationToken) =>
-            DispatchCliApplication.RenderPlannedCommand("run cmd", "9 PSRP Transport / 9.1 Raw WinRM Transport command execution");
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            RunCmdSettings settings,
+            CancellationToken cancellationToken) =>
+            await application.RunCommandAsync(BuildCommandArgs(settings, context.Remaining.Raw), cancellationToken)
+                .ConfigureAwait(false);
     }
 
-    private sealed class RunExeCommand : Command<RunExeSettings>
+    private sealed class RunExeCommand(DispatchCliApplication application) : AsyncCommand<RunExeSettings>
     {
-        protected override int Execute(CommandContext context, RunExeSettings settings, CancellationToken cancellationToken) =>
-            DispatchCliApplication.RenderPlannedCommand("run exe", "9 PSRP Transport / 9.1 Raw WinRM Transport command execution");
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            RunExeSettings settings,
+            CancellationToken cancellationToken) =>
+            await application.RunCommandAsync(BuildExecutableArgs(settings, context.Remaining.Raw), cancellationToken)
+                .ConfigureAwait(false);
     }
 
     private abstract class PlannedCommand(string command, string roadmapItem) : Command
@@ -259,11 +268,8 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         public string? Source { get; init; }
     }
 
-    private sealed class RunPsSettings : CommandSettings, IRunSharedSettings
+    private abstract class RunTargetedSettings : CommandSettings, IRunSharedSettings
     {
-        [CommandArgument(0, "<script.ps1>")]
-        public string ScriptPath { get; init; } = string.Empty;
-
         [CommandOption("-t|--target <selector>")]
         public string? Target { get; init; }
 
@@ -334,13 +340,19 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         public bool Trace { get; init; }
     }
 
-    private sealed class RunCmdSettings : CommandSettings
+    private sealed class RunPsSettings : RunTargetedSettings
+    {
+        [CommandArgument(0, "<script.ps1>")]
+        public string ScriptPath { get; init; } = string.Empty;
+    }
+
+    private sealed class RunCmdSettings : RunTargetedSettings
     {
         [CommandArgument(0, "<command>")]
         public string Command { get; init; } = string.Empty;
     }
 
-    private sealed class RunExeSettings : CommandSettings
+    private sealed class RunExeSettings : RunTargetedSettings
     {
         [CommandArgument(0, "<path>")]
         public string Path { get; init; } = string.Empty;
@@ -406,24 +418,56 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     private static string[] BuildPowerShellArgs(RunPsSettings settings, IReadOnlyList<string> remaining)
     {
         var mapped = new List<string> { "--script", settings.ScriptPath };
-        AddSharedArgs(mapped, settings);
-        AddValue(mapped, "--target", settings.Target);
-        AddValue(mapped, "--inventory", settings.Inventory);
-        AddValue(mapped, "--config", settings.Config);
-        AddValue(mapped, "--exclude", settings.Exclude);
-        AddValue(mapped, "--throttle", settings.Concurrency);
+        AddTargetedArgs(mapped, settings);
+        AddRemaining(mapped, remaining);
+        return mapped.ToArray();
+    }
+
+    private static string[] BuildCommandArgs(RunCmdSettings settings, IReadOnlyList<string> remaining)
+    {
+        var commandLine = string.Join(" ", new[] { settings.Command }.Concat(remaining).Where(static value => !string.IsNullOrWhiteSpace(value)));
+        var mapped = new List<string>
+        {
+            "--command",
+            commandLine,
+            "--shell",
+            "cmd"
+        };
+        AddTargetedArgs(mapped, settings);
+        return mapped.ToArray();
+    }
+
+    private static string[] BuildExecutableArgs(RunExeSettings settings, IReadOnlyList<string> remaining)
+    {
+        var commandLine = new DirectExecutionCommand(settings.Path, remaining).RenderedCommand;
+        var mapped = new List<string>
+        {
+            "--command",
+            commandLine,
+            "--shell",
+            "exe"
+        };
+        AddTargetedArgs(mapped, settings);
+        return mapped.ToArray();
+    }
+
+    private static void AddTargetedArgs(List<string> args, RunTargetedSettings settings)
+    {
+        AddSharedArgs(args, settings);
+        AddValue(args, "--target", settings.Target);
+        AddValue(args, "--inventory", settings.Inventory);
+        AddValue(args, "--config", settings.Config);
+        AddValue(args, "--exclude", settings.Exclude);
+        AddValue(args, "--throttle", settings.Concurrency);
         if (settings.Plan)
         {
-            mapped.Add("--dry-run");
+            args.Add("--dry-run");
         }
 
         if (settings.System)
         {
-            mapped.Add("--run-as-system");
+            args.Add("--run-as-system");
         }
-
-        AddRemaining(mapped, remaining);
-        return mapped.ToArray();
     }
 
     private static void AddSharedArgs(List<string> args, IRunSharedSettings settings)

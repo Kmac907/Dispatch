@@ -1739,19 +1739,66 @@ public sealed class DispatchCliApplicationTests
         Assert.Contains($"{command} {subcommand}", error);
     }
 
-    [Theory]
-    [InlineData("cmd", "whoami")]
-    [InlineData("exe", "tool.exe")]
-    public async Task PlannedRunCommandPayloadsIdentifyRoadmapItem(string subcommand, string argument)
+    [Fact]
+    public async Task RunCommandRouteUsesSharedRequestAndCommandPayload()
     {
-        var application = CreateApplication(new CapturingPlanner());
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
 
-        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(["run", subcommand, argument], CancellationToken.None));
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            [
+                "run",
+                "cmd",
+                "whoami",
+                "--target",
+                "PC001",
+                "--transport",
+                "winrm",
+                "--plan",
+                "--",
+                "/all"
+            ],
+            CancellationToken.None));
 
-        Assert.Equal(1, exitCode);
-        Assert.Contains("Planned Dispatch command", error);
-        Assert.Contains($"run {subcommand}", error);
-        Assert.Contains("9 PSRP Transport / 9.1 Raw WinRM Transport command execution", error);
+        Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+        var payload = Assert.IsType<CommandPayload>(planner.LastRequest!.Payload);
+        Assert.Equal("whoami /all", payload.CommandLine);
+        Assert.Equal("cmd", payload.Shell);
+        Assert.Null(payload.WorkingDirectory);
+        Assert.Equal(TransportKind.WinRm, planner.LastRequest.Transport);
+        Assert.True(planner.LastRequest.DryRun);
+        Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
+    public async Task RunExecutableRouteUsesSharedRequestAndCommandPayload()
+    {
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            [
+                "run",
+                "exe",
+                @"C:\Tools\tool.exe",
+                "--target",
+                "PC001",
+                "--transport",
+                "winrm",
+                "--plan",
+                "--",
+                "/quiet",
+                "/norestart"
+            ],
+            CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+        var payload = Assert.IsType<CommandPayload>(planner.LastRequest!.Payload);
+        Assert.Equal(@"C:\Tools\tool.exe /quiet /norestart", payload.CommandLine);
+        Assert.Equal("exe", payload.Shell);
+        Assert.Null(payload.WorkingDirectory);
+        Assert.Equal(TransportKind.WinRm, planner.LastRequest.Transport);
+        Assert.True(planner.LastRequest.DryRun);
     }
 
     [Fact]
@@ -1911,6 +1958,21 @@ public sealed class DispatchCliApplicationTests
         public Task<ExecutionPlan> CreatePlanAsync(DispatchRequest request, CancellationToken cancellationToken)
         {
             LastRequest = request;
+            var plannedRemoteScriptPath = request.Payload is ScriptPayload scriptPayload
+                ? Path.Combine(@"C:\ProgramData\Dispatch\Runs\run-test\script", Path.GetFileName(scriptPayload.ScriptPath))
+                : null;
+            var plannedCommand = request.Payload switch
+            {
+                ScriptPayload => plannedRemoteScriptPath is null
+                    ? null
+                    : new DirectExecutionCommand(
+                        "powershell.exe",
+                        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", plannedRemoteScriptPath]),
+                CommandPayload commandPayload => new DirectExecutionCommand(
+                    "cmd.exe",
+                    ["/c", commandPayload.CommandLine]),
+                _ => null
+            };
             var targets = request.Targets
                 .Select(target => new TargetExecution(
                     "run-test",
@@ -1918,7 +1980,8 @@ public sealed class DispatchCliApplicationTests
                     TargetExecutionState.Pending,
                     Path.Combine(@"C:\Dispatch\Tests\run-test\Targets", target.Name),
                     Path.Combine(@"C:\Dispatch\Tests\run-test\Targets", target.Name, "result.json"),
-                    Path.Combine(@"C:\ProgramData\Dispatch\Runs\run-test\script", Path.GetFileName(((ScriptPayload)request.Payload).ScriptPath))))
+                    plannedRemoteScriptPath,
+                    plannedCommand))
                 .ToArray();
             var job = new DispatchJob(
                 RunId: "run-test",
@@ -1926,7 +1989,9 @@ public sealed class DispatchCliApplicationTests
                 Payload: request.Payload,
                 Transport: request.Transport,
                 ExecutionContext: request.ExecutionContext,
-                ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-test", true),
+                ScriptTransferPolicy: new ScriptTransferPolicy(
+                    @"C:\ProgramData\Dispatch\Runs\run-test",
+                    request.Payload is ScriptPayload),
                 TimeoutPolicy: new TimeoutPolicy(),
                 RetryPolicy: new RetryPolicy(),
                 ExpectedExitCodes: request.ExpectedExitCodes,

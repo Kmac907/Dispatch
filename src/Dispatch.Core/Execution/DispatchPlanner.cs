@@ -43,8 +43,9 @@ internal sealed class DispatchPlanner(
             : options.Value.ExpectedExitCodes;
 
         var requiresEndpointLocalScriptPath =
-            request.Transport == TransportKind.PsExec
-            || request.Transport == TransportKind.WinRm;
+            request.Payload is ScriptPayload
+            && (request.Transport == TransportKind.PsExec
+                || request.Transport == TransportKind.WinRm);
         var job = new DispatchJob(
             RunId: runId,
             Targets: request.Targets,
@@ -89,9 +90,12 @@ internal sealed class DispatchPlanner(
             ? CombineWindowsPath(remoteRunRoot, "script", Path.GetFileName(script.ScriptPath))
             : null;
 
-        var command = payload is ScriptPayload scriptPayload && remoteScriptPath is not null
-            ? CreatePowerShellScriptCommand(scriptPayload, remoteScriptPath)
-            : null;
+        var command = payload switch
+        {
+            ScriptPayload scriptPayload when remoteScriptPath is not null => CreatePowerShellScriptCommand(scriptPayload, remoteScriptPath),
+            CommandPayload commandPayload => CreateCommandPayloadCommand(commandPayload),
+            _ => null
+        };
 
         return new TargetExecution(
             RunId: runId,
@@ -145,6 +149,15 @@ internal sealed class DispatchPlanner(
                     errors.Add(new("CommandRequired", "Command line is required."));
                 }
 
+                if (string.IsNullOrWhiteSpace(command.Shell))
+                {
+                    errors.Add(new("CommandShellRequired", "Command shell is required."));
+                }
+                else if (!IsSupportedCommandShell(command.Shell))
+                {
+                    errors.Add(new("UnsupportedCommandShell", $"Command shell '{command.Shell}' is not supported."));
+                }
+
                 break;
         }
 
@@ -179,6 +192,42 @@ internal sealed class DispatchPlanner(
         arguments.AddRange(payload.ScriptArguments);
         return new DirectExecutionCommand("powershell.exe", arguments);
     }
+
+    private static DirectExecutionCommand CreateCommandPayloadCommand(CommandPayload payload)
+    {
+        var normalizedShell = payload.Shell.Trim().ToLowerInvariant();
+        return normalizedShell switch
+        {
+            "cmd" or "exe" or "direct" => new DirectExecutionCommand(
+                "cmd.exe",
+                ["/c", WrapCmdCommand(payload.CommandLine, payload.WorkingDirectory)]),
+            "powershell" or "powershell.exe" => CreatePowerShellCommand("powershell.exe", payload.CommandLine, payload.WorkingDirectory),
+            "pwsh" or "pwsh.exe" => CreatePowerShellCommand("pwsh.exe", payload.CommandLine, payload.WorkingDirectory),
+            _ => throw new InvalidOperationException($"Unsupported command shell '{payload.Shell}'.")
+        };
+    }
+
+    private static DirectExecutionCommand CreatePowerShellCommand(
+        string executable,
+        string commandLine,
+        string? workingDirectory)
+    {
+        var effectiveCommand = string.IsNullOrWhiteSpace(workingDirectory)
+            ? commandLine
+            : $"Set-Location -LiteralPath '{EscapePowerShellSingleQuotedString(workingDirectory)}'; {commandLine}";
+
+        return new DirectExecutionCommand(
+            executable,
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", effectiveCommand]);
+    }
+
+    private static string WrapCmdCommand(string commandLine, string? workingDirectory) =>
+        string.IsNullOrWhiteSpace(workingDirectory)
+            ? commandLine
+            : $"cd /d \"{workingDirectory.Replace("\"", "\"\"", StringComparison.Ordinal)}\" && {commandLine}";
+
+    private static string EscapePowerShellSingleQuotedString(string value) =>
+        value.Replace("'", "''", StringComparison.Ordinal);
 
     private static string CombineWindowsPath(params string[] parts)
     {
@@ -228,5 +277,17 @@ internal sealed class DispatchPlanner(
             && char.IsLetter(path[0])
             && path[1] == ':'
             && (path[2] == '\\' || path[2] == '/');
+    }
+
+    private static bool IsSupportedCommandShell(string shell)
+    {
+        var normalized = shell.Trim();
+        return normalized.Equals("cmd", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("exe", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("direct", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("powershell", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("powershell.exe", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("pwsh", StringComparison.OrdinalIgnoreCase)
+            || normalized.Equals("pwsh.exe", StringComparison.OrdinalIgnoreCase);
     }
 }

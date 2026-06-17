@@ -13,7 +13,7 @@ public sealed class WinRmTransportDescriptor : ITransportDescriptor
 
     public TransportCapabilities Capabilities { get; } = new(
         SupportsScriptExecution: true,
-        SupportsCommandExecution: false,
+        SupportsCommandExecution: true,
         RequiresEndpointLocalScriptPath: true,
         SupportsNativeFileCopy: false,
         SupportsStreamedFileTransfer: true,

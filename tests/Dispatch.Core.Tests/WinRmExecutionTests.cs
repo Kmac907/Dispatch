@@ -163,6 +163,71 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorExecutesWinRmCommandPayloadWithoutUpload()
+    {
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(
+            new WinRmShellCommandResult(
+                true,
+                0,
+                "scf\\admin",
+                string.Empty,
+                null,
+                new Dictionary<string, string>
+                {
+                    ["shell"] = "command"
+                }),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3));
+        using var provider = BuildProvider(outputRoot.Path, endpointFileSystem, transferClient, shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var observer = new RecordingExecutionObserver();
+        var request = new DispatchRequest(
+            payload: new CommandPayload("whoami", "cmd", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, observer, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal(FailureCategory.None, target.FailureCategory);
+        Assert.Null(plan.Targets[0].PlannedRemoteScriptPath);
+        Assert.Equal(0, target.ExitCode);
+        Assert.Equal("command", target.TransportMetadata?["payloadType"]);
+        Assert.Equal("executed", target.TransportMetadata?["mode"]);
+        Assert.Equal("not-required", target.TransportMetadata?["uploadStatus"]);
+        Assert.Equal("NotRequired", target.TransportMetadata?["transferMode"]);
+        Assert.Equal("cmd", target.TransportMetadata?["commandShell"]);
+        Assert.Equal("cmd.exe", target.TransportMetadata?["executable"]);
+        Assert.Equal("command", target.TransportMetadata?["shell"]);
+        Assert.NotNull(target.StdoutPath);
+        Assert.NotNull(target.StderrPath);
+        Assert.Equal("scf\\admin", await File.ReadAllTextAsync(target.StdoutPath));
+        Assert.Equal(string.Empty, await File.ReadAllTextAsync(target.StderrPath));
+        Assert.Empty(transferClient.Requests);
+        Assert.Equal(3, shellClient.Requests.Count);
+        var shellRequest = shellClient.Requests[0];
+        Assert.Equal("PC001", shellRequest.Target);
+        Assert.Equal("cmd.exe", shellRequest.Executable);
+        Assert.Equal(["/c", "whoami"], shellRequest.Arguments);
+        Assert.Equal(
+            [
+                TargetExecutionState.Probing,
+                TargetExecutionState.Executing,
+                TargetExecutionState.CollectingArtifacts,
+                TargetExecutionState.Succeeded
+            ],
+            observer.Progress.Select(static progress => progress.State));
+    }
+
+    [Fact]
     public async Task ExecutorMapsUnexpectedWinRmExitCodeToUnexpectedExitCode()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -439,6 +504,36 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ScriptExecutorExecutesCommandPayloadWithoutUploadPlan()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "scf\\admin",
+            string.Empty,
+            null));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateCommandExecutionRequest("whoami", "cmd"),
+            CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("scf\\admin", result.Stdout);
+        Assert.Equal("executed", result.Metadata?["mode"]);
+        Assert.Equal("not-required", result.Metadata?["uploadStatus"]);
+        Assert.Equal("NotRequired", result.Metadata?["transferMode"]);
+        Assert.Equal("cmd", result.Metadata?["commandShell"]);
+        Assert.Empty(transferClient.Requests);
+
+        var shellRequest = Assert.Single(shellClient.Requests);
+        Assert.Equal("cmd.exe", shellRequest.Executable);
+        Assert.Equal(["/c", "whoami"], shellRequest.Arguments);
+    }
+
+    [Fact]
     public async Task ScriptExecutorMapsNonZeroExitCodeAtTransportResultLevel()
     {
         var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
@@ -614,6 +709,47 @@ public sealed class WinRmExecutionTests
             AdminShareScriptPath: null,
             Succeeded: true,
             TransferPlan: transferPlan);
+
+        return new TransportScriptExecutionRequest(plan, target, preparation);
+    }
+
+    private static TransportScriptExecutionRequest CreateCommandExecutionRequest(
+        string commandLine,
+        string shell,
+        string? workingDirectory = null)
+    {
+        var target = new TargetExecution(
+            RunId: "run-001",
+            Target: new TargetSpec("PC001"),
+            State: TargetExecutionState.Pending,
+            PlannedLocalTargetRoot: null,
+            PlannedLocalResultPath: null,
+            PlannedRemoteScriptPath: null,
+            PlannedCommand: new DirectExecutionCommand(
+                "cmd.exe",
+                ["/c", workingDirectory is null ? commandLine : $"cd /d \"{workingDirectory}\" && {commandLine}"]));
+        var plan = new ExecutionPlan(
+            RunId: "run-001",
+            CreatedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
+            Job: new DispatchJob(
+                RunId: "run-001",
+                Targets: [new TargetSpec("PC001")],
+                Payload: new CommandPayload(commandLine, shell, workingDirectory),
+                Transport: TransportKind.WinRm,
+                ExecutionContext: new ExecutionContextOptions(),
+                ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", RequiresEndpointLocalScriptPath: false),
+                TimeoutPolicy: new TimeoutPolicy(),
+                RetryPolicy: new RetryPolicy(),
+                ExpectedExitCodes: [0],
+                ArtifactPolicy: new ArtifactPolicy(),
+                ResultPolicy: new ResultPolicy(@"C:\Dispatch\Runs\run-001")),
+            Targets: [target],
+            DryRun: false);
+        var preparation = new TargetScriptPreparationResult(
+            Target: target.Target,
+            RemoteScriptPath: string.Empty,
+            AdminShareScriptPath: null,
+            Succeeded: true);
 
         return new TransportScriptExecutionRequest(plan, target, preparation);
     }

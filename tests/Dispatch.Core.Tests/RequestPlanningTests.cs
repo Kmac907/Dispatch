@@ -112,6 +112,28 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerAllowsWinRmCommandPayloadWithoutRemoteScriptPreparation()
+    {
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new CommandPayload("whoami /all", "cmd", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: true);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var target = Assert.Single(plan.Targets);
+
+        Assert.Equal(TransportKind.WinRm, plan.Job.Transport);
+        Assert.False(plan.Job.ScriptTransferPolicy.RequiresEndpointLocalScriptPath);
+        Assert.Null(target.PlannedRemoteScriptPath);
+        Assert.NotNull(target.PlannedCommand);
+        Assert.Equal("cmd.exe", target.PlannedCommand.Executable);
+        Assert.Equal(["/c", "whoami /all"], target.PlannedCommand.Arguments);
+    }
+
+    [Fact]
     public async Task PlannerRejectsLikelySecretScriptArgumentsBeforeDryRunRendering()
     {
         using var script = TemporaryScript.Create("Fix.ps1");

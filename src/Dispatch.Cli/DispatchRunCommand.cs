@@ -4,8 +4,7 @@ namespace Dispatch.Cli;
 
 internal sealed record DispatchRunCommand(
     bool DryRun,
-    string ScriptPath,
-    IReadOnlyList<string> ScriptArguments,
+    DispatchPayload Payload,
     IReadOnlyList<TargetSpec> Targets,
     TransportKind Transport,
     IReadOnlyList<int> ExpectedExitCodes,
@@ -23,7 +22,7 @@ internal sealed record DispatchRunCommand(
 {
     public DispatchRequest ToRequest() =>
         new(
-            payload: new ScriptPayload(ScriptPath, ScriptArguments),
+            payload: Payload,
             targets: Targets,
             transport: Transport,
             expectedExitCodes: ExpectedExitCodes,

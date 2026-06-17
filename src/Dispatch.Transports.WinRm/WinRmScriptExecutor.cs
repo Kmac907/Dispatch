@@ -21,10 +21,20 @@ public sealed class WinRmScriptExecutor(
         var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["transport"] = "winrm",
-            ["mode"] = "upload-pending",
+            ["mode"] = "execution-pending",
+            ["payloadType"] = request.Plan.Job.Payload.PayloadType.ToString().ToLowerInvariant(),
             ["preparation"] = transferPlan is null ? "missing" : "completed",
             ["plannedRemoteScriptPath"] = remoteScriptPath
         };
+
+        if (request.Plan.Job.Payload is CommandPayload commandPayload)
+        {
+            metadata["commandShell"] = commandPayload.Shell;
+            if (!string.IsNullOrWhiteSpace(commandPayload.WorkingDirectory))
+            {
+                metadata["workingDirectory"] = commandPayload.WorkingDirectory;
+            }
+        }
 
         if (transferPlan is not null)
         {
@@ -33,20 +43,6 @@ public sealed class WinRmScriptExecutor(
             metadata["scriptSha256"] = transferPlan.ContentSha256;
             metadata["chunkSizeBytes"] = transferPlan.ChunkSizeBytes.ToString();
             metadata["chunkCount"] = transferPlan.ChunkCount.ToString();
-        }
-
-        if (transferPlan is null)
-        {
-            metadata["mode"] = "upload-unavailable";
-            return Task.FromResult(new TransportScriptExecutionResult(
-                ExitCode: null,
-                Stdout: string.Empty,
-                Stderr: string.Empty,
-                StartedAt: startedAt,
-                EndedAt: DateTimeOffset.UtcNow,
-                FailureCategory: FailureCategory.PayloadPreparationFailed,
-                FailureMessage: "Raw WinRM script upload requires a prepared chunked transfer plan, but none was produced.",
-                Metadata: metadata));
         }
 
         var command = ResolveCommand(request);
@@ -60,11 +56,31 @@ public sealed class WinRmScriptExecutor(
                 StartedAt: startedAt,
                 EndedAt: DateTimeOffset.UtcNow,
                 FailureCategory: FailureCategory.PayloadPreparationFailed,
-                FailureMessage: $"Raw WinRM execution requires a prepared PowerShell command for '{request.Target.Target.Name}'.",
+                FailureMessage: $"Raw WinRM execution requires a prepared command for '{request.Target.Target.Name}'.",
                 Metadata: metadata));
         }
 
         metadata["executionCommand"] = command.RenderedCommand;
+        if (transferPlan is null)
+        {
+            if (request.Plan.Job.Payload is ScriptPayload)
+            {
+                metadata["mode"] = "upload-unavailable";
+                return Task.FromResult(new TransportScriptExecutionResult(
+                    ExitCode: null,
+                    Stdout: string.Empty,
+                    Stderr: string.Empty,
+                    StartedAt: startedAt,
+                    EndedAt: DateTimeOffset.UtcNow,
+                    FailureCategory: FailureCategory.PayloadPreparationFailed,
+                    FailureMessage: "Raw WinRM script upload requires a prepared chunked transfer plan, but none was produced.",
+                    Metadata: metadata));
+            }
+
+            metadata["transferMode"] = "NotRequired";
+            metadata["uploadStatus"] = "not-required";
+            return ExecuteShellCommandAsync(request, command, metadata, startedAt, cancellationToken);
+        }
         return ExecuteAfterUploadAsync(request, transferPlan, command, metadata, startedAt, cancellationToken);
     }
 
@@ -107,9 +123,17 @@ public sealed class WinRmScriptExecutor(
                 Metadata: metadata);
         }
 
-        metadata["mode"] = "execution-pending";
         metadata["uploadStatus"] = "completed";
+        return await ExecuteShellCommandAsync(request, command, metadata, startedAt, cancellationToken).ConfigureAwait(false);
+    }
 
+    private async Task<TransportScriptExecutionResult> ExecuteShellCommandAsync(
+        TransportScriptExecutionRequest request,
+        DirectExecutionCommand command,
+        Dictionary<string, string> metadata,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken)
+    {
         var shellResult = await shellClient.ExecuteAsync(
                 new WinRmShellCommandRequest(
                     request.Target.Target.Name,

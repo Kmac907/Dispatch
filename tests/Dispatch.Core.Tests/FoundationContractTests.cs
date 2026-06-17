@@ -85,8 +85,8 @@ public sealed class FoundationContractTests
 
         Assert.Equal(TransportKind.WinRm, descriptor.Kind);
         Assert.True(descriptor.Capabilities.SupportsScriptExecution);
+        Assert.True(descriptor.Capabilities.SupportsCommandExecution);
         Assert.True(descriptor.Capabilities.RequiresEndpointLocalScriptPath);
-        Assert.False(descriptor.Capabilities.SupportsCommandExecution);
         Assert.False(descriptor.Capabilities.SupportsNativeFileCopy);
         Assert.True(descriptor.Capabilities.SupportsStreamedFileTransfer);
         Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
