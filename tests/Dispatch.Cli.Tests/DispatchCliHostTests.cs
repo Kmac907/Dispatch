@@ -1,9 +1,11 @@
 using Dispatch.Core.Models;
 using Dispatch.Core.Transports;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.Versioning;
 
 namespace Dispatch.Cli.Tests;
 
+[SupportedOSPlatform("windows")]
 public sealed class DispatchCliHostTests
 {
     [Fact]

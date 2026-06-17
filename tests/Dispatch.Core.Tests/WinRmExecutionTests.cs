@@ -5,10 +5,13 @@ using Dispatch.Core.Transports;
 using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.Versioning;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace Dispatch.Core.Tests;
 
+[SupportedOSPlatform("windows")]
 public sealed class WinRmExecutionTests
 {
     [Fact]
@@ -65,9 +68,16 @@ public sealed class WinRmExecutionTests
         using var script = TemporaryScript.Create("Fix.ps1");
         using var outputRoot = TemporaryDirectory.Create();
         var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success(
+            new Dictionary<string, string>
+            {
+                ["scheme"] = "https",
+                ["port"] = "5986"
+            }));
         using var provider = BuildProvider(
             outputRoot.Path,
             endpointFileSystem,
+            transferClient,
             dnsResolver: new RecordingDnsResolver(WinRmProbeResult.Success),
             portProbe: new RecordingPortProbe((_, port) => port == 5986
                 ? WinRmProbeResult.Success
@@ -94,8 +104,9 @@ public sealed class WinRmExecutionTests
         Assert.Empty(endpointFileSystem.CreatedDirectories);
         Assert.Empty(endpointFileSystem.Copies);
         Assert.Equal("winrm", target.TransportMetadata?["transport"]);
-        Assert.Equal("prepared-only", target.TransportMetadata?["mode"]);
+        Assert.Equal("upload-only", target.TransportMetadata?["mode"]);
         Assert.Equal("completed", target.TransportMetadata?["preparation"]);
+        Assert.Equal("completed", target.TransportMetadata?["uploadStatus"]);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.TransportMetadata?["plannedRemoteScriptPath"]);
         var scriptBytes = await File.ReadAllBytesAsync(script.Path);
         Assert.Equal("WinRmChunkedBase64", target.TransportMetadata?["transferMode"]);
@@ -103,6 +114,12 @@ public sealed class WinRmExecutionTests
         Assert.Equal(ComputeSha256(scriptBytes), target.TransportMetadata?["scriptSha256"]);
         Assert.Equal("8192", target.TransportMetadata?["chunkSizeBytes"]);
         Assert.Equal("1", target.TransportMetadata?["chunkCount"]);
+        Assert.Equal("https", target.TransportMetadata?["scheme"]);
+        Assert.Equal("5986", target.TransportMetadata?["port"]);
+        var uploadRequest = Assert.Single(transferClient.Requests);
+        Assert.Equal("PC001", uploadRequest.Target);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", uploadRequest.RemoteScriptPath);
+        Assert.Equal(1, uploadRequest.TransferPlan.ChunkCount);
         Assert.Equal(
             [
                 TargetExecutionState.Probing,
@@ -143,6 +160,125 @@ public sealed class WinRmExecutionTests
         Assert.Equal("dns", target.TransportMetadata?["stage"]);
     }
 
+    [Fact]
+    public async Task ExecutorMapsWinRmUploadFailureToScriptTransferFailed()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Failed(
+            FailureCategory.ScriptTransferFailed,
+            "Upload failed.",
+            new Dictionary<string, string>
+            {
+                ["uploadStage"] = "shell"
+            }));
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            endpointFileSystem,
+            transferClient,
+            dnsResolver: new RecordingDnsResolver(WinRmProbeResult.Success),
+            portProbe: new RecordingPortProbe((_, _) => WinRmProbeResult.Success));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(FailureCategory.ScriptTransferFailed, target.FailureCategory);
+        Assert.Contains("Upload failed", target.FailureMessage);
+        Assert.Equal("shell", target.TransportMetadata?["uploadStage"]);
+        Assert.Equal("upload-failed", target.TransportMetadata?["mode"]);
+        Assert.Equal("completed", target.TransportMetadata?["preparation"]);
+        Assert.Equal("failed", target.TransportMetadata?["uploadStatus"]);
+    }
+
+    [Fact]
+    public async Task ScriptTransferClientUploadsPreparedChunksAndValidatesReportedHash()
+    {
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "abcd1234\n",
+            string.Empty,
+            null,
+            new Dictionary<string, string>
+            {
+                ["scheme"] = "https",
+                ["port"] = "5986"
+            }));
+        var client = new WinRmScriptTransferClient(shellClient);
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 6,
+            ContentSha256: "abcd1234",
+            ChunkSizeBytes: 4,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA=="),
+                new ScriptTransferChunk(1, 4, 2, "hash-2", "RUY=")
+            ]);
+
+        var result = await client.UploadAsync(
+            new WinRmScriptTransferRequest("PC001", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", transferPlan),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var request = Assert.Single(shellClient.Requests);
+        Assert.Equal("PC001", request.Target);
+        Assert.Equal("powershell.exe", request.Executable);
+        Assert.Contains("-EncodedCommand", request.Arguments);
+        Assert.Equal(2, request.StandardInputFrames.Count);
+        Assert.Equal("QUJDRA==\n", Encoding.ASCII.GetString(request.StandardInputFrames[0]));
+        Assert.Equal("RUY=\n", Encoding.ASCII.GetString(request.StandardInputFrames[1]));
+        var encodedCommandIndex = request.Arguments.ToList().IndexOf("-EncodedCommand");
+        var encodedCommand = request.Arguments[encodedCommandIndex + 1];
+        var uploaderScript = Encoding.Unicode.GetString(Convert.FromBase64String(encodedCommand));
+        Assert.Contains(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("Get-FileHash", uploaderScript, StringComparison.Ordinal);
+        Assert.Equal("completed", result.Metadata?["uploadStage"]);
+        Assert.Equal("abcd1234", result.Metadata?["uploadExpectedSha256"]);
+        Assert.Equal("abcd1234", result.Metadata?["uploadReportedSha256"]);
+    }
+
+    [Fact]
+    public async Task ScriptTransferClientFailsWhenReportedHashDoesNotMatch()
+    {
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "wronghash\n",
+            string.Empty,
+            null));
+        var client = new WinRmScriptTransferClient(shellClient);
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 4,
+            ContentSha256: "expectedhash",
+            ChunkSizeBytes: 4,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA==")
+            ]);
+
+        var result = await client.UploadAsync(
+            new WinRmScriptTransferRequest("PC001", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", transferPlan),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal(FailureCategory.ScriptTransferFailed, result.FailureCategory);
+        Assert.Equal("hash-verify", result.Metadata?["uploadStage"]);
+        Assert.Equal("wronghash", result.Metadata?["uploadReportedSha256"]);
+        Assert.Equal("expectedhash", result.Metadata?["uploadExpectedSha256"]);
+    }
+
     private static TransportEndpointProbeRequest CreateProbeRequest(string targetName)
     {
         var target = new TargetExecution(
@@ -176,6 +312,7 @@ public sealed class WinRmExecutionTests
     private static ServiceProvider BuildProvider(
         string localRunRoot,
         RecordingEndpointFileSystem endpointFileSystem,
+        RecordingScriptTransferClient? transferClient = null,
         IWinRmDnsResolver? dnsResolver = null,
         IWinRmPortProbe? portProbe = null)
     {
@@ -197,6 +334,7 @@ public sealed class WinRmExecutionTests
             .AddSingleton<IEndpointFileSystem>(endpointFileSystem)
             .AddSingleton<IWinRmDnsResolver>(dnsResolver ?? new RecordingDnsResolver(WinRmProbeResult.Success))
             .AddSingleton<IWinRmPortProbe>(portProbe ?? new RecordingPortProbe((_, _) => WinRmProbeResult.Success))
+            .AddSingleton<IWinRmScriptTransferClient>(transferClient ?? new RecordingScriptTransferClient(WinRmScriptTransferResult.Success()))
             .BuildServiceProvider(validateScopes: true);
     }
 
@@ -257,5 +395,27 @@ public sealed class WinRmExecutionTests
     {
         public Task<WinRmProbeResult> CanConnectAsync(string target, int port, CancellationToken cancellationToken) =>
             Task.FromResult(resultFactory(target, port));
+    }
+
+    private sealed class RecordingScriptTransferClient(WinRmScriptTransferResult result) : IWinRmScriptTransferClient
+    {
+        public List<WinRmScriptTransferRequest> Requests { get; } = [];
+
+        public Task<WinRmScriptTransferResult> UploadAsync(WinRmScriptTransferRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(result);
+        }
+    }
+
+    private sealed class RecordingShellClient(WinRmShellCommandResult result) : IWinRmShellClient
+    {
+        public List<WinRmShellCommandRequest> Requests { get; } = [];
+
+        public Task<WinRmShellCommandResult> ExecuteAsync(WinRmShellCommandRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(result);
+        }
     }
 }

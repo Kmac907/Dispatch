@@ -5,9 +5,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Runtime.Versioning;
 
 namespace Dispatch.Cli;
 
+[SupportedOSPlatform("windows")]
 public static class DispatchCliHost
 {
     public static IHost Build(string[] args)

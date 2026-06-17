@@ -1,0 +1,119 @@
+using Dispatch.Core.Models;
+using System.Text;
+
+namespace Dispatch.Transports.WinRm;
+
+public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : IWinRmScriptTransferClient
+{
+    public async Task<WinRmScriptTransferResult> UploadAsync(
+        WinRmScriptTransferRequest request,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var frames = request.TransferPlan.Chunks
+            .Select(static chunk => Encoding.ASCII.GetBytes(chunk.Base64Data + "\n"))
+            .ToArray();
+
+        var shellResult = await shellClient.ExecuteAsync(
+                new WinRmShellCommandRequest(
+                    request.Target,
+                    "powershell.exe",
+                    [
+                        "-NoProfile",
+                        "-ExecutionPolicy",
+                        "Bypass",
+                        "-EncodedCommand",
+                        BuildUploaderEncodedCommand(request.RemoteScriptPath)
+                    ],
+                    frames),
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["uploadTarget"] = request.Target,
+            ["uploadRemoteScriptPath"] = request.RemoteScriptPath,
+            ["uploadChunkCount"] = request.TransferPlan.ChunkCount.ToString(),
+            ["uploadChunkSizeBytes"] = request.TransferPlan.ChunkSizeBytes.ToString()
+        };
+
+        if (shellResult.Metadata is not null)
+        {
+            foreach (var pair in shellResult.Metadata)
+            {
+                metadata[pair.Key] = pair.Value;
+            }
+        }
+
+        if (!shellResult.Succeeded)
+        {
+            metadata["uploadStage"] = "shell";
+            return WinRmScriptTransferResult.Failed(
+                FailureCategory.ScriptTransferFailed,
+                shellResult.FailureMessage ?? $"Raw WinRM upload failed for '{request.Target}'.",
+                metadata);
+        }
+
+        if (shellResult.ExitCode != 0)
+        {
+            metadata["uploadStage"] = "remote-command";
+            metadata["uploadExitCode"] = shellResult.ExitCode?.ToString() ?? string.Empty;
+            return WinRmScriptTransferResult.Failed(
+                FailureCategory.ScriptTransferFailed,
+                $"Raw WinRM upload failed for '{request.Target}' with exit code {shellResult.ExitCode}. {shellResult.Stderr}".Trim(),
+                metadata);
+        }
+
+        var reportedSha = ExtractLastNonEmptyLine(shellResult.Stdout);
+        if (!string.Equals(reportedSha, request.TransferPlan.ContentSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            metadata["uploadStage"] = "hash-verify";
+            metadata["uploadReportedSha256"] = reportedSha ?? string.Empty;
+            metadata["uploadExpectedSha256"] = request.TransferPlan.ContentSha256;
+            return WinRmScriptTransferResult.Failed(
+                FailureCategory.ScriptTransferFailed,
+                $"Raw WinRM upload reported SHA-256 '{reportedSha ?? "<empty>"}' for '{request.Target}', expected '{request.TransferPlan.ContentSha256}'.",
+                metadata);
+        }
+
+        metadata["uploadStage"] = "completed";
+        metadata["uploadReportedSha256"] = reportedSha!;
+        metadata["uploadExpectedSha256"] = request.TransferPlan.ContentSha256;
+        return WinRmScriptTransferResult.Success(metadata);
+    }
+
+    private static string BuildUploaderEncodedCommand(string remoteScriptPath)
+    {
+        var script = $$"""
+$path = @'
+{{remoteScriptPath}}
+'@
+$directory = Split-Path -Parent -LiteralPath $path
+[System.IO.Directory]::CreateDirectory($directory) | Out-Null
+$stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+try {
+    while (($line = [Console]::In.ReadLine()) -ne $null) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        $bytes = [Convert]::FromBase64String($line)
+        $stream.Write($bytes, 0, $bytes.Length)
+    }
+}
+finally {
+    $stream.Dispose()
+}
+
+$hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+[Console]::Out.WriteLine($hash)
+""";
+
+        return Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+    }
+
+    private static string? ExtractLastNonEmptyLine(string value) =>
+        value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault();
+}
