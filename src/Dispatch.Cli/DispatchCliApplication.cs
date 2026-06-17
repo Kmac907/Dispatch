@@ -67,7 +67,11 @@ public sealed class DispatchCliApplication(
     {
         if (!DispatchRunCommandParser.TryParse(
                 args,
-                options.Value.DefaultTransport,
+                new DispatchRunCommandParser.DispatchRunAmbientConfig(
+                    options.Value.Inventory,
+                    options.Value.Target,
+                    options.Value.Exclude,
+                    options.Value.DefaultTransport),
                 options.Value.ExpectedExitCodes,
                 out var command,
                 out var error))

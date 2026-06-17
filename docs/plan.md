@@ -1139,12 +1139,13 @@ Definition of done:
 
 Current implementation note:
 - `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, groups, nested `groups.<group>.children`, host names, `tag:<name>`, and `file:<path>`.
-- Explicit `--config <path>` currently provides `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path when the corresponding CLI flags are omitted.
+- Ambient bound `Dispatch` config values now provide `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path when the corresponding CLI flags are omitted and no explicit `--config <path>` is supplied.
+- Explicit `--config <path>` currently provides the same `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path and overrides ambient config values where it supplies them.
 - The current YAML inventory subset now includes transport precedence from inventory defaults, group vars, and host vars when CLI transport is not explicitly set, including inherited group membership through nested child groups.
 - Inventory transport policy still overrides config/default transport when CLI transport is omitted.
 - Defaults-only inventories are treated as YAML and fail clearly when they do not resolve any real hosts, rather than being parsed as text host files.
 - Unsupported inventory sections and unsupported fields inside the current YAML subset now fail validation clearly before planning, and cyclic nested group graphs fail validation clearly before planning.
-- Advanced selectors, broader YAML inventory schema behavior, credential references, and the remaining job/user-config/machine-config precedence work remain pending.
+- Advanced selectors, broader YAML inventory schema behavior, credential references, and future job-YAML precedence work remain pending.
 
 #### 6.3 Structured Run Logs And Log Commands
 

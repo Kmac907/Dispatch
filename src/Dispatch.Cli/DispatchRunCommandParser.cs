@@ -9,7 +9,7 @@ internal sealed class DispatchRunCommandParser
 {
     public static bool TryParse(
         IReadOnlyList<string> args,
-        TransportKind defaultTransport,
+        DispatchRunAmbientConfig ambientConfig,
         IReadOnlyList<int> defaultExpectedExitCodes,
         out DispatchRunCommand? command,
         out string error)
@@ -220,7 +220,7 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
-        if (!TryLoadConfig(configPath, out var config, out error))
+        if (!TryLoadConfig(configPath, ambientConfig, out var config, out error))
         {
             return false;
         }
@@ -236,7 +236,7 @@ internal sealed class DispatchRunCommandParser
             excludeSelectors.Add(config.Exclude);
         }
 
-        var effectiveDefaultTransport = config.DefaultTransport ?? defaultTransport;
+        var effectiveDefaultTransport = config.DefaultTransport ?? ambientConfig.DefaultTransport;
         var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(
             computerNameValues,
             targetFile,
@@ -300,10 +300,17 @@ internal sealed class DispatchRunCommandParser
 
     private static bool TryLoadConfig(
         string? configPath,
+        DispatchRunAmbientConfig ambientConfig,
         out DispatchRunConfig config,
         out string error)
     {
-        config = new DispatchRunConfig();
+        config = new DispatchRunConfig
+        {
+            Inventory = ambientConfig.Inventory,
+            Target = ambientConfig.Target,
+            Exclude = ambientConfig.Exclude,
+            DefaultTransport = ambientConfig.DefaultTransport
+        };
         error = string.Empty;
 
         if (string.IsNullOrWhiteSpace(configPath))
@@ -324,11 +331,11 @@ internal sealed class DispatchRunCommandParser
                 .Build();
             var section = configuration.GetSection(DispatchOptions.SectionName);
 
-            config = new DispatchRunConfig
+            config = config with
             {
-                Inventory = section["Inventory"],
-                Target = section["Target"],
-                Exclude = section["Exclude"]
+                Inventory = section["Inventory"] ?? config.Inventory,
+                Target = section["Target"] ?? config.Target,
+                Exclude = section["Exclude"] ?? config.Exclude
             };
 
             var configuredTransport = section["DefaultTransport"];
@@ -340,7 +347,10 @@ internal sealed class DispatchRunCommandParser
                     return false;
                 }
 
-                config.DefaultTransport = parsedTransport.Value;
+                config = config with
+                {
+                    DefaultTransport = parsedTransport.Value
+                };
             }
 
             return true;
@@ -451,7 +461,13 @@ internal sealed class DispatchRunCommandParser
         return parsed.Count > 0;
     }
 
-    private sealed class DispatchRunConfig
+    internal sealed record DispatchRunAmbientConfig(
+        string? Inventory,
+        string? Target,
+        string? Exclude,
+        TransportKind DefaultTransport);
+
+    private sealed record DispatchRunConfig
     {
         public string? Inventory { get; init; }
 
@@ -459,6 +475,6 @@ internal sealed class DispatchRunCommandParser
 
         public string? Exclude { get; init; }
 
-        public TransportKind? DefaultTransport { get; set; }
+        public TransportKind? DefaultTransport { get; init; }
     }
 }

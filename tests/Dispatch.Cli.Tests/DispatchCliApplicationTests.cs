@@ -637,6 +637,168 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteUsesAmbientConfigForInventoryTargetExcludeAndTransportDefault()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            options: new DispatchOptions
+            {
+                Inventory = inventoryPath,
+                Target = "web",
+                Exclude = "WEB02",
+                DefaultTransport = TransportKind.WinRm,
+                ExpectedExitCodes = [0]
+            });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest!.Transport);
+            Assert.Equal(["WEB01"], planner.LastRequest.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteInventoryTransportBeatsAmbientConfigTransport()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              transport: winrm
+            hosts:
+              WEB01:
+                tags: [prod]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            options: new DispatchOptions
+            {
+                Inventory = inventoryPath,
+                Target = "WEB01",
+                DefaultTransport = TransportKind.PsExec,
+                ExpectedExitCodes = [0]
+            });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRouteExplicitConfigOverridesAmbientConfigWhenProvided()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var ambientInventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        var explicitInventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(ambientInventoryPath, """
+            hosts:
+              APP01:
+                tags: [ambient]
+            """);
+        await File.WriteAllTextAsync(explicitInventoryPath, """
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            """);
+        await File.WriteAllTextAsync(configPath, JsonSerializer.Serialize(new
+        {
+            Dispatch = new
+            {
+                Inventory = explicitInventoryPath,
+                Target = "web",
+                Exclude = "WEB02",
+                DefaultTransport = "winrm"
+            }
+        }));
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            options: new DispatchOptions
+            {
+                Inventory = ambientInventoryPath,
+                Target = "APP01",
+                DefaultTransport = TransportKind.PsExec,
+                ExpectedExitCodes = [0]
+            });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--config",
+                    configPath,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest!.Transport);
+            Assert.Equal(["WEB01"], planner.LastRequest.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(ambientInventoryPath);
+            File.Delete(explicitInventoryPath);
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteUsesExplicitConfigForInventoryTargetExcludeAndTransportDefault()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -1484,9 +1646,10 @@ public sealed class DispatchCliApplicationTests
         IDispatchDoctor? doctor = null,
         IDispatchExecutor? executor = null,
         DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
-        TextWriter? statusWriter = null) =>
+        TextWriter? statusWriter = null,
+        DispatchOptions? options = null) =>
         new(
-            Options.Create(new DispatchOptions { ExpectedExitCodes = [0] }),
+            Options.Create(options ?? new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
             executor ?? new ThrowingExecutor(),
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
