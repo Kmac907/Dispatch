@@ -22,6 +22,13 @@ public sealed record WinRmShellCommandResult(
     string? FailureMessage,
     IReadOnlyDictionary<string, string>? Metadata = null)
 {
+    public static WinRmShellCommandResult SucceededResult(
+        int? exitCode = 0,
+        string stdout = "",
+        string stderr = "",
+        IReadOnlyDictionary<string, string>? metadata = null) =>
+        new(true, exitCode, stdout, stderr, null, metadata);
+
     public static WinRmShellCommandResult Failed(
         string failureMessage,
         IReadOnlyDictionary<string, string>? metadata = null) =>

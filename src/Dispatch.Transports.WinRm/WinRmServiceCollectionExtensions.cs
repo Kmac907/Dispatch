@@ -1,3 +1,4 @@
+using Dispatch.Core.Execution;
 using Dispatch.Core.Transports;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
@@ -14,6 +15,7 @@ public static class WinRmServiceCollectionExtensions
         services.AddSingleton<IWinRmPortProbe, WinRmPortProbe>();
         services.AddSingleton<IWinRmShellClient, WinRmShellClient>();
         services.AddSingleton<IWinRmScriptTransferClient, WinRmScriptTransferClient>();
+        services.AddSingleton<ITransportArtifactCollector, WinRmArtifactCollector>();
         services.AddSingleton<ITransportEndpointProbe, WinRmEndpointProbe>();
         services.AddSingleton<ITransportScriptExecutor, WinRmScriptExecutor>();
         return services;

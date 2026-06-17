@@ -2,7 +2,9 @@ using Dispatch.Core.Models;
 
 namespace Dispatch.Core.Execution;
 
-internal sealed class DispatchArtifactCollector(IEndpointFileSystem endpointFileSystem) : IDispatchArtifactCollector
+internal sealed class DispatchArtifactCollector(
+    IEndpointFileSystem endpointFileSystem,
+    IEnumerable<ITransportArtifactCollector> transportArtifactCollectors) : IDispatchArtifactCollector
 {
     private static readonly string[] DefaultArtifactFolders = ["logs", "artifacts"];
 
@@ -13,8 +15,14 @@ internal sealed class DispatchArtifactCollector(IEndpointFileSystem endpointFile
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (!SupportsArtifactCopyBack(plan.Job.Transport))
+        if (plan.Job.Transport != TransportKind.PsExec)
         {
+            var transportCollector = transportArtifactCollectors.SingleOrDefault(collector => collector.Kind == plan.Job.Transport);
+            if (transportCollector is not null)
+            {
+                return await transportCollector.CollectAsync(plan, target, cancellationToken).ConfigureAwait(false);
+            }
+
             return new ArtifactCollectionResult(
                 "skipped",
                 [],
@@ -69,14 +77,12 @@ internal sealed class DispatchArtifactCollector(IEndpointFileSystem endpointFile
             copiedArtifacts);
     }
 
-    private static bool SupportsArtifactCopyBack(TransportKind transport) => transport == TransportKind.PsExec;
-
-    private static IReadOnlyList<string> GetArtifactFolders(ArtifactPolicy policy) =>
+    internal static IReadOnlyList<string> GetArtifactFolders(ArtifactPolicy policy) =>
         policy.Paths is { Count: > 0 }
             ? policy.Paths
             : DefaultArtifactFolders;
 
-    private static string CombineWindowsPath(params string[] parts)
+    internal static string CombineWindowsPath(params string[] parts)
     {
         var first = parts[0].TrimEnd('\\');
         var rest = parts
@@ -87,7 +93,7 @@ internal sealed class DispatchArtifactCollector(IEndpointFileSystem endpointFile
         return string.Join('\\', new[] { first }.Concat(rest));
     }
 
-    private static string SanitizeRelativePath(string value)
+    internal static string SanitizeRelativePath(string value)
     {
         var invalidPathChars = Path.GetInvalidPathChars();
         var sanitized = string.Concat(value.Select(character => invalidPathChars.Contains(character) ? '_' : character));

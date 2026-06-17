@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
 using System.Text;
+using System.IO.Compression;
 
 namespace Dispatch.Core.Tests;
 
@@ -74,16 +75,19 @@ public sealed class WinRmExecutionTests
                 ["scheme"] = "https",
                 ["port"] = "5986"
             }));
-        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
-            true,
-            0,
-            "audit complete",
-            string.Empty,
-            null,
-            new Dictionary<string, string>
-            {
-                ["shell"] = "command"
-            }));
+        var shellClient = new RecordingShellClient(
+            new WinRmShellCommandResult(
+                true,
+                0,
+                "audit complete",
+                string.Empty,
+                null,
+                new Dictionary<string, string>
+                {
+                    ["shell"] = "command"
+                }),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3));
         using var provider = BuildProvider(
             outputRoot.Path,
             endpointFileSystem,
@@ -110,8 +114,8 @@ public sealed class WinRmExecutionTests
         Assert.Equal(TargetExecutionState.Succeeded, target.State);
         Assert.Equal(FailureCategory.None, target.FailureCategory);
         Assert.Null(target.FailureMessage);
-        Assert.Equal("skipped", target.ArtifactCollectionStatus);
-        Assert.Contains("not implemented", target.ArtifactCollectionFailureMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("not-found", target.ArtifactCollectionStatus);
+        Assert.Null(target.ArtifactCollectionFailureMessage);
         Assert.Empty(endpointFileSystem.CreatedDirectories);
         Assert.Empty(endpointFileSystem.Copies);
         Assert.Equal(0, target.ExitCode);
@@ -139,13 +143,14 @@ public sealed class WinRmExecutionTests
         Assert.Equal("PC001", uploadRequest.Target);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", uploadRequest.RemoteScriptPath);
         Assert.Equal(1, uploadRequest.TransferPlan.ChunkCount);
-        var shellRequest = Assert.Single(shellClient.Requests);
+        var shellRequest = shellClient.Requests[0];
         Assert.Equal("PC001", shellRequest.Target);
         Assert.Equal("powershell.exe", shellRequest.Executable);
         Assert.Equal(
             ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", "-Mode", "Audit"],
             shellRequest.Arguments);
         Assert.Empty(shellRequest.StandardInputFrames);
+        Assert.Equal(3, shellClient.Requests.Count);
         Assert.Equal(
             [
                 TargetExecutionState.Probing,
@@ -164,12 +169,15 @@ public sealed class WinRmExecutionTests
         using var outputRoot = TemporaryDirectory.Create();
         var endpointFileSystem = new RecordingEndpointFileSystem();
         var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
-        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
-            true,
-            5,
-            "partial output",
-            "stderr line",
-            null));
+        var shellClient = new RecordingShellClient(
+            new WinRmShellCommandResult(
+                true,
+                5,
+                "partial output",
+                "stderr line",
+                null),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3));
         using var provider = BuildProvider(
             outputRoot.Path,
             endpointFileSystem,
@@ -275,12 +283,15 @@ public sealed class WinRmExecutionTests
         using var outputRoot = TemporaryDirectory.Create();
         var endpointFileSystem = new RecordingEndpointFileSystem();
         var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
-        var shellClient = new RecordingShellClient(WinRmShellCommandResult.Failed(
-            "Shell failed.",
-            new Dictionary<string, string>
-            {
-                ["shellStage"] = "invoke"
-            }));
+        var shellClient = new RecordingShellClient(
+            WinRmShellCommandResult.Failed(
+                "Shell failed.",
+                new Dictionary<string, string>
+                {
+                    ["shellStage"] = "invoke"
+                }),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3));
         using var provider = BuildProvider(
             outputRoot.Path,
             endpointFileSystem,
@@ -306,6 +317,78 @@ public sealed class WinRmExecutionTests
         Assert.Equal("completed", target.TransportMetadata?["uploadStatus"]);
         Assert.Equal("failed", target.TransportMetadata?["executionStatus"]);
         Assert.Equal("invoke", target.TransportMetadata?["shellStage"]);
+    }
+
+    [Fact]
+    public async Task ExecutorCollectsWinRmArtifactFoldersOverRawShell()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(
+            new WinRmShellCommandResult(true, 0, "artifact complete", string.Empty, null),
+            new WinRmShellCommandResult(true, 0, CreateZipBase64(("install.log", "copied log")), string.Empty, null),
+            new WinRmShellCommandResult(true, 0, CreateZipBase64((@"reports\summary.json", "{\"ok\":true}")), string.Empty, null));
+        using var provider = BuildProvider(outputRoot.Path, endpointFileSystem, transferClient, shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal("collected", target.ArtifactCollectionStatus);
+        Assert.Null(target.ArtifactCollectionFailureMessage);
+        Assert.Equal(
+            [@"logs\install.log", @"artifacts\reports\summary.json"],
+            target.Artifacts);
+        Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "logs", "install.log")));
+        Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "artifacts", "reports", "summary.json")));
+
+        var targetJson = await File.ReadAllTextAsync(target.ResultPath);
+        Assert.Contains("\"artifactCollectionStatus\": \"collected\"", targetJson);
+
+        var resultsCsv = await File.ReadAllTextAsync(plan.LocalResultsCsvPath);
+        Assert.Contains(@"logs\install.log;artifacts\reports\summary.json", resultsCsv);
+    }
+
+    [Fact]
+    public async Task ExecutorTracksWinRmArtifactFailureSeparatelyFromScriptResult()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(
+            new WinRmShellCommandResult(true, 0, "artifact complete", string.Empty, null),
+            WinRmShellCommandResult.Failed("artifact shell failed"));
+        using var provider = BuildProvider(outputRoot.Path, endpointFileSystem, transferClient, shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path,
+            artifactPaths: ["logs"]);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal(FailureCategory.None, target.FailureCategory);
+        Assert.Equal("failed", target.ArtifactCollectionStatus);
+        Assert.Contains("artifact", target.ArtifactCollectionFailureMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -666,13 +749,38 @@ public sealed class WinRmExecutionTests
         }
     }
 
-    private sealed class RecordingShellClient(WinRmShellCommandResult result) : IWinRmShellClient
+    private static string CreateZipBase64(params (string RelativePath, string Content)[] entries)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (relativePath, content) in entries)
+            {
+                var entry = archive.CreateEntry(relativePath.Replace('\\', '/'));
+                using var writer = new StreamWriter(entry.Open(), Encoding.UTF8, 1024, leaveOpen: false);
+                writer.Write(content);
+            }
+        }
+
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private sealed class RecordingShellClient : IWinRmShellClient
     {
         public List<WinRmShellCommandRequest> Requests { get; } = [];
+        private readonly Queue<WinRmShellCommandResult> results;
+
+        public RecordingShellClient(params WinRmShellCommandResult[] results)
+        {
+            this.results = new Queue<WinRmShellCommandResult>(results);
+        }
 
         public Task<WinRmShellCommandResult> ExecuteAsync(WinRmShellCommandRequest request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
+            var result = results.Count > 0
+                ? results.Dequeue()
+                : WinRmShellCommandResult.SucceededResult(exitCode: 3);
             return Task.FromResult(result);
         }
     }

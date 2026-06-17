@@ -23,7 +23,7 @@ internal static class SpectreConsoleRenderer
     {
         var console = CreateConsole(writer);
         console.MarkupLine("[bold]Dispatch[/]");
-        console.WriteLine("Windows-native automation runner for PowerShell scripts; PsExec executes today, and WinRM now supports planning, endpoint probes, prepared-script upload, and raw-shell-backed PowerShell script execution while command execution and artifact collection remain in progress.");
+        console.WriteLine("Windows-native automation runner for PowerShell scripts; PsExec executes today, and WinRM now supports planning, endpoint probes, prepared-script upload, raw-shell-backed PowerShell script execution, and artifact collection while command execution and live validation remain in progress.");
         console.WriteLine();
         console.WriteLine("Usage:");
         console.WriteLine("  dispatch <command> [arguments] [options]");

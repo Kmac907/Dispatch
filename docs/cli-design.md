@@ -8,7 +8,7 @@ This document records the active CLI design that supersedes the earlier Terminal
 
 Dispatch is a Windows-native C# automation runner for Windows hosts. The product design covers ad-hoc execution, declared jobs, host inventories, structured logs, credential references, and explicit transports. Current implementation status is tracked in `docs/plan.md` and `workflow/build/implementation-plan.md`.
 
-Current transport priority is raw WinRM first, then PSRP. PsExec remains the only fully completed transport path today. The current raw WinRM slice now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, and raw-shell-backed PowerShell script execution; command execution, artifact collection, and successful live validation still remain roadmap work.
+Current transport priority is raw WinRM first, then PSRP. PsExec remains the only fully completed transport path today. The current raw WinRM slice now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, and artifact collection over the WinRM channel; command execution and successful live validation still remain roadmap work.
 
 The operator model is:
 
@@ -38,7 +38,7 @@ Transports are not top-level commands. They are selected with:
 --transport auto|psrp|winrm|psexec
 ```
 
-Accepted transport names are broader than the currently implemented executors. `psrp` remains a command-contract value and roadmap target. `winrm` is now a partial execution path that can validate requests, build plans, probe endpoint reachability, upload a prepared script, and execute that prepared PowerShell script, but direct command execution and artifact collection are still not implemented.
+Accepted transport names are broader than the currently implemented executors. `psrp` remains a command-contract value and roadmap target. `winrm` is now a partial execution path that can validate requests, build plans, probe endpoint reachability, upload a prepared script, execute that prepared PowerShell script, and collect declared/default artifact folders, but direct command execution is still not implemented.
 
 ## Global Options
 

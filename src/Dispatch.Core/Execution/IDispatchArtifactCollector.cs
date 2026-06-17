@@ -7,6 +7,13 @@ public interface IDispatchArtifactCollector
     Task<ArtifactCollectionResult> CollectAsync(ExecutionPlan plan, TargetExecution target, CancellationToken cancellationToken);
 }
 
+public interface ITransportArtifactCollector
+{
+    TransportKind Kind { get; }
+
+    Task<ArtifactCollectionResult> CollectAsync(ExecutionPlan plan, TargetExecution target, CancellationToken cancellationToken);
+}
+
 public sealed record ArtifactCollectionResult(
     string Status,
     IReadOnlyList<string> Artifacts,
