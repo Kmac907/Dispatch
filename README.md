@@ -66,7 +66,7 @@ dispatch version
 
 ### Live Terminal Design
 
-Spectre live output is event-driven. Planning and preflight use live `Status`/`Progress` only when the work is actually happening. Real execution uses one `LiveDisplay` dashboard fed by internal run events; workers do not write directly to the console. After live rendering ends, Dispatch prints a stable final summary and keeps durable logs/results for automation and troubleshooting.
+Spectre live output is event-driven. Planning and preflight use live `Status`/`Progress` only when the work is actually happening. Real execution uses one `LiveDisplay` dashboard fed by internal run events plus a one-second heartbeat refresh, so elapsed timers continue moving during long phases; workers do not write directly to the console. The live dashboard shows aggregate counts, one measurable completion bar, per-target status/phase/elapsed rows, and recent events. After live rendering ends, Dispatch prints a stable final summary and keeps durable logs/results for automation and troubleshooting.
 
 Run from a real Windows Terminal or PowerShell window, not from redirected output:
 

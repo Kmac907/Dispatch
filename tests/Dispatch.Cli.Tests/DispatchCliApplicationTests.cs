@@ -22,8 +22,9 @@ public sealed class DispatchCliApplicationTests
         Assert.Equal(0, exitCode);
         Assert.Contains("Windows-native automation runner", output);
         Assert.Contains("PowerShell scripts and commands", normalized);
-        Assert.Contains("direct command execution", normalized);
-        Assert.Contains("live validation remains in progress", normalized);
+        Assert.Contains("direct WinRM command execution", normalized);
+        Assert.Contains("PsExec and raw WinRM execute today", normalized);
+        Assert.Contains("PSRP is the next transport priority", normalized);
         Assert.Contains("apply", output);
         Assert.Contains("dispatch run", output);
         Assert.Contains("dispatch doctor", output);
@@ -1833,7 +1834,8 @@ public sealed class DispatchCliApplicationTests
             Assert.True(exitCode == 0, $"Dry-run planning failed. {error}");
 
             var plan = Assert.IsType<ExecutionPlan>(planner.LastPlan);
-            var dashboard = new SpectreRunDashboard(plan, DateTimeOffset.UnixEpoch);
+            var now = DateTimeOffset.UnixEpoch.AddSeconds(70);
+            var dashboard = new SpectreRunDashboard(plan, DateTimeOffset.UnixEpoch, () => now);
             dashboard.Update(new DispatchExecutionProgress(
                 plan.RunId,
                 "PC001",
@@ -1842,8 +1844,13 @@ public sealed class DispatchCliApplicationTests
             dashboard.Update(new DispatchExecutionProgress(
                 plan.RunId,
                 "PC002",
+                TargetExecutionState.Probing,
+                DateTimeOffset.UnixEpoch.AddSeconds(2)));
+            dashboard.Update(new DispatchExecutionProgress(
+                plan.RunId,
+                "PC002",
                 TargetExecutionState.Failed,
-                DateTimeOffset.UnixEpoch.AddSeconds(2),
+                DateTimeOffset.UnixEpoch.AddSeconds(4),
                 FailureCategory.ExecutionFailed,
                 "Installer returned 1603."));
 
@@ -1852,14 +1859,20 @@ public sealed class DispatchCliApplicationTests
             var output = writer.ToString();
 
             Assert.Contains("Dispatch Run", output);
+            Assert.Contains("Completion", output);
             Assert.Contains("Outcome Chart", output);
             Assert.Contains("run-test", output);
             Assert.Contains("psexec", output);
             Assert.Contains("PC001", output);
+            Assert.Contains("Running", output);
             Assert.Contains("Executing", output);
+            Assert.Contains("01:09", output);
             Assert.Contains("PC002", output);
             Assert.Contains("ExecutionFailed", output);
             Assert.Contains("Installer returned 1603", output);
+            Assert.Contains("00:02", output);
+            Assert.DoesNotContain("[--------------------]", output);
+            Assert.DoesNotContain(" 65%", output);
         }
         finally
         {

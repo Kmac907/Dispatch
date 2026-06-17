@@ -102,6 +102,28 @@ Workers must not write directly to `AnsiConsole`. They emit events. A single ren
 
 Current execution rendering uses `DispatchExecutionProgress` events, a channel-fed renderer, and one Spectre `LiveDisplay` for live runs. Planning uses Spectre `Status` or `Progress` only during active work. Redirected sessions and `--no-progress` use stable non-live rendering.
 
+The live dashboard contract is:
+
+- one `LiveDisplay` surface only
+- refresh on new execution events and on a one-second heartbeat while the run is active
+- a summary row with aggregate running/succeeded/failed/pending counts and run elapsed time
+- one measurable completion bar based only on completed targets versus total targets
+- per-target rows that show:
+  - target name
+  - status (`Pending`, `Running`, `Succeeded`, `Failed`, `Timed Out`, `Cancelled`)
+  - current phase (`Resolving`, `Probing`, `Preparing Script`, `Executing`, `Collecting Artifacts`, `Complete`)
+  - target elapsed active time
+  - exit code when available
+  - detail text or failure message
+- a recent-events view sourced from the same run-event stream
+
+The dashboard must stay honest:
+
+- use progress bars only where progress is measurable
+- do not invent per-target percentages from state transitions
+- keep phase text phase-based, not pseudo-percent-based
+- keep workers write-free with respect to the terminal; only the renderer updates the live widgets
+
 ## Structured Output
 
 `--output json` emits one valid JSON document and suppresses decorative UI.
