@@ -13,7 +13,16 @@ public interface IWinRmScriptTransferClient
 public sealed record WinRmScriptTransferRequest(
     string Target,
     string RemoteScriptPath,
-    ScriptTransferPlan TransferPlan);
+    ScriptTransferPlan TransferPlan,
+    Action<WinRmUploadProgress>? ProgressReporter = null);
+
+public sealed record WinRmUploadProgress(
+    string Target,
+    string RemoteScriptPath,
+    int ChunksUploaded,
+    int TotalChunks,
+    long BytesUploaded,
+    long TotalBytes);
 
 public sealed record WinRmScriptTransferResult(
     bool Succeeded,

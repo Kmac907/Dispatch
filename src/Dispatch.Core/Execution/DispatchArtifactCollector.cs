@@ -11,7 +11,8 @@ internal sealed class DispatchArtifactCollector(
     public async Task<ArtifactCollectionResult> CollectAsync(
         ExecutionPlan plan,
         TargetExecution target,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<DispatchExecutionProgress>? progressReporter = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -20,7 +21,7 @@ internal sealed class DispatchArtifactCollector(
             var transportCollector = transportArtifactCollectors.SingleOrDefault(collector => collector.Kind == plan.Job.Transport);
             if (transportCollector is not null)
             {
-                return await transportCollector.CollectAsync(plan, target, cancellationToken).ConfigureAwait(false);
+                return await transportCollector.CollectAsync(plan, target, cancellationToken, progressReporter).ConfigureAwait(false);
             }
 
             return new ArtifactCollectionResult(

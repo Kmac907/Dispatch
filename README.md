@@ -46,7 +46,7 @@ Run `dispatch doctor` to check local prerequisites before executing endpoint job
 
 ## Run Output
 
-The active CLI design uses Spectre.Console.Cli for command routing and Spectre.Console for operator output. Rich terminal output is for humans; `--output json`, `--output ndjson`, and `--output yaml` are implemented for the current `run ps` plan/result paths. NDJSON still streams typed stdout events for the current command path, and runs now also persist a durable `Admin\events.ndjson` event stream plus a reduced `Admin\results.json` summary file. Optional duplicate files such as `results.csv`, `dispatch.log`, and per-target `result.json` are no longer written by default.
+The active CLI design uses Spectre.Console.Cli for command routing and Spectre.Console for operator output. Rich terminal output is for humans; `--output json`, `--output ndjson`, and `--output yaml` are implemented for the current `run ps` plan/result paths. NDJSON still streams typed stdout events for the current command path, and runs now also persist a durable `Admin\events.ndjson` event stream plus a reduced `Admin\results.json` summary file. Optional duplicate files such as `results.csv`, `dispatch.log`, and per-target `result.json` are no longer written by default. The live dashboard now also shows the run-local `results.json` path, the durable `events.ndjson` path, and the per-target stdout/stderr root so operators can jump straight from terminal status to the persisted files.
 
 The target command tree is:
 
@@ -66,7 +66,7 @@ dispatch version
 
 ### Live Terminal Design
 
-Spectre live output is event-driven. Planning and preflight use live `Status`/`Progress` only when the work is actually happening. Real execution uses one `LiveDisplay` dashboard fed by internal run events plus a one-second heartbeat refresh, so elapsed timers continue moving during long phases; workers do not write directly to the console. The live dashboard shows aggregate counts, one measurable completion bar, per-target status/phase/elapsed rows, and recent events. After live rendering ends, Dispatch prints a stable final summary and keeps durable logs/results for automation and troubleshooting.
+Spectre live output is event-driven. Planning and preflight use live `Status`/`Progress` only when the work is actually happening. Real execution uses one `LiveDisplay` dashboard fed by internal run events plus a one-second heartbeat refresh, so elapsed timers continue moving during long phases; workers do not write directly to the console. The live dashboard shows aggregate counts, one measurable completion bar, a phase-count summary widget, output-file locations, active-first target ordering, per-target current-phase elapsed time, and recent events. Measured per-target progress is shown only when Dispatch has a real denominator; today that includes WinRM chunk upload counts during script transfer and WinRM artifact download bytes when the archive size is known. After live rendering ends, Dispatch prints a stable final summary and keeps durable logs/results for automation and troubleshooting.
 
 Run from a real Windows Terminal or PowerShell window, not from redirected output:
 

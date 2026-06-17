@@ -1,3 +1,4 @@
+using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Core.Transports;
 
@@ -96,7 +97,24 @@ public sealed class WinRmScriptExecutor(
                 new WinRmScriptTransferRequest(
                     request.Target.Target.Name,
                     request.Target.PlannedRemoteScriptPath ?? string.Empty,
-                    transferPlan),
+                    transferPlan,
+                    progress =>
+                    {
+                        request.ProgressReporter?.Invoke(new DispatchExecutionProgress(
+                            request.Plan.RunId,
+                            request.Target.Target.Name,
+                            TargetExecutionState.Executing,
+                            DateTimeOffset.UtcNow,
+                            Message: $"Uploading script to {request.Target.Target.Name}",
+                            Details: new DispatchExecutionProgressDetails(
+                                Operation: "winrm-upload",
+                                Location: request.Target.PlannedRemoteScriptPath,
+                                CompletedUnits: progress.ChunksUploaded,
+                                TotalUnits: progress.TotalChunks,
+                                UnitLabel: "chunks",
+                                CompletedBytes: progress.BytesUploaded,
+                                TotalBytes: progress.TotalBytes)));
+                    }),
                 cancellationToken)
             .ConfigureAwait(false);
 

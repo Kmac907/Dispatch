@@ -15,7 +15,23 @@ public sealed record WinRmShellCommandRequest(
     IReadOnlyList<string> Arguments,
     IReadOnlyList<byte[]> StandardInputFrames,
     bool CloseStandardInput = true,
-    TimeSpan? ExecutionTimeout = null);
+    TimeSpan? ExecutionTimeout = null,
+    Action<WinRmShellTransferProgress>? ProgressReporter = null);
+
+public sealed record WinRmShellTransferProgress(
+    WinRmShellTransferKind Kind,
+    long BytesTransferred,
+    long? TotalBytes = null,
+    int? FramesTransferred = null,
+    int? TotalFrames = null,
+    string? TextChunk = null);
+
+public enum WinRmShellTransferKind
+{
+    Input,
+    Output,
+    Error
+}
 
 public sealed record WinRmShellCommandResult(
     bool Succeeded,

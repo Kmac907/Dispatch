@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a completed raw WinRM transport that wires `winrm` into DI, validates `winrm + ScriptPayload` and `winrm + CommandPayload`, plans endpoint-local script paths only when needed, probes DNS plus default WinRM TCP ports, prepares chunked script-transfer plans without SMB/admin shares, uploads prepared scripts through raw WinRM shell semantics, executes prepared PowerShell scripts and direct command payloads over the same raw shell path, classifies raw WinRM shell timeouts plus shell-open authentication/authorization/transport failures into the shared result model, and collects declared/default artifact folders over the WinRM channel. YAML jobs, `logs` commands, credentials, and push/hosts/init behavior remain roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a completed raw WinRM transport that wires `winrm` into DI, validates `winrm + ScriptPayload` and `winrm + CommandPayload`, plans endpoint-local script paths only when needed, probes DNS plus default WinRM TCP ports, prepares chunked script-transfer plans without SMB/admin shares, uploads prepared scripts through raw WinRM shell semantics, executes prepared PowerShell scripts and direct command payloads over the same raw shell path, classifies raw WinRM shell timeouts plus shell-open authentication/authorization/transport failures into the shared result model, emits measurable upload/download progress details where the protocol exposes them, and collects declared/default artifact folders over the WinRM channel. YAML jobs, `logs` commands, credentials, and push/hosts/init behavior remain roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -108,14 +108,27 @@ The live dashboard contract is:
 - refresh on new execution events and on a one-second heartbeat while the run is active
 - a summary row with aggregate running/succeeded/failed/pending counts and run elapsed time
 - one measurable completion bar based only on completed targets versus total targets
+- an output-locations widget that shows:
+  - `Admin\results.json`
+  - `Admin\events.ndjson`
+  - the per-target local root pattern
+  - the default `stdout.txt` / `stderr.txt` locations
+- a phase-count summary widget sourced from the same target-state model as the main table
 - per-target rows that show:
   - target name
   - status (`Pending`, `Running`, `Succeeded`, `Failed`, `Timed Out`, `Cancelled`)
   - current phase (`Resolving`, `Probing`, `Preparing Script`, `Executing`, `Collecting Artifacts`, `Complete`)
-  - target elapsed active time
+  - current-phase elapsed time
+  - a measurable progress cell only when the renderer has a real denominator
   - exit code when available
   - detail text or failure message
+- active targets ordered ahead of pending and completed targets so the operator sees active work first
 - a recent-events view sourced from the same run-event stream
+
+Current measurable per-target progress sources are:
+
+- WinRM script upload chunk counts and bytes during raw shell upload
+- WinRM artifact download bytes when the remote archive size is known
 
 The dashboard must stay honest:
 

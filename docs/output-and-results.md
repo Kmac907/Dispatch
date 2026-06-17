@@ -75,6 +75,17 @@ Use this file for:
 - automation that wants the final run outcome
 - operators who need the final state without replaying the full event stream
 
+## Live dashboard file locations
+
+The interactive Spectre dashboard now exposes the key persisted paths while the run is in progress:
+
+- `Admin\results.json`
+- `Admin\events.ndjson`
+- `Targets\<Target>\stdout.txt`
+- `Targets\<Target>\stderr.txt`
+
+It also shows the per-target local root pattern so an operator can move from live terminal status to the durable files without reconstructing the run layout by hand.
+
 ## Console output modes
 
 - `rich`
@@ -92,6 +103,20 @@ Stdout NDJSON and durable `events.ndjson` are related but different:
 
 - stdout NDJSON is the live command-output stream
 - `Admin\events.ndjson` is the durable local run-history file
+
+## Live dashboard progress contract
+
+The live dashboard shows progress only when Dispatch has a real denominator.
+
+Current measurable per-target cases are:
+
+- WinRM script upload:
+  - chunk count progress
+  - uploaded bytes when the shell transfer reports them
+- WinRM artifact download:
+  - downloaded bytes when the remote archive size is known
+
+If a phase does not expose a real denominator, Dispatch shows phase/status/elapsed information instead of a fake percentage.
 
 ## Remote endpoint layout
 

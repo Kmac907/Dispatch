@@ -168,12 +168,13 @@ internal sealed class DispatchExecutor(
             }
 
             await NotifyTargetStateAsync(plan, target, TargetExecutionState.Executing, observer, cancellationToken).ConfigureAwait(false);
+            var progressReporter = CreateProgressReporter(plan, target, observer, cancellationToken);
             var execution = await transportExecutor.ExecuteScriptAsync(
-                new TransportScriptExecutionRequest(plan, target, targetPreparation),
+                new TransportScriptExecutionRequest(plan, target, targetPreparation, progressReporter),
                 cancellationToken).ConfigureAwait(false);
 
             await NotifyTargetStateAsync(plan, target, TargetExecutionState.CollectingArtifacts, observer, cancellationToken).ConfigureAwait(false);
-            var artifacts = await artifactCollector.CollectAsync(plan, target, cancellationToken).ConfigureAwait(false);
+            var artifacts = await artifactCollector.CollectAsync(plan, target, cancellationToken, progressReporter).ConfigureAwait(false);
 
             var result = await CreateExecutionResultAsync(plan, target, execution, artifacts, cancellationToken).ConfigureAwait(false);
             await NotifyTargetStateAsync(observer, result, result.EndedAt, cancellationToken).ConfigureAwait(false);
@@ -282,6 +283,21 @@ internal sealed class DispatchExecutor(
         {
         }
     }
+
+    private static Action<DispatchExecutionProgress> CreateProgressReporter(
+        ExecutionPlan plan,
+        TargetExecution target,
+        IDispatchExecutionObserver observer,
+        CancellationToken cancellationToken) =>
+        progress =>
+        {
+            var normalized = progress with
+            {
+                RunId = string.IsNullOrWhiteSpace(progress.RunId) ? plan.RunId : progress.RunId,
+                Target = string.IsNullOrWhiteSpace(progress.Target) ? target.Target.Name : progress.Target
+            };
+            NotifyTargetStateAsync(observer, normalized, cancellationToken).GetAwaiter().GetResult();
+        };
 
     private static async Task<TargetExecutionResult> CreateExecutionResultAsync(
         ExecutionPlan plan,

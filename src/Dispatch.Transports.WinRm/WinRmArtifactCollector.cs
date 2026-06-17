@@ -9,12 +9,14 @@ namespace Dispatch.Transports.WinRm;
 [SupportedOSPlatform("windows")]
 public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITransportArtifactCollector
 {
+    private const string ArtifactProgressPrefix = "DISPATCH_ARTIFACT_PROGRESS=";
     public TransportKind Kind => TransportKind.WinRm;
 
     public async Task<ArtifactCollectionResult> CollectAsync(
         ExecutionPlan plan,
         TargetExecution target,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<DispatchExecutionProgress>? progressReporter = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -36,7 +38,12 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
             cancellationToken.ThrowIfCancellationRequested();
 
             var remoteFolder = CombineWindowsPath(plan.RemoteRunRoot, folder);
-            var download = await DownloadFolderArchiveAsync(target.Target.Name, remoteFolder, cancellationToken).ConfigureAwait(false);
+            var download = await DownloadFolderArchiveAsync(
+                plan,
+                target,
+                remoteFolder,
+                cancellationToken,
+                progressReporter).ConfigureAwait(false);
 
             if (!download.Succeeded)
             {
@@ -73,25 +80,66 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
     }
 
     private async Task<ArtifactDownloadResult> DownloadFolderArchiveAsync(
-        string targetName,
+        ExecutionPlan plan,
+        TargetExecution target,
         string remoteFolder,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<DispatchExecutionProgress>? progressReporter)
     {
+        long? totalArchiveBytes = null;
         var script = BuildArtifactDownloadScript(remoteFolder);
         var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
         var result = await shellClient.ExecuteAsync(
                 new WinRmShellCommandRequest(
-                    targetName,
+                    target.Target.Name,
                     "powershell.exe",
                     ["-NoProfile", "-EncodedCommand", encodedScript],
-                    []),
+                    [],
+                    ProgressReporter: progress =>
+                    {
+                        if (progressReporter is null || progress.Kind != WinRmShellTransferKind.Error || string.IsNullOrWhiteSpace(progress.TextChunk))
+                        {
+                            return;
+                        }
+
+                        foreach (var line in progress.TextChunk
+                                     .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            if (!line.StartsWith(ArtifactProgressPrefix, StringComparison.Ordinal))
+                            {
+                                continue;
+                            }
+
+                            var payload = line[ArtifactProgressPrefix.Length..];
+                            var parts = payload.Split('/', 2, StringSplitOptions.TrimEntries);
+                            if (parts.Length != 2
+                                || !long.TryParse(parts[0], out var completedBytes)
+                                || !long.TryParse(parts[1], out var archiveBytes))
+                            {
+                                continue;
+                            }
+
+                            totalArchiveBytes = archiveBytes;
+                            progressReporter(new DispatchExecutionProgress(
+                                plan.RunId,
+                                target.Target.Name,
+                                TargetExecutionState.CollectingArtifacts,
+                                DateTimeOffset.UtcNow,
+                                Message: $"Downloading artifacts from {remoteFolder}",
+                                Details: new DispatchExecutionProgressDetails(
+                                    Operation: "artifact-download",
+                                    Location: remoteFolder,
+                                    CompletedBytes: completedBytes,
+                                    TotalBytes: archiveBytes)));
+                        }
+                    }),
                 cancellationToken)
             .ConfigureAwait(false);
 
         if (!result.Succeeded)
         {
             return ArtifactDownloadResult.Failed(
-                result.FailureMessage ?? $"Raw WinRM artifact download failed for '{targetName}'.");
+                result.FailureMessage ?? $"Raw WinRM artifact download failed for '{target.Target.Name}'.");
         }
 
         if (result.ExitCode == 3)
@@ -103,24 +151,44 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
         {
             var detail = string.IsNullOrWhiteSpace(result.Stderr) ? result.Stdout : result.Stderr;
             return ArtifactDownloadResult.Failed(
-                $"Artifact collection failed for target '{targetName}' at '{remoteFolder}' with exit code {result.ExitCode}: {detail}".Trim());
+                $"Artifact collection failed for target '{target.Target.Name}' at '{remoteFolder}' with exit code {result.ExitCode}: {detail}".Trim());
         }
 
-        var base64 = new string(result.Stdout.Where(static character => !char.IsWhiteSpace(character)).ToArray());
+        var stdoutLines = result.Stdout
+            .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(static line => !line.StartsWith(ArtifactProgressPrefix, StringComparison.Ordinal))
+            .ToArray();
+        var base64 = new string(string.Concat(stdoutLines).Where(static character => !char.IsWhiteSpace(character)).ToArray());
         if (string.IsNullOrWhiteSpace(base64))
         {
             return ArtifactDownloadResult.Failed(
-                $"Artifact collection failed for target '{targetName}' at '{remoteFolder}': the WinRM artifact download returned no archive content.");
+                $"Artifact collection failed for target '{target.Target.Name}' at '{remoteFolder}': the WinRM artifact download returned no archive content.");
         }
 
         try
         {
-            return ArtifactDownloadResult.Success(Convert.FromBase64String(base64));
+            var zipBytes = Convert.FromBase64String(base64);
+            if (progressReporter is not null && totalArchiveBytes is not null)
+            {
+                progressReporter(new DispatchExecutionProgress(
+                    plan.RunId,
+                    target.Target.Name,
+                    TargetExecutionState.CollectingArtifacts,
+                    DateTimeOffset.UtcNow,
+                    Message: $"Downloaded artifacts from {remoteFolder}",
+                    Details: new DispatchExecutionProgressDetails(
+                        Operation: "artifact-download",
+                        Location: remoteFolder,
+                        CompletedBytes: zipBytes.Length,
+                        TotalBytes: totalArchiveBytes)));
+            }
+
+            return ArtifactDownloadResult.Success(zipBytes);
         }
         catch (FormatException exception)
         {
             return ArtifactDownloadResult.Failed(
-                $"Artifact collection failed for target '{targetName}' at '{remoteFolder}': invalid archive payload returned over raw WinRM ({exception.Message}).");
+                $"Artifact collection failed for target '{target.Target.Name}' at '{remoteFolder}': invalid archive payload returned over raw WinRM ({exception.Message}).");
         }
     }
 
@@ -167,7 +235,18 @@ try {
         $zipPath,
         [System.IO.Compression.CompressionLevel]::Fastest,
         $false)
-    [Console]::Out.Write([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($zipPath)))
+    $fileBytes = [System.IO.File]::ReadAllBytes($zipPath)
+    $totalBytes = $fileBytes.Length
+    $offset = 0
+    $chunkSize = 24576
+    while ($offset -lt $totalBytes) {
+        $count = [Math]::Min($chunkSize, $totalBytes - $offset)
+        $chunk = New-Object byte[] $count
+        [Array]::Copy($fileBytes, $offset, $chunk, 0, $count)
+        [Console]::Error.WriteLine('{{ArtifactProgressPrefix}}' + ($offset + $count) + '/' + $totalBytes)
+        [Console]::Out.Write([Convert]::ToBase64String($chunk))
+        $offset += $count
+    }
     exit 0
 }
 catch {

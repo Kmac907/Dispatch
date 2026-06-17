@@ -93,7 +93,8 @@ internal sealed class DispatchEventStreamWriter : IDispatchExecutionObserver, IA
             target = progress.Target,
             state = progress.State,
             failureCategory = progress.FailureCategory,
-            message = progress.Message
+            message = progress.Message,
+            details = progress.Details
         });
 
         return Task.CompletedTask;

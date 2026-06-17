@@ -14,6 +14,7 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
         var frames = request.TransferPlan.Chunks
             .Select(static chunk => Encoding.ASCII.GetBytes(chunk.Base64Data + "\n"))
             .ToArray();
+        var totalFrameBytes = frames.Sum(static frame => (long)frame.Length);
 
         var shellResult = await shellClient.ExecuteAsync(
                 new WinRmShellCommandRequest(
@@ -26,7 +27,22 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
                         "-EncodedCommand",
                         BuildUploaderEncodedCommand(request.RemoteScriptPath)
                     ],
-                    frames),
+                    frames,
+                    ProgressReporter: progress =>
+                    {
+                        if (progress.Kind != WinRmShellTransferKind.Input)
+                        {
+                            return;
+                        }
+
+                        request.ProgressReporter?.Invoke(new WinRmUploadProgress(
+                            request.Target,
+                            request.RemoteScriptPath,
+                            progress.FramesTransferred ?? 0,
+                            progress.TotalFrames ?? request.TransferPlan.ChunkCount,
+                            progress.BytesTransferred,
+                            progress.TotalBytes ?? totalFrameBytes));
+                    }),
                 cancellationToken)
             .ConfigureAwait(false);
 

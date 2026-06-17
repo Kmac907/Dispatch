@@ -171,8 +171,8 @@ psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
 psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
 psrp   + ScriptPayload   = next transport roadmap work after raw WinRM
 psrp   + CommandPayload  = same transport family; not yet implemented
-winrm  + ScriptPayload   = partial; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, timeout classification, and artifact collection implemented; live validation remains
-winrm  + CommandPayload  = partial; planning, probe, raw-shell-backed direct command execution, timeout classification, and artifact collection implemented; live validation remains
+winrm  + ScriptPayload   = implemented; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, timeout classification, artifact collection, and elevated live validation completed
+winrm  + CommandPayload  = implemented; planning, probe, raw-shell-backed direct command execution, timeout classification, artifact collection, and elevated live validation completed
 ```
 
 `DispatchRequest` may represent script and command payloads from the beginning, but v1 validation must reject unsupported transport/payload combinations before probing or touching endpoints. This keeps v1 focused on script orchestration while preserving the future Ansible-style command execution surface.
@@ -1093,7 +1093,7 @@ Scope:
 - Bridge existing `DispatchExecutionProgress` events into renderer events without changing transport worker behavior.
 - Use `Status` only for indeterminate preflight work, `Progress` only for measurable planning/preflight work, and one `LiveDisplay` dashboard for real host execution.
 - Refresh the live execution dashboard on both incoming events and a renderer heartbeat so elapsed-time fields continue to move during long-running phases.
-- Show aggregate counts, one measurable completion bar based on completed targets versus total targets, per-target status/phase/elapsed data, and recent events.
+- Show aggregate counts, one measurable completion bar based on completed targets versus total targets, a phase-count summary widget, output-file locations, active-first target ordering, per-target status/phase/current-phase-elapsed data, and recent events.
 - Do not prompt while a live renderer is active.
 - Worker tasks, transports, and planners must not write directly to `AnsiConsole`; the renderer owns terminal output during live phases.
 - Implement `--no-progress`, `--no-color`, `--quiet`, `--verbose`, and `--trace` behavior where supported.
@@ -1109,7 +1109,8 @@ Current implementation note:
 - `--no-color`, `--quiet`, `--verbose`, and `--trace` are accepted for the current `run ps` path. `--no-color` disables ANSI/color for interactive Spectre planning/execution, `--quiet` suppresses rich/table non-error output while preserving structured output, and `--verbose`/`--trace` enrich current NDJSON event details without adding durable trace logs.
 - `--output rich|table|json|ndjson|yaml` is implemented for the current `run ps` dry-run plan and final result paths; JSON/YAML suppress decorative rendering, and NDJSON emits one typed event per line for planning, execution start, per-target progress, and final result on the current stdout path.
 - Runs now also persist a durable `Admin\events.ndjson` event stream as the canonical local run-history file. Broader verbose/trace log-command work remains under later logging work.
-- The current execution dashboard shows aggregate counts, one measurable completion bar, per-target status/phase/elapsed rows, and recent events sourced from the same run-event stream.
+- The current execution dashboard shows aggregate counts, one measurable completion bar, a phase-count summary widget, output-file locations, active-first target ordering, per-target status/phase/current-phase-elapsed rows, and recent events sourced from the same run-event stream.
+- The renderer only shows measured per-target progress when the event stream supplies a real denominator. Current concrete cases are WinRM upload chunk counts during script transfer and WinRM artifact download bytes when the archive size is known.
 
 Non-goals:
 - No static fake progress bars.

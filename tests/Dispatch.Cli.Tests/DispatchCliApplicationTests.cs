@@ -1841,7 +1841,15 @@ public sealed class DispatchCliApplicationTests
                 plan.RunId,
                 "PC001",
                 TargetExecutionState.Executing,
-                DateTimeOffset.UnixEpoch.AddSeconds(1)));
+                DateTimeOffset.UnixEpoch.AddSeconds(1),
+                Details: new DispatchExecutionProgressDetails(
+                    Operation: "winrm-upload",
+                    Location: @"C:\ProgramData\Dispatch\Runs\run-test\script\Fix.ps1",
+                    CompletedUnits: 1,
+                    TotalUnits: 4,
+                    UnitLabel: "chunks",
+                    CompletedBytes: 1024,
+                    TotalBytes: 4096)));
             dashboard.Update(new DispatchExecutionProgress(
                 plan.RunId,
                 "PC002",
@@ -1860,20 +1868,24 @@ public sealed class DispatchCliApplicationTests
             var output = writer.ToString();
 
             Assert.Contains("Dispatch Run", output);
+            Assert.Contains("Outputs", output);
             Assert.Contains("Completion", output);
+            Assert.Contains("Phase Counts", output);
             Assert.Contains("Outcome Chart", output);
             Assert.Contains("run-test", output);
             Assert.Contains("psexec", output);
+            Assert.Contains(@"C:\Dispatch\Tests\run-test\Admin\results.json", output);
+            Assert.Contains(@"C:\Dispatch\Tests\run-test\Admin\events.ndjson", output);
             Assert.Contains("PC001", output);
             Assert.Contains("Running", output);
             Assert.Contains("Executing", output);
+            Assert.Contains("Progress", output);
             Assert.Contains("01:09", output);
             Assert.Contains("PC002", output);
-            Assert.Contains("ExecutionFailed", output);
             Assert.Contains("Installer returned 1603", output);
             Assert.Contains("00:02", output);
-            Assert.DoesNotContain("[--------------------]", output);
             Assert.DoesNotContain(" 65%", output);
+            Assert.True(output.IndexOf("PC001", StringComparison.Ordinal) < output.IndexOf("PC002", StringComparison.Ordinal));
         }
         finally
         {

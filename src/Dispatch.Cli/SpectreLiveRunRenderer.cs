@@ -178,6 +178,7 @@ internal sealed class SpectreRunDashboard
                 null,
                 null,
                 null,
+                null,
                 null));
     }
 
@@ -195,6 +196,7 @@ internal sealed class SpectreRunDashboard
             State = progress.State,
             FailureCategory = progress.FailureCategory,
             Message = progress.Message,
+            Details = progress.Details,
             StateStartedAt = stateStartedAt,
             TargetStartedAt = targetStartedAt,
             LastUpdatedAt = progress.Timestamp,
@@ -224,6 +226,7 @@ internal sealed class SpectreRunDashboard
                 State = target.State,
                 FailureCategory = target.FailureCategory,
                 Message = target.FailureMessage,
+                Details = existing.Details,
                 StateStartedAt = stateStartedAt,
                 TargetStartedAt = targetStartedAt,
                 LastUpdatedAt = target.EndedAt,
@@ -240,7 +243,9 @@ internal sealed class SpectreRunDashboard
         {
             new Rule($"[bold]Dispatch Run[/] [grey]{Markup.Escape(plan.RunId)}[/]"),
             CreateSummaryTable(now),
+            CreateOutputLocationsPanel(),
             CreateCompletionPanel(),
+            CreatePhaseSummaryPanel(),
             CreateOutcomeChart(),
             CreateTargetTable(now),
             CreateRecentEventsTable()
@@ -300,6 +305,47 @@ internal sealed class SpectreRunDashboard
             .Expand();
     }
 
+    private IRenderable CreatePhaseSummaryPanel()
+    {
+        var phaseGroups = targets.Values
+            .GroupBy(target => FormatPhase(target.State))
+            .Select(group => new { Phase = group.Key, Count = group.Count(), SortOrder = GetPhaseSortOrder(group.First().State) })
+            .OrderBy(group => group.SortOrder)
+            .ThenBy(group => group.Phase, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var table = new Table().Border(TableBorder.Rounded).Expand();
+        table.AddColumn("Phase");
+        table.AddColumn("Count");
+
+        foreach (var phase in phaseGroups)
+        {
+            table.AddRow(Markup.Escape(phase.Phase), phase.Count.ToString());
+        }
+
+        return new Panel(table)
+            .Header("Phase Counts")
+            .Border(BoxBorder.Rounded)
+            .Expand();
+    }
+
+    private IRenderable CreateOutputLocationsPanel()
+    {
+        var targetRootPattern = Path.Combine(plan.LocalRunRoot, "Targets", "<target>");
+        var lines = new[]
+        {
+            $"[bold]Results[/]: {Markup.Escape(plan.LocalResultsJsonPath)}",
+            $"[bold]Events[/]: {Markup.Escape(plan.LocalEventsNdjsonPath ?? "-")}",
+            $"[bold]Target Root[/]: {Markup.Escape(targetRootPattern)}",
+            $"[bold]Stdout/Stderr[/]: {Markup.Escape(Path.Combine(targetRootPattern, "stdout.txt"))} / {Markup.Escape(Path.Combine(targetRootPattern, "stderr.txt"))}"
+        };
+
+        return new Panel(new Rows(lines.Select(static line => (IRenderable)new Markup(line)).ToArray()))
+            .Header("Outputs")
+            .Border(BoxBorder.Rounded)
+            .Expand();
+    }
+
     private IRenderable CreateOutcomeChart()
     {
         var counts = GetCounts();
@@ -326,17 +372,19 @@ internal sealed class SpectreRunDashboard
         table.AddColumn("Target");
         table.AddColumn("Status");
         table.AddColumn("Phase");
-        table.AddColumn("Elapsed");
+        table.AddColumn("Phase Elapsed");
+        table.AddColumn("Progress");
         table.AddColumn("Exit");
         table.AddColumn("Detail");
 
-        foreach (var target in targets.Values.OrderBy(static target => target.Name, StringComparer.OrdinalIgnoreCase))
+        foreach (var target in OrderTargets())
         {
             table.AddRow(
                 Markup.Escape(target.Name),
                 FormatStatusMarkup(target.State),
                 Markup.Escape(FormatPhase(target.State)),
-                Markup.Escape(FormatTargetElapsed(target, now)),
+                Markup.Escape(FormatPhaseElapsed(target, now)),
+                Markup.Escape(FormatMeasuredProgress(target)),
                 Markup.Escape(target.ExitCode?.ToString() ?? "-"),
                 Markup.Escape(FormatDetail(target, now)));
         }
@@ -405,14 +453,39 @@ internal sealed class SpectreRunDashboard
             _ => "Complete"
         };
 
-    private static string FormatTargetElapsed(TargetProgress target, DateTimeOffset now)
+    private static string FormatPhaseElapsed(TargetProgress target, DateTimeOffset now)
     {
-        if (target.TargetStartedAt is null)
+        if (target.StateStartedAt is null)
         {
             return "-";
         }
 
-        return FormatElapsed(target.TargetStartedAt.Value, target.EndedAt ?? now);
+        return FormatElapsed(target.StateStartedAt.Value, target.EndedAt ?? now);
+    }
+
+    private static string FormatMeasuredProgress(TargetProgress target)
+    {
+        if (target.Details is null)
+        {
+            return "-";
+        }
+
+        if (target.Details.TotalUnits is > 0 && target.Details.CompletedUnits is not null)
+        {
+            var percent = (int)Math.Round((double)target.Details.CompletedUnits.Value / target.Details.TotalUnits.Value * 100, MidpointRounding.AwayFromZero);
+            var filled = Math.Clamp((int)Math.Round(percent / 10d, MidpointRounding.AwayFromZero), 0, 10);
+            var unitLabel = string.IsNullOrWhiteSpace(target.Details.UnitLabel) ? "items" : target.Details.UnitLabel;
+            return $"{target.Details.Operation ?? "Progress"} [{new string('#', filled).PadRight(10, '-')}] {target.Details.CompletedUnits}/{target.Details.TotalUnits} {unitLabel}";
+        }
+
+        if (target.Details.TotalBytes is > 0 && target.Details.CompletedBytes is not null)
+        {
+            var percent = (int)Math.Round((double)target.Details.CompletedBytes.Value / target.Details.TotalBytes.Value * 100, MidpointRounding.AwayFromZero);
+            var filled = Math.Clamp((int)Math.Round(percent / 10d, MidpointRounding.AwayFromZero), 0, 10);
+            return $"{target.Details.Operation ?? "Progress"} [{new string('#', filled).PadRight(10, '-')}] {FormatBytes(target.Details.CompletedBytes.Value)} / {FormatBytes(target.Details.TotalBytes.Value)}";
+        }
+
+        return "-";
     }
 
     private static string FormatDetail(TargetProgress target, DateTimeOffset now)
@@ -428,6 +501,16 @@ internal sealed class SpectreRunDashboard
         if (target.StateStartedAt is not null && !IsTerminal(target.State))
         {
             detailParts.Add($"Phase {FormatElapsed(target.StateStartedAt.Value, now)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(target.Details?.Location))
+        {
+            detailParts.Add(target.Details.Location);
+        }
+
+        if (target.TargetStartedAt is not null)
+        {
+            detailParts.Add($"Active {FormatElapsed(target.TargetStartedAt.Value, target.EndedAt ?? now)}");
         }
 
         if (detailParts.Count > 0)
@@ -450,6 +533,44 @@ internal sealed class SpectreRunDashboard
             or TargetExecutionState.TimedOut
             or TargetExecutionState.Cancelled;
 
+    private IEnumerable<TargetProgress> OrderTargets() =>
+        targets.Values
+            .OrderBy(GetTargetPriority)
+            .ThenBy(target => target.StateStartedAt ?? DateTimeOffset.MaxValue)
+            .ThenBy(target => target.Name, StringComparer.OrdinalIgnoreCase);
+
+    private static int GetTargetPriority(TargetProgress target) =>
+        target.State switch
+        {
+            TargetExecutionState.Executing => 0,
+            TargetExecutionState.CollectingArtifacts => 1,
+            TargetExecutionState.PreparingScript => 2,
+            TargetExecutionState.Probing => 3,
+            TargetExecutionState.Resolving => 4,
+            TargetExecutionState.Failed => 5,
+            TargetExecutionState.TimedOut => 6,
+            TargetExecutionState.Cancelled => 7,
+            TargetExecutionState.Pending => 8,
+            TargetExecutionState.Succeeded => 9,
+            _ => 10
+        };
+
+    private static int GetPhaseSortOrder(TargetExecutionState state) =>
+        state switch
+        {
+            TargetExecutionState.Executing => 0,
+            TargetExecutionState.CollectingArtifacts => 1,
+            TargetExecutionState.PreparingScript => 2,
+            TargetExecutionState.Probing => 3,
+            TargetExecutionState.Resolving => 4,
+            TargetExecutionState.Pending => 5,
+            TargetExecutionState.Failed => 6,
+            TargetExecutionState.TimedOut => 7,
+            TargetExecutionState.Cancelled => 8,
+            TargetExecutionState.Succeeded => 9,
+            _ => 10
+        };
+
     private static string FormatElapsed(DateTimeOffset startedAt, DateTimeOffset endedAt)
     {
         var elapsed = endedAt - startedAt;
@@ -463,11 +584,25 @@ internal sealed class SpectreRunDashboard
             : elapsed.ToString(@"mm\:ss");
     }
 
+    private static string FormatBytes(long bytes)
+    {
+        const long kilobyte = 1024;
+        const long megabyte = kilobyte * 1024;
+
+        return bytes switch
+        {
+            >= megabyte => $"{bytes / (double)megabyte:0.0} MB",
+            >= kilobyte => $"{bytes / (double)kilobyte:0.0} KB",
+            _ => $"{bytes} B"
+        };
+    }
+
     private sealed record TargetProgress(
         string Name,
         TargetExecutionState State,
         FailureCategory FailureCategory,
         string? Message,
+        DispatchExecutionProgressDetails? Details,
         DateTimeOffset? StateStartedAt,
         DateTimeOffset? TargetStartedAt,
         DateTimeOffset? LastUpdatedAt,

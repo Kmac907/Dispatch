@@ -119,7 +119,14 @@ internal sealed class DispatchNdjsonStreamWriter(TextWriter writer, bool verbose
                 or TargetExecutionState.Failed
                 or TargetExecutionState.TimedOut
                 or TargetExecutionState.Cancelled,
-            hasFailure = progress.FailureCategory != FailureCategory.None
+            hasFailure = progress.FailureCategory != FailureCategory.None,
+            operation = progress.Details?.Operation,
+            location = trace ? progress.Details?.Location : null,
+            completedUnits = progress.Details?.CompletedUnits,
+            totalUnits = progress.Details?.TotalUnits,
+            unitLabel = progress.Details?.UnitLabel,
+            completedBytes = progress.Details?.CompletedBytes,
+            totalBytes = progress.Details?.TotalBytes
         };
     }
 

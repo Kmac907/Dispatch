@@ -866,6 +866,134 @@ public sealed class WinRmExecutionTests
         Assert.Equal("expectedhash", result.Metadata?["uploadExpectedSha256"]);
     }
 
+    [Fact]
+    public async Task ScriptTransferClientReportsMeasuredChunkProgress()
+    {
+        var uploads = new List<WinRmUploadProgress>();
+        var shellClient = new RecordingShellClient(
+            request =>
+            {
+                request.ProgressReporter?.Invoke(new WinRmShellTransferProgress(
+                    WinRmShellTransferKind.Input,
+                    BytesTransferred: request.StandardInputFrames[0].Length,
+                    TotalBytes: request.StandardInputFrames.Sum(static frame => (long)frame.Length),
+                    FramesTransferred: 1,
+                    TotalFrames: request.StandardInputFrames.Count));
+                request.ProgressReporter?.Invoke(new WinRmShellTransferProgress(
+                    WinRmShellTransferKind.Input,
+                    BytesTransferred: request.StandardInputFrames.Sum(static frame => (long)frame.Length),
+                    TotalBytes: request.StandardInputFrames.Sum(static frame => (long)frame.Length),
+                    FramesTransferred: request.StandardInputFrames.Count,
+                    TotalFrames: request.StandardInputFrames.Count));
+            },
+            new WinRmShellCommandResult(true, 0, "abcd1234\n", string.Empty, null));
+        var client = new WinRmScriptTransferClient(shellClient);
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 6,
+            ContentSha256: "abcd1234",
+            ChunkSizeBytes: 4,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA=="),
+                new ScriptTransferChunk(1, 4, 2, "hash-2", "RUY=")
+            ]);
+
+        var result = await client.UploadAsync(
+            new WinRmScriptTransferRequest(
+                "PC001",
+                @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1",
+                transferPlan,
+                uploads.Add),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Collection(
+            uploads,
+            progress =>
+            {
+                Assert.Equal(1, progress.ChunksUploaded);
+                Assert.Equal(2, progress.TotalChunks);
+                Assert.True(progress.BytesUploaded > 0);
+                Assert.True(progress.TotalBytes >= progress.BytesUploaded);
+            },
+            progress =>
+            {
+                Assert.Equal(2, progress.ChunksUploaded);
+                Assert.Equal(2, progress.TotalChunks);
+                Assert.Equal(progress.TotalBytes, progress.BytesUploaded);
+            });
+    }
+
+    [Fact]
+    public async Task WinRmArtifactCollectorReportsMeasuredDownloadProgressWhenArchiveSizeIsKnown()
+    {
+        var remoteFolder = @"C:\ProgramData\Dispatch\Runs\run-001\logs";
+        var zipBytes = Convert.FromBase64String(CreateZipBase64(("install.log", "ok")));
+        var progress = new List<DispatchExecutionProgress>();
+        var shellClient = new RecordingShellClient(
+            request =>
+            {
+                request.ProgressReporter?.Invoke(new WinRmShellTransferProgress(
+                    WinRmShellTransferKind.Error,
+                    0,
+                    TextChunk: $"DISPATCH_ARTIFACT_PROGRESS={zipBytes.Length / 2}/{zipBytes.Length}\n"));
+                request.ProgressReporter?.Invoke(new WinRmShellTransferProgress(
+                    WinRmShellTransferKind.Error,
+                    0,
+                    TextChunk: $"DISPATCH_ARTIFACT_PROGRESS={zipBytes.Length}/{zipBytes.Length}\n"));
+            },
+            WinRmShellCommandResult.SucceededResult(stdout: CreateZipBase64(("install.log", "ok"))));
+        var collector = new WinRmArtifactCollector(shellClient);
+        var targetRoot = Path.Combine(Path.GetTempPath(), $"dispatch-artifacts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(targetRoot);
+        var target = new TargetExecution(
+            "run-001",
+            new TargetSpec("PC001"),
+            TargetExecutionState.Pending,
+            targetRoot,
+            null,
+            remoteFolder);
+            var plan = new ExecutionPlan(
+                RunId: "run-001",
+                CreatedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
+                Job: new DispatchJob(
+                "run-001",
+                [new TargetSpec("PC001")],
+                new ScriptPayload(@"C:\Scripts\Fix.ps1", []),
+                TransportKind.WinRm,
+                new ExecutionContextOptions(),
+                new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", true),
+                new TimeoutPolicy(),
+                new RetryPolicy(),
+                [0],
+                 new ArtifactPolicy(["logs"]),
+                 new ResultPolicy(targetRoot)),
+                Targets: [target],
+                DryRun: false,
+                RemoteRunRoot: @"C:\ProgramData\Dispatch\Runs\run-001");
+
+        try
+        {
+            var result = await collector.CollectAsync(plan, target, CancellationToken.None, progress.Add);
+
+            Assert.Equal("collected", result.Status);
+            Assert.Contains(progress, item =>
+                item.Details is
+                {
+                    Operation: "artifact-download",
+                    CompletedBytes: > 0,
+                    TotalBytes: > 0
+                }
+                && item.Target == "PC001"
+                && item.State == TargetExecutionState.CollectingArtifacts);
+        }
+        finally
+        {
+            Directory.Delete(targetRoot, recursive: true);
+        }
+    }
+
     private static TransportScriptExecutionRequest CreateScriptExecutionRequest(
         IReadOnlyList<string>? scriptArguments = null,
         TimeSpan? executionTimeout = null)
@@ -1109,15 +1237,23 @@ public sealed class WinRmExecutionTests
     {
         public List<WinRmShellCommandRequest> Requests { get; } = [];
         private readonly Queue<WinRmShellCommandResult> results;
+        private readonly Action<WinRmShellCommandRequest>? onExecute;
 
         public RecordingShellClient(params WinRmShellCommandResult[] results)
+            : this(null, results)
         {
+        }
+
+        public RecordingShellClient(Action<WinRmShellCommandRequest>? onExecute, params WinRmShellCommandResult[] results)
+        {
+            this.onExecute = onExecute;
             this.results = new Queue<WinRmShellCommandResult>(results);
         }
 
         public Task<WinRmShellCommandResult> ExecuteAsync(WinRmShellCommandRequest request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
+            onExecute?.Invoke(request);
             var result = results.Count > 0
                 ? results.Dequeue()
                 : WinRmShellCommandResult.SucceededResult(exitCode: 3);

@@ -44,8 +44,8 @@ public sealed class WinRmShellClient : IWinRmShellClient
                     ["shellResourceUri"] = ShellResourceUri
                 };
                 var commandId = CreateCommand(session.Automation, session.Session, shellId, request.Executable, request.Arguments);
-                SendStandardInput(session.Automation, session.Session, shellId, commandId, request.StandardInputFrames, request.CloseStandardInput);
-                var receive = ReceiveUntilDone(session.Automation, session.Session, shellId, commandId, effectiveCancellationToken);
+                SendStandardInput(session.Automation, session.Session, shellId, commandId, request.StandardInputFrames, request.CloseStandardInput, request.ProgressReporter);
+                var receive = ReceiveUntilDone(session.Automation, session.Session, shellId, commandId, effectiveCancellationToken, request.ProgressReporter);
 
                 return Task.FromResult(new WinRmShellCommandResult(
                     true,
@@ -203,15 +203,28 @@ public sealed class WinRmShellClient : IWinRmShellClient
         string shellId,
         string commandId,
         IReadOnlyList<byte[]> frames,
-        bool closeStandardInput)
+        bool closeStandardInput,
+        Action<WinRmShellTransferProgress>? progressReporter)
     {
         dynamic locator = automation.CreateResourceLocator(ShellResourceUri);
         locator.AddSelector("ShellId", shellId);
+        var totalBytes = frames.Sum(static frame => (long)frame.Length);
+        long bytesTransferred = 0;
+        var totalFrames = frames.Count;
+        var framesTransferred = 0;
 
         foreach (var frame in frames)
         {
             var body = BuildSendBody(commandId, Convert.ToBase64String(frame), end: false);
             _ = (string)session.Invoke(SendActionUri, locator, body, 0);
+            bytesTransferred += frame.Length;
+            framesTransferred++;
+            progressReporter?.Invoke(new WinRmShellTransferProgress(
+                WinRmShellTransferKind.Input,
+                bytesTransferred,
+                totalBytes,
+                framesTransferred,
+                totalFrames));
         }
 
         if (closeStandardInput)
@@ -226,13 +239,16 @@ public sealed class WinRmShellClient : IWinRmShellClient
         dynamic session,
         string shellId,
         string commandId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Action<WinRmShellTransferProgress>? progressReporter)
     {
         dynamic locator = automation.CreateResourceLocator(ShellResourceUri);
         locator.AddSelector("ShellId", shellId);
 
         var stdout = new StringBuilder();
         var stderr = new StringBuilder();
+        long stdoutBytesTransferred = 0;
+        long stderrBytesTransferred = 0;
 
         while (true)
         {
@@ -259,10 +275,20 @@ public sealed class WinRmShellClient : IWinRmShellClient
                 if (string.Equals(name, "stdout", StringComparison.OrdinalIgnoreCase))
                 {
                     stdout.Append(decoded);
+                    stdoutBytesTransferred += Encoding.UTF8.GetByteCount(decoded);
+                    progressReporter?.Invoke(new WinRmShellTransferProgress(
+                        WinRmShellTransferKind.Output,
+                        stdoutBytesTransferred,
+                        TextChunk: decoded));
                 }
                 else if (string.Equals(name, "stderr", StringComparison.OrdinalIgnoreCase))
                 {
                     stderr.Append(decoded);
+                    stderrBytesTransferred += Encoding.UTF8.GetByteCount(decoded);
+                    progressReporter?.Invoke(new WinRmShellTransferProgress(
+                        WinRmShellTransferKind.Error,
+                        stderrBytesTransferred,
+                        TextChunk: decoded));
                 }
             }
 
