@@ -12,7 +12,8 @@ public sealed record WinRmShellCommandRequest(
     string Executable,
     IReadOnlyList<string> Arguments,
     IReadOnlyList<byte[]> StandardInputFrames,
-    bool CloseStandardInput = true);
+    bool CloseStandardInput = true,
+    TimeSpan? ExecutionTimeout = null);
 
 public sealed record WinRmShellCommandResult(
     bool Succeeded,
@@ -20,7 +21,8 @@ public sealed record WinRmShellCommandResult(
     string Stdout,
     string Stderr,
     string? FailureMessage,
-    IReadOnlyDictionary<string, string>? Metadata = null)
+    IReadOnlyDictionary<string, string>? Metadata = null,
+    bool TimedOut = false)
 {
     public static WinRmShellCommandResult SucceededResult(
         int? exitCode = 0,
@@ -33,4 +35,11 @@ public sealed record WinRmShellCommandResult(
         string failureMessage,
         IReadOnlyDictionary<string, string>? metadata = null) =>
         new(false, null, string.Empty, string.Empty, failureMessage, metadata);
+
+    public static WinRmShellCommandResult TimedOutResult(
+        string failureMessage,
+        string stdout = "",
+        string stderr = "",
+        IReadOnlyDictionary<string, string>? metadata = null) =>
+        new(false, null, stdout, stderr, failureMessage, metadata, TimedOut: true);
 }

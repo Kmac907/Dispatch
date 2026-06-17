@@ -385,6 +385,45 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorMapsWinRmShellTimeoutToTimedOut()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.TimedOutResult(
+            "Shell timed out.",
+            metadata: new Dictionary<string, string>
+            {
+                ["timeoutOrigin"] = "client"
+            }));
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            endpointFileSystem,
+            transferClient,
+            shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.TimedOut, target.State);
+        Assert.Equal(FailureCategory.TimedOut, target.FailureCategory);
+        Assert.Contains("timed out", target.FailureMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("execution-timed-out", target.TransportMetadata?["mode"]);
+        Assert.Equal("timed-out", target.TransportMetadata?["executionStatus"]);
+        Assert.Equal("client", target.TransportMetadata?["timeoutOrigin"]);
+    }
+
+    [Fact]
     public async Task ExecutorCollectsWinRmArtifactFoldersOverRawShell()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -586,6 +625,50 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ScriptExecutorMapsShellTimeoutAtTransportResultLevel()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.TimedOutResult(
+            "Shell timed out.",
+            stdout: "partial output",
+            metadata: new Dictionary<string, string>
+            {
+                ["timeoutOrigin"] = "client"
+            }));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(),
+            CancellationToken.None);
+
+        Assert.Null(result.ExitCode);
+        Assert.Equal("partial output", result.Stdout);
+        Assert.Equal(string.Empty, result.Stderr);
+        Assert.Equal(FailureCategory.TimedOut, result.FailureCategory);
+        Assert.Equal("Shell timed out.", result.FailureMessage);
+        Assert.Equal("execution-timed-out", result.Metadata?["mode"]);
+        Assert.Equal("timed-out", result.Metadata?["executionStatus"]);
+        Assert.Equal("client", result.Metadata?["timeoutOrigin"]);
+    }
+
+    [Fact]
+    public async Task ScriptExecutorPassesExecutionTimeoutToShellClient()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.SucceededResult());
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+        var expectedTimeout = TimeSpan.FromSeconds(12);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(executionTimeout: expectedTimeout),
+            CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        var shellRequest = Assert.Single(shellClient.Requests);
+        Assert.Equal(expectedTimeout, shellRequest.ExecutionTimeout);
+    }
+
+    [Fact]
     public async Task ScriptTransferClientUploadsPreparedChunksAndValidatesReportedHash()
     {
         var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
@@ -664,7 +747,9 @@ public sealed class WinRmExecutionTests
         Assert.Equal("expectedhash", result.Metadata?["uploadExpectedSha256"]);
     }
 
-    private static TransportScriptExecutionRequest CreateScriptExecutionRequest(IReadOnlyList<string>? scriptArguments = null)
+    private static TransportScriptExecutionRequest CreateScriptExecutionRequest(
+        IReadOnlyList<string>? scriptArguments = null,
+        TimeSpan? executionTimeout = null)
     {
         var arguments = scriptArguments ?? [];
         var target = new TargetExecution(
@@ -696,7 +781,7 @@ public sealed class WinRmExecutionTests
                 Transport: TransportKind.WinRm,
                 ExecutionContext: new ExecutionContextOptions(),
                 ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", RequiresEndpointLocalScriptPath: true),
-                TimeoutPolicy: new TimeoutPolicy(),
+                TimeoutPolicy: new TimeoutPolicy(ExecutionTimeout: executionTimeout),
                 RetryPolicy: new RetryPolicy(),
                 ExpectedExitCodes: [0],
                 ArtifactPolicy: new ArtifactPolicy(),

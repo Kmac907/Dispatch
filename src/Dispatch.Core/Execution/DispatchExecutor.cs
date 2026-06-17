@@ -277,9 +277,12 @@ internal sealed class DispatchExecutor(
         ArtifactCollectionResult artifacts,
         CancellationToken cancellationToken)
     {
-        var state = execution.FailureCategory == FailureCategory.None
-            ? TargetExecutionState.Succeeded
-            : TargetExecutionState.Failed;
+        var state = execution.FailureCategory switch
+        {
+            FailureCategory.None => TargetExecutionState.Succeeded,
+            FailureCategory.TimedOut => TargetExecutionState.TimedOut,
+            _ => TargetExecutionState.Failed
+        };
         var stdoutPath = Path.Combine(target.PlannedLocalTargetRoot ?? string.Empty, "stdout.txt");
         var stderrPath = Path.Combine(target.PlannedLocalTargetRoot ?? string.Empty, "stderr.txt");
 
@@ -328,7 +331,7 @@ internal sealed class DispatchExecutor(
             Transport: plan.Job.Transport,
             PayloadType: plan.Job.Payload.PayloadType,
             PayloadName: plan.Job.Payload.DisplayName,
-            State: TargetExecutionState.Failed,
+            State: failureCategory == FailureCategory.TimedOut ? TargetExecutionState.TimedOut : TargetExecutionState.Failed,
             ExitCode: null,
             ExpectedExitCodes: plan.Job.ExpectedExitCodes,
             StartedAt: startedAt,

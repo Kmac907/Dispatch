@@ -19,21 +19,32 @@ public sealed class WinRmShellClient : IWinRmShellClient
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        var requestedExecutionTimeout = request.ExecutionTimeout;
+        using var executionTimeout = requestedExecutionTimeout is not null
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : null;
+        if (executionTimeout is not null && requestedExecutionTimeout is not null)
+        {
+            executionTimeout.CancelAfter(requestedExecutionTimeout.Value);
+        }
+
+        var effectiveCancellationToken = executionTimeout?.Token ?? cancellationToken;
+        Dictionary<string, string>? metadata = null;
 
         try
         {
-            var session = OpenShell(request.Target, out var shellId, out var scheme, out var port);
+            var session = OpenShell(request.Target, request.ExecutionTimeout, out var shellId, out var scheme, out var port);
             try
             {
-                var commandId = CreateCommand(session.Automation, session.Session, shellId, request.Executable, request.Arguments);
-                SendStandardInput(session.Automation, session.Session, shellId, commandId, request.StandardInputFrames, request.CloseStandardInput);
-                var receive = ReceiveUntilDone(session.Automation, session.Session, shellId, commandId, cancellationToken);
-                var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["scheme"] = scheme,
                     ["port"] = port.ToString(),
                     ["shellResourceUri"] = ShellResourceUri
                 };
+                var commandId = CreateCommand(session.Automation, session.Session, shellId, request.Executable, request.Arguments);
+                SendStandardInput(session.Automation, session.Session, shellId, commandId, request.StandardInputFrames, request.CloseStandardInput);
+                var receive = ReceiveUntilDone(session.Automation, session.Session, shellId, commandId, effectiveCancellationToken);
 
                 return Task.FromResult(new WinRmShellCommandResult(
                     true,
@@ -48,13 +59,30 @@ public sealed class WinRmShellClient : IWinRmShellClient
                 TryDeleteShell(session.Automation, session.Session, shellId);
             }
         }
+        catch (OperationCanceledException) when (executionTimeout?.IsCancellationRequested == true && !cancellationToken.IsCancellationRequested)
+        {
+            metadata ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            metadata["timeoutOrigin"] = "client";
+            metadata["timeoutSeconds"] = request.ExecutionTimeout?.TotalSeconds.ToString("0.###") ?? string.Empty;
+            return Task.FromResult(WinRmShellCommandResult.TimedOutResult(
+                $"Raw WinRM shell execution timed out for '{request.Target}' after {request.ExecutionTimeout}.",
+                metadata: metadata));
+        }
+        catch (Exception exception) when (IsLikelyTimeout(exception))
+        {
+            metadata ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            metadata["timeoutOrigin"] = "wsman-operation";
+            return Task.FromResult(WinRmShellCommandResult.TimedOutResult(
+                $"Raw WinRM shell operation timed out for '{request.Target}': {exception.Message}",
+                metadata: metadata));
+        }
         catch (Exception exception)
         {
-            return Task.FromResult(WinRmShellCommandResult.Failed(exception.Message));
+            return Task.FromResult(WinRmShellCommandResult.Failed(exception.Message, metadata));
         }
     }
 
-    private static OpenShellSession OpenShell(string target, out string shellId, out string scheme, out int port)
+    private static OpenShellSession OpenShell(string target, TimeSpan? executionTimeout, out string shellId, out string scheme, out int port)
     {
         var failures = new List<string>();
         foreach (var attempt in GetConnectionAttempts(target))
@@ -73,8 +101,9 @@ public sealed class WinRmShellClient : IWinRmShellClient
                     flags |= (int)automation.SessionFlagUseSsl();
                 }
 
-                dynamic session = automation.CreateSession(attempt.ConnectionUri, flags, null);
-                session.Timeout = 60000;
+                dynamic connectionOptions = automation.CreateConnectionOptions();
+                dynamic session = automation.CreateSession(attempt.ConnectionUri, flags, connectionOptions);
+                session.Timeout = GetSessionTimeoutMilliseconds(executionTimeout);
                 shellId = CreateShell(session, attempt.ConnectionUri);
                 scheme = attempt.UseSsl ? "https" : "http";
                 port = attempt.Port;
@@ -240,6 +269,21 @@ public sealed class WinRmShellClient : IWinRmShellClient
         yield return new ConnectionAttempt($"http://{target}:5985/wsman", UseSsl: false, Port: 5985);
         yield return new ConnectionAttempt($"https://{target}:5986/wsman", UseSsl: true, Port: 5986);
     }
+
+    private static int GetSessionTimeoutMilliseconds(TimeSpan? executionTimeout)
+    {
+        if (executionTimeout is not { } timeout)
+        {
+            return 60000;
+        }
+
+        var milliseconds = (long)Math.Ceiling(timeout.TotalMilliseconds);
+        return (int)Math.Clamp(milliseconds, 1000, int.MaxValue);
+    }
+
+    private static bool IsLikelyTimeout(Exception exception) =>
+        exception.Message.IndexOf("timeout", StringComparison.OrdinalIgnoreCase) >= 0
+        || exception.Message.IndexOf("timed out", StringComparison.OrdinalIgnoreCase) >= 0;
 
     private sealed record OpenShellSession(dynamic Automation, dynamic Session);
 
