@@ -1637,6 +1637,7 @@ public sealed class DispatchCliApplicationTests
             var plan = Assert.Single(events, static document => document.RootElement.GetProperty("type").GetString() == "plan");
             Assert.Equal("trace", plan.RootElement.GetProperty("details").GetProperty("verbosity").GetString());
             Assert.Equal(@"C:\Dispatch\Tests\run-test\Admin\results.json", plan.RootElement.GetProperty("details").GetProperty("resultsJsonPath").GetString());
+            Assert.Equal(@"C:\Dispatch\Tests\run-test\Admin\events.ndjson", plan.RootElement.GetProperty("details").GetProperty("eventsNdjsonPath").GetString());
             var progress = events.First(static document => document.RootElement.GetProperty("type").GetString() == "progress");
             Assert.Equal("trace", progress.RootElement.GetProperty("details").GetProperty("verbosity").GetString());
             Assert.False(progress.RootElement.GetProperty("details").GetProperty("terminal").GetBoolean());
@@ -2015,7 +2016,8 @@ public sealed class DispatchCliApplicationTests
                 Targets: targets,
                 DryRun: request.DryRun,
                 ThrottleLimit: request.Throttle ?? 0,
-                LocalResultsJsonPath: @"C:\Dispatch\Tests\run-test\Admin\results.json");
+                LocalResultsJsonPath: @"C:\Dispatch\Tests\run-test\Admin\results.json",
+                LocalEventsNdjsonPath: @"C:\Dispatch\Tests\run-test\Admin\events.ndjson");
             return Task.FromResult(LastPlan);
         }
     }
@@ -2073,7 +2075,7 @@ public sealed class DispatchCliApplicationTests
                         EndedAt: DateTimeOffset.UnixEpoch,
                         FailureCategory: FailureCategory.None,
                         FailureMessage: null,
-                        ResultPath: target.PlannedLocalResultPath ?? string.Empty)
+                        ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty)
                 ],
                 ResultPath: plan.LocalResultsJsonPath);
         }

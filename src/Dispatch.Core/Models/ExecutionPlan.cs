@@ -12,4 +12,5 @@ public sealed record ExecutionPlan(
     string LocalAdminRoot = "",
     string LocalTargetsRoot = "",
     string LocalResultsJsonPath = "",
-    string LocalResultsCsvPath = "");
+    string LocalResultsCsvPath = "",
+    string LocalEventsNdjsonPath = "");

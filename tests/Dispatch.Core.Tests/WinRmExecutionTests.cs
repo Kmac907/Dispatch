@@ -499,11 +499,12 @@ public sealed class WinRmExecutionTests
         Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "logs", "install.log")));
         Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "artifacts", "reports", "summary.json")));
 
-        var targetJson = await File.ReadAllTextAsync(target.ResultPath);
-        Assert.Contains("\"artifactCollectionStatus\": \"collected\"", targetJson);
+        Assert.Equal(string.Empty, target.ResultPath);
 
-        var resultsCsv = await File.ReadAllTextAsync(plan.LocalResultsCsvPath);
-        Assert.Contains(@"logs\install.log;artifacts\reports\summary.json", resultsCsv);
+        var resultsJson = await File.ReadAllTextAsync(plan.LocalResultsJsonPath);
+        Assert.Contains("\"artifactCollectionStatus\": \"collected\"", resultsJson);
+        Assert.Contains(@"logs\\install.log", resultsJson);
+        Assert.Contains(@"artifacts\\reports\\summary.json", resultsJson);
     }
 
     [Fact]

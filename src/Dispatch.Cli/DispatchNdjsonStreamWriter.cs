@@ -91,13 +91,14 @@ internal sealed class DispatchNdjsonStreamWriter(TextWriter writer, bool verbose
             localRunRoot = trace ? plan.LocalRunRoot : null,
             remoteRunRoot = trace ? plan.RemoteRunRoot : null,
             resultsJsonPath = trace ? plan.LocalResultsJsonPath : null,
-            resultsCsvPath = trace ? plan.LocalResultsCsvPath : null,
+            eventsNdjsonPath = trace ? plan.LocalEventsNdjsonPath : null,
+            resultsCsvPath = trace && plan.Job.ResultPolicy.WriteCsv ? plan.LocalResultsCsvPath : null,
             targets = trace
-                ? plan.Targets.Select(static target => new
+                ? plan.Targets.Select(target => new
                 {
                     name = target.Target.Name,
                     source = target.Target.Source,
-                    localResultPath = target.PlannedLocalResultPath,
+                    localResultPath = plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath : null,
                     remoteScriptPath = target.PlannedRemoteScriptPath
                 }).ToArray()
                 : null

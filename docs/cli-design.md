@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a completed raw WinRM transport that wires `winrm` into DI, validates `winrm + ScriptPayload` and `winrm + CommandPayload`, plans endpoint-local script paths only when needed, probes DNS plus default WinRM TCP ports, prepares chunked script-transfer plans without SMB/admin shares, uploads prepared scripts through raw WinRM shell semantics, executes prepared PowerShell scripts and direct command payloads over the same raw shell path, classifies raw WinRM shell timeouts plus shell-open authentication/authorization/transport failures into the shared result model, and collects declared/default artifact folders over the WinRM channel. YAML jobs, durable run logs, credentials, and push/hosts/init behavior remain roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a completed raw WinRM transport that wires `winrm` into DI, validates `winrm + ScriptPayload` and `winrm + CommandPayload`, plans endpoint-local script paths only when needed, probes DNS plus default WinRM TCP ports, prepares chunked script-transfer plans without SMB/admin shares, uploads prepared scripts through raw WinRM shell semantics, executes prepared PowerShell scripts and direct command payloads over the same raw shell path, classifies raw WinRM shell timeouts plus shell-open authentication/authorization/transport failures into the shared result model, and collects declared/default artifact folders over the WinRM channel. YAML jobs, `logs` commands, credentials, and push/hosts/init behavior remain roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -106,7 +106,25 @@ Current execution rendering uses `DispatchExecutionProgress` events, a channel-f
 
 `--output json` emits one valid JSON document and suppresses decorative UI.
 
-`--output ndjson` emits one stdout event per line and suppresses decorative UI for the current `run ps` path. Durable `events.ndjson` run-history files belong to the later log-command work.
+`--output ndjson` emits one stdout event per line and suppresses decorative UI for the current `run ps` path. Runs now also persist `Admin\events.ndjson` as the canonical durable event stream, while stdout NDJSON remains the live command-output stream.
+
+Default local output set for real runs:
+
+```text
+Admin\events.ndjson
+Admin\results.json
+Targets\<target>\stdout.txt
+Targets\<target>\stderr.txt
+Targets\<target>\artifacts\...
+```
+
+Optional duplicate/export files:
+
+```text
+Admin\results.csv
+Admin\dispatch.log
+Targets\<target>\result.json
+```
 
 `--no-progress` disables live widgets and keeps terminal output stable for CI and redirected hosts.
 

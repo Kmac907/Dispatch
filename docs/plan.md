@@ -24,7 +24,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - Script transfer/preparation under `C:\ProgramData\Dispatch` when the selected transport requires an endpoint-local script path.
 - Throttled multi-target execution.
 - Expected exit code handling, default `[0]`, with installer-friendly support for `[0,3010]`.
-- Local run/log folder with admin logs, CSV summary, JSON summary, per-target outputs, and an event stream suitable for live rendering and NDJSON output.
+- Local run folder with a canonical admin event stream, a reduced JSON summary, per-target stdout/stderr outputs, optional duplicate/export files, and an event model suitable for live rendering and NDJSON output.
 - Spectre.Console live progress/status/dashboard rendering driven by a single renderer over execution events; worker threads must not write directly to the console.
 - Stable output modes: `rich`, `table`, `json`, `ndjson`, and `yaml`, where JSON/NDJSON are non-decorative automation contracts.
 - YAML configuration, inventory, and job file schema surfaces, with script-first execution implemented before richer task vocabulary.
@@ -546,15 +546,24 @@ Local admin machine:
 ```text
 C:\ProgramData\Dispatch\Runs\<RunId>\
   Admin\
-    dispatch.log
-    results.csv
+    events.ndjson
     results.json
   Targets\
     PC001\
       stdout.txt
       stderr.txt
-      result.json
       artifacts\
+```
+
+Optional duplicate/export files may also be written by policy:
+
+```text
+Admin\
+  results.csv
+  dispatch.log
+Targets\
+  <Target>\
+    result.json
 ```
 
 Remote endpoint:
@@ -992,7 +1001,8 @@ Scope:
 - Implement throttle-limited target worker pool.
 - Maintain per-target state transitions.
 - Collect stdout/stderr and endpoint artifacts where available.
-- Write `dispatch.log`, `results.csv`, `results.json`, and per-target `result.json`.
+- Write `events.ndjson` and `results.json` by default.
+- Keep `results.csv`, `dispatch.log`, and per-target `result.json` as optional duplicate/export files behind result policy.
 - Emit structured progress/result events that terminal renderers and durable log writers can consume.
 
 Non-goals:
@@ -1005,7 +1015,8 @@ Dependencies:
 
 Definition of done:
 - Multi-target runs respect throttle limit.
-- Result JSON and CSV include run metadata, target metadata, statuses, exit codes, durations, and failure reasons.
+- The default file set includes `Admin\events.ndjson`, `Admin\results.json`, per-target `stdout.txt`, per-target `stderr.txt`, and copied-back artifacts where present.
+- Optional duplicate/export files can still be written by policy when needed.
 - A partial failure job can be distinguished from full success and full failure.
 
 #### 5.1 Artifact Copy-Back
@@ -1094,7 +1105,7 @@ Current implementation note:
 - `--no-progress` is implemented.
 - `--no-color`, `--quiet`, `--verbose`, and `--trace` are accepted for the current `run ps` path. `--no-color` disables ANSI/color for interactive Spectre planning/execution, `--quiet` suppresses rich/table non-error output while preserving structured output, and `--verbose`/`--trace` enrich current NDJSON event details without adding durable trace logs.
 - `--output rich|table|json|ndjson|yaml` is implemented for the current `run ps` dry-run plan and final result paths; JSON/YAML suppress decorative rendering, and NDJSON emits one typed event per line for planning, execution start, per-target progress, and final result on the current stdout path.
-- Durable `events.ndjson` run-history files and broader verbose/trace log detail remain pending under later logging work.
+- Runs now also persist a durable `Admin\events.ndjson` event stream as the canonical local run-history file. Broader verbose/trace log-command work remains under later logging work.
 
 Non-goals:
 - No static fake progress bars.
@@ -1183,9 +1194,12 @@ Reference:
 - `docs/cli-design.md` defines the `logs` command group and structured output expectations for this roadmap item.
 
 Scope:
-- Write run folders under `C:\ProgramData\Dispatch\logs\<yyyy>\<MM>\<dd>\<run-id>\` unless overridden.
-- Record `run.json`, `plan.json`, `summary.json`, `events.ndjson`, host stdout/stderr/transcript paths where available, and collected artifacts.
-- Implement `dispatch logs list|show|tail|export|retry` command stubs first, then functional readers over the durable run log format.
+- Use `Admin\events.ndjson` as the canonical structured run log for each run.
+- Keep `Admin\results.json` as the reduced final summary rather than duplicating the full event history.
+- Keep per-target `stdout.txt` and `stderr.txt` as the default raw execution outputs.
+- Keep copied-back artifacts separate from process stdout/stderr.
+- Treat `results.csv`, `dispatch.log`, and per-target `result.json` as optional duplicate/export files rather than default outputs.
+- Implement `dispatch logs list|show|tail|export|retry` command stubs first, then functional readers over the durable event-stream format.
 - Ensure credential reference names may be logged, but secret values must never be logged.
 
 Non-goals:
@@ -1196,7 +1210,8 @@ Dependencies:
 - 6.1.
 
 Definition of done:
-- New runs record an event stream and summary in the documented layout.
+- New runs record `Admin\events.ndjson` and `Admin\results.json` in the documented layout.
+- The default file set is smaller and the duplicate/export files are optional by policy.
 - `logs list` and `logs show latest` can read local run history.
 - Tests cover layout planning, event serialization, and summary export.
 
@@ -1529,7 +1544,7 @@ Add optional harness-based managed execution for stronger normalized results.
 Scope:
 - Add `-ExecutionMode Managed` / `--execution-mode managed`.
 - Generate a minimal internal harness only when managed mode is selected.
-- Standardize `stdout.txt`, `stderr.txt`, `result.json`, timeout behavior, and child process exit classification.
+- Standardize `stdout.txt`, `stderr.txt`, timeout behavior, and child process exit classification while keeping per-target `result.json` optional.
 
 Non-goals:
 - Managed mode is not the default.
@@ -1612,7 +1627,7 @@ Definition of done:
 - Rich terminal output uses Spectre.Console, and JSON/NDJSON output modes are non-decorative.
 - Multi-target execution respects throttle limit.
 - Dispatch does not own installer/media payload staging or Blob/SAS payload retrieval.
-- Results are written as CSV and JSON.
+- Results are written as JSON by default; CSV remains an optional export.
 - PowerShell module wrapper can launch interactive and automation flows.
 - Source installer can build, install, validate, and clean up the module and bundled EXE.
 - Optional ZIP installer can install the module and bundled EXE.

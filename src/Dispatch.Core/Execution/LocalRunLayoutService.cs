@@ -28,6 +28,7 @@ internal sealed class LocalRunLayoutService : ILocalRunLayoutService
             LocalTargetsRoot: localTargetsRoot,
             LocalResultsJsonPath: Path.Combine(localAdminRoot, "results.json"),
             LocalResultsCsvPath: Path.Combine(localAdminRoot, "results.csv"),
+            LocalEventsNdjsonPath: Path.Combine(localAdminRoot, "events.ndjson"),
             Targets: targetLayouts);
 
         var errors = ValidateLayout(localRoot, layout);

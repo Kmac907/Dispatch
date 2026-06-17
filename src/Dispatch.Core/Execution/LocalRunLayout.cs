@@ -14,6 +14,7 @@ public sealed record LocalRunLayout(
     string LocalTargetsRoot,
     string LocalResultsJsonPath,
     string LocalResultsCsvPath,
+    string LocalEventsNdjsonPath,
     IReadOnlyList<TargetLocalLayout> Targets);
 
 public sealed record LocalRunLayoutResult(

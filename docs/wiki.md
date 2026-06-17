@@ -200,6 +200,9 @@ Must include:
 - JSON / NDJSON / YAML output behavior
 - run/result file layout
 - CSV/JSON summaries
+- canonical `Admin\\events.ndjson` behavior
+- reduced `Admin\\results.json` behavior
+- default vs optional local output files
 - artifact location
 - what automation should read
 - the local run folder layout vs the remote endpoint run folder layout

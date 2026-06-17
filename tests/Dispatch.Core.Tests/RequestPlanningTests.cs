@@ -40,10 +40,16 @@ public sealed class RequestPlanningTests
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Targets", plan.LocalTargetsRoot);
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.json", plan.LocalResultsJsonPath);
         Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\results.csv", plan.LocalResultsCsvPath);
+        Assert.Equal(@"D:\Dispatch\Runs\run-001\Admin\events.ndjson", plan.LocalEventsNdjsonPath);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001", plan.RemoteRunRoot);
         Assert.Equal([0, 3010], plan.Job.ExpectedExitCodes);
         Assert.Equal(["logs", @"custom\reports"], plan.Job.ArtifactPolicy.Paths);
         Assert.True(plan.Job.ExecutionContext.RunAsSystem);
+        Assert.True(plan.Job.ResultPolicy.WriteJson);
+        Assert.False(plan.Job.ResultPolicy.WriteCsv);
+        Assert.False(plan.Job.ResultPolicy.WritePerTargetJson);
+        Assert.False(plan.Job.ResultPolicy.WriteTextLog);
+        Assert.True(plan.Job.ResultPolicy.WriteEventStream);
 
         Assert.Equal("PC001", target.Target.Name);
         Assert.Equal(TargetExecutionState.Pending, target.State);

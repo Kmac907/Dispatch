@@ -28,6 +28,17 @@ internal sealed class DispatchExecutor(
         }
 
         var startedAt = clock.UtcNow;
+        await using var eventStreamWriter = CreateEventStreamWriter(plan);
+        eventStreamWriter?.WriteRunStarted(plan, startedAt);
+        eventStreamWriter?.WritePlan(plan);
+        eventStreamWriter?.WriteExecutionStarted(plan, startedAt);
+
+        var effectiveObserver = eventStreamWriter is null
+            ? observer
+            : observer is NullDispatchExecutionObserver
+                ? eventStreamWriter
+                : new CompositeDispatchExecutionObserver(observer, eventStreamWriter);
+
         var transportExecutor = transportExecutors.SingleOrDefault(executor => executor.Kind == plan.Job.Transport);
 
         if (transportExecutor is null)
@@ -43,7 +54,7 @@ internal sealed class DispatchExecutor(
                     unavailableEndedAt,
                     FailureCategory.TransportUnavailable,
                     $"No executor is registered for transport '{plan.Job.Transport.ToDispatchString()}'.");
-                await NotifyTargetStateAsync(observer, failed, unavailableEndedAt, cancellationToken).ConfigureAwait(false);
+                await NotifyTargetStateAsync(effectiveObserver, failed, unavailableEndedAt, cancellationToken).ConfigureAwait(false);
                 unavailableTargets.Add(failed);
             }
 
@@ -58,12 +69,13 @@ internal sealed class DispatchExecutor(
                 Targets: unavailableTargets,
                 ResultPath: plan.LocalResultsJsonPath);
 
+            WriteFinalEvents(eventStreamWriter, unavailableResult);
             await resultWriter.WriteAsync(plan, unavailableResult, cancellationToken).ConfigureAwait(false);
             return unavailableResult;
         }
 
         var endpointProbe = endpointProbes.SingleOrDefault(probe => probe.Kind == plan.Job.Transport);
-        var targetResults = await ExecuteTargetsAsync(plan, transportExecutor, endpointProbe, observer, cancellationToken).ConfigureAwait(false);
+        var targetResults = await ExecuteTargetsAsync(plan, transportExecutor, endpointProbe, effectiveObserver, cancellationToken).ConfigureAwait(false);
 
         var endedAt = clock.UtcNow;
         var result = new DispatchRunResult(
@@ -77,6 +89,7 @@ internal sealed class DispatchExecutor(
             Targets: targetResults,
             ResultPath: plan.LocalResultsJsonPath);
 
+        WriteFinalEvents(eventStreamWriter, result);
         await resultWriter.WriteAsync(plan, result, cancellationToken).ConfigureAwait(false);
         return result;
     }
@@ -308,7 +321,7 @@ internal sealed class DispatchExecutor(
             FailureMessage: execution.FailureMessage,
             StdoutPath: stdoutPath,
             StderrPath: stderrPath,
-            ResultPath: target.PlannedLocalResultPath ?? string.Empty,
+            ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty,
             Artifacts: artifacts.Artifacts,
             ArtifactCollectionStatus: artifacts.Status,
             ArtifactCollectionFailureMessage: artifacts.FailureMessage,
@@ -338,10 +351,35 @@ internal sealed class DispatchExecutor(
             EndedAt: endedAt,
             FailureCategory: failureCategory,
             FailureMessage: failureMessage,
-            ResultPath: target.PlannedLocalResultPath ?? string.Empty,
+            ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty,
             Artifacts: [],
             ArtifactCollectionStatus: "skipped",
             SecretHandoffStatus: "not-supported",
             CleanupStatus: "not-started",
             TransportMetadata: metadata);
+
+    private static DispatchEventStreamWriter? CreateEventStreamWriter(ExecutionPlan plan)
+    {
+        if (!plan.Job.ResultPolicy.WriteEventStream || string.IsNullOrWhiteSpace(plan.LocalEventsNdjsonPath))
+        {
+            return null;
+        }
+
+        return new DispatchEventStreamWriter(plan.LocalEventsNdjsonPath);
+    }
+
+    private static void WriteFinalEvents(DispatchEventStreamWriter? eventStreamWriter, DispatchRunResult result)
+    {
+        if (eventStreamWriter is null)
+        {
+            return;
+        }
+
+        foreach (var target in result.Targets)
+        {
+            eventStreamWriter.WriteTargetResult(target);
+        }
+
+        eventStreamWriter.WriteRunResult(result);
+    }
 }

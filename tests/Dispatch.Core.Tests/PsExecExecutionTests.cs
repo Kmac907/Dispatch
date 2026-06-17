@@ -280,11 +280,12 @@ public sealed class PsExecExecutionTests
         Assert.Equal(FailureCategory.UnexpectedExitCode, result.Targets.Single(static target => target.Target == "PC003").FailureCategory);
 
         Assert.True(File.Exists(plan.LocalResultsJsonPath));
-        Assert.True(File.Exists(plan.LocalResultsCsvPath));
-        Assert.True(File.Exists(Path.Combine(plan.LocalAdminRoot, "dispatch.log")));
+        Assert.True(File.Exists(plan.LocalEventsNdjsonPath));
+        Assert.False(File.Exists(plan.LocalResultsCsvPath));
+        Assert.False(File.Exists(Path.Combine(plan.LocalAdminRoot, "dispatch.log")));
 
         var firstTarget = result.Targets.Single(static target => target.Target == "PC001");
-        Assert.True(File.Exists(firstTarget.ResultPath));
+        Assert.Equal(string.Empty, firstTarget.ResultPath);
         Assert.True(File.Exists(firstTarget.StdoutPath));
         Assert.True(File.Exists(firstTarget.StderrPath));
         Assert.Equal("stdout from PC001", await File.ReadAllTextAsync(firstTarget.StdoutPath));
@@ -293,13 +294,14 @@ public sealed class PsExecExecutionTests
         var resultsJson = await File.ReadAllTextAsync(plan.LocalResultsJsonPath);
         Assert.Contains("\"targetCount\": 4", resultsJson);
         Assert.Contains("\"failedCount\": 1", resultsJson);
+        Assert.Contains("\"resultPath\": \"\"", resultsJson);
 
-        var resultsCsv = await File.ReadAllTextAsync(plan.LocalResultsCsvPath);
-        Assert.Contains("PC003", resultsCsv);
-        Assert.Contains("UnexpectedExitCode", resultsCsv);
-
-        var dispatchLog = await File.ReadAllTextAsync(Path.Combine(plan.LocalAdminRoot, "dispatch.log"));
-        Assert.Contains("Succeeded: 3; Failed: 1", dispatchLog);
+        var eventsNdjson = await File.ReadAllLinesAsync(plan.LocalEventsNdjsonPath);
+        Assert.Contains(eventsNdjson, static line => line.Contains("\"type\":\"run.started\"", StringComparison.Ordinal));
+        Assert.Contains(eventsNdjson, static line => line.Contains("\"type\":\"plan\"", StringComparison.Ordinal));
+        Assert.Contains(eventsNdjson, static line => line.Contains("\"type\":\"execution.started\"", StringComparison.Ordinal));
+        Assert.Contains(eventsNdjson, static line => line.Contains("\"type\":\"target.result\"", StringComparison.Ordinal));
+        Assert.Contains(eventsNdjson, static line => line.Contains("\"type\":\"result\"", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -341,11 +343,51 @@ public sealed class PsExecExecutionTests
         Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "logs", "install.log")));
         Assert.True(File.Exists(Path.Combine(plan.Targets[0].PlannedLocalTargetRoot!, "artifacts", "reports", "summary.json")));
 
-        var targetJson = await File.ReadAllTextAsync(target.ResultPath);
-        Assert.Contains("\"artifactCollectionStatus\": \"collected\"", targetJson);
+        Assert.Equal(string.Empty, target.ResultPath);
 
-        var resultsCsv = await File.ReadAllTextAsync(plan.LocalResultsCsvPath);
-        Assert.Contains(@"logs\install.log;artifacts\reports\summary.json", resultsCsv);
+        var resultsJson = await File.ReadAllTextAsync(plan.LocalResultsJsonPath);
+        Assert.Contains("\"artifactCollectionStatus\": \"collected\"", resultsJson);
+        Assert.Contains(@"logs\\install.log", resultsJson);
+        Assert.Contains(@"artifacts\\reports\\summary.json", resultsJson);
+    }
+
+    [Fact]
+    public async Task ExecutorWritesOptionalSummaryAndTargetFilesWhenEnabled()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        using var provider = BuildProvider(outputRoot.Path, runner);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var planWithOptionalFiles = plan with
+        {
+            Job = plan.Job with
+            {
+                ResultPolicy = new ResultPolicy(
+                    outputRoot.Path,
+                    WriteJson: true,
+                    WriteCsv: true,
+                    WritePerTargetJson: true,
+                    WriteTextLog: true,
+                    WriteEventStream: true)
+            }
+        };
+
+        var result = await executor.ExecuteAsync(planWithOptionalFiles, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.True(File.Exists(planWithOptionalFiles.LocalResultsCsvPath));
+        Assert.True(File.Exists(Path.Combine(planWithOptionalFiles.LocalAdminRoot, "dispatch.log")));
+        Assert.True(File.Exists(target.ResultPath));
     }
 
     [Fact]

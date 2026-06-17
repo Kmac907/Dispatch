@@ -226,7 +226,11 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
         console.WriteLine($"Local run root: {plan.LocalRunRoot}");
         console.WriteLine($"Admin results: {plan.LocalResultsJsonPath}");
-        console.WriteLine($"CSV results: {plan.LocalResultsCsvPath}");
+        console.WriteLine($"Event log: {plan.LocalEventsNdjsonPath}");
+        if (plan.Job.ResultPolicy.WriteCsv)
+        {
+            console.WriteLine($"Optional CSV export: {plan.LocalResultsCsvPath}");
+        }
     }
 
     public static void RenderRunResult(TextWriter writer, DispatchRunResult result)

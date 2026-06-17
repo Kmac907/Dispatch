@@ -12,28 +12,42 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
         Directory.CreateDirectory(plan.LocalAdminRoot);
         Directory.CreateDirectory(plan.LocalTargetsRoot);
 
-        foreach (var target in result.Targets)
+        if (plan.Job.ResultPolicy.WritePerTargetJson)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var targetPlan = plan.Targets.SingleOrDefault(candidate =>
-                candidate.Target.Name.Equals(target.Target, StringComparison.OrdinalIgnoreCase));
-            var targetRoot = targetPlan?.PlannedLocalTargetRoot;
-            if (!string.IsNullOrWhiteSpace(targetRoot))
+            foreach (var target in result.Targets)
             {
-                Directory.CreateDirectory(targetRoot);
-            }
+                cancellationToken.ThrowIfCancellationRequested();
 
-            if (!string.IsNullOrWhiteSpace(target.ResultPath))
-            {
-                Directory.CreateDirectory(Path.GetDirectoryName(target.ResultPath)!);
-                await File.WriteAllTextAsync(target.ResultPath, DispatchJson.Serialize(target), cancellationToken).ConfigureAwait(false);
+                var targetPlan = plan.Targets.SingleOrDefault(candidate =>
+                    candidate.Target.Name.Equals(target.Target, StringComparison.OrdinalIgnoreCase));
+                var targetRoot = targetPlan?.PlannedLocalTargetRoot;
+                if (!string.IsNullOrWhiteSpace(targetRoot))
+                {
+                    Directory.CreateDirectory(targetRoot);
+                }
+
+                if (!string.IsNullOrWhiteSpace(target.ResultPath))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(target.ResultPath)!);
+                    await File.WriteAllTextAsync(target.ResultPath, DispatchJson.Serialize(target), cancellationToken).ConfigureAwait(false);
+                }
             }
         }
 
-        await File.WriteAllTextAsync(plan.LocalResultsJsonPath, DispatchJson.Serialize(result), cancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(plan.LocalResultsCsvPath, CreateCsv(result), cancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(plan.LocalAdminRoot, "dispatch.log"), CreateLog(result), cancellationToken).ConfigureAwait(false);
+        if (plan.Job.ResultPolicy.WriteJson)
+        {
+            await File.WriteAllTextAsync(plan.LocalResultsJsonPath, DispatchJson.Serialize(result), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (plan.Job.ResultPolicy.WriteCsv)
+        {
+            await File.WriteAllTextAsync(plan.LocalResultsCsvPath, CreateCsv(result), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (plan.Job.ResultPolicy.WriteTextLog)
+        {
+            await File.WriteAllTextAsync(Path.Combine(plan.LocalAdminRoot, "dispatch.log"), CreateLog(result), cancellationToken).ConfigureAwait(false);
+        }
     }
 
     private static string CreateCsv(DispatchRunResult result)

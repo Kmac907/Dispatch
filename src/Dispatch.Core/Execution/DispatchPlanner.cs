@@ -75,7 +75,8 @@ internal sealed class DispatchPlanner(
             LocalAdminRoot: localLayout.LocalAdminRoot,
             LocalTargetsRoot: localLayout.LocalTargetsRoot,
             LocalResultsJsonPath: localLayout.LocalResultsJsonPath,
-            LocalResultsCsvPath: localLayout.LocalResultsCsvPath);
+            LocalResultsCsvPath: localLayout.LocalResultsCsvPath,
+            LocalEventsNdjsonPath: localLayout.LocalEventsNdjsonPath);
 
         return Task.FromResult(plan);
     }
