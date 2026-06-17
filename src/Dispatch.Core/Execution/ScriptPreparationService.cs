@@ -1,9 +1,12 @@
 using Dispatch.Core.Models;
+using System.Security.Cryptography;
 
 namespace Dispatch.Core.Execution;
 
 internal sealed class ScriptPreparationService(IEndpointFileSystem endpointFileSystem) : IScriptPreparationService
 {
+    private const int WinRmChunkSizeBytes = 8192;
+
     public async Task<ScriptPreparationResult> PrepareAsync(ExecutionPlan plan, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -24,6 +27,28 @@ internal sealed class ScriptPreparationService(IEndpointFileSystem endpointFileS
 
         var targetManifests = new List<TargetScriptManifest>();
         var targetResults = new List<TargetScriptPreparationResult>();
+        ScriptTransferPlan? winRmTransferPlan = null;
+
+        if (UsesChunkedWinRmScriptTransfer(plan.Job.Transport))
+        {
+            try
+            {
+                winRmTransferPlan = await CreateWinRmTransferPlanAsync(script.ScriptPath, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                var failedTargets = plan.Targets
+                    .Select(target => Failed(
+                        target.Target,
+                        target.PlannedRemoteScriptPath ?? string.Empty,
+                        null,
+                        FailureCategory.PayloadPreparationFailed,
+                        $"Failed to prepare WinRM script payload for target '{target.Target.Name}': {exception.Message}"))
+                    .ToArray();
+
+                return new ScriptPreparationResult(null, failedTargets);
+            }
+        }
 
         foreach (var target in plan.Targets)
         {
@@ -45,12 +70,14 @@ internal sealed class ScriptPreparationService(IEndpointFileSystem endpointFileS
                 targetManifests.Add(new TargetScriptManifest(
                     target.Target,
                     target.PlannedRemoteScriptPath,
-                    null));
+                    null,
+                    winRmTransferPlan));
                 targetResults.Add(new TargetScriptPreparationResult(
                     Target: target.Target,
                     RemoteScriptPath: target.PlannedRemoteScriptPath,
                     AdminShareScriptPath: null,
-                    Succeeded: true));
+                    Succeeded: true,
+                    TransferPlan: winRmTransferPlan));
                 continue;
             }
 
@@ -125,6 +152,38 @@ internal sealed class ScriptPreparationService(IEndpointFileSystem endpointFileS
     }
 
     private static bool UsesAdminShareScriptTransfer(TransportKind transport) => transport == TransportKind.PsExec;
+
+    private static bool UsesChunkedWinRmScriptTransfer(TransportKind transport) => transport == TransportKind.WinRm;
+
+    private static async Task<ScriptTransferPlan> CreateWinRmTransferPlanAsync(
+        string scriptPath,
+        CancellationToken cancellationToken)
+    {
+        var scriptBytes = await File.ReadAllBytesAsync(scriptPath, cancellationToken).ConfigureAwait(false);
+        var chunks = new List<ScriptTransferChunk>((scriptBytes.Length + WinRmChunkSizeBytes - 1) / WinRmChunkSizeBytes);
+
+        for (var offset = 0; offset < scriptBytes.Length; offset += WinRmChunkSizeBytes)
+        {
+            var chunkLength = Math.Min(WinRmChunkSizeBytes, scriptBytes.Length - offset);
+            var chunkBytes = scriptBytes.AsSpan(offset, chunkLength).ToArray();
+            chunks.Add(new ScriptTransferChunk(
+                Index: chunks.Count,
+                Offset: offset,
+                ByteLength: chunkLength,
+                Sha256: ComputeSha256(chunkBytes),
+                Base64Data: Convert.ToBase64String(chunkBytes)));
+        }
+
+        return new ScriptTransferPlan(
+            Mode: ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: scriptBytes.Length,
+            ContentSha256: ComputeSha256(scriptBytes),
+            ChunkSizeBytes: WinRmChunkSizeBytes,
+            Chunks: chunks);
+    }
+
+    private static string ComputeSha256(byte[] content) =>
+        Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
     private static TargetScriptPreparationResult Failed(
         TargetSpec target,

@@ -3,6 +3,7 @@ using Dispatch.Core.Hosting;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography;
 
 namespace Dispatch.Core.Tests;
 
@@ -152,14 +153,16 @@ public sealed class ScriptPreparationTests
     [Fact]
     public async Task ScriptPreparationDoesNotAttemptAdminShareCopyForWinRmSlice()
     {
-        using var script = TemporaryScript.Create("Fix.ps1");
         using var outputRoot = TemporaryDirectory.Create();
+        var scriptPath = Path.Combine(outputRoot.Path, "Chunked.ps1");
+        var scriptContent = new string('A', 9000);
+        await File.WriteAllTextAsync(scriptPath, scriptContent);
         var endpointFileSystem = new RecordingEndpointFileSystem();
         using var provider = BuildProvider(outputRoot.Path, endpointFileSystem);
         var planner = provider.GetRequiredService<IDispatchPlanner>();
         var preparation = provider.GetRequiredService<IScriptPreparationService>();
         var request = new DispatchRequest(
-            payload: new ScriptPayload(script.Path, []),
+            payload: new ScriptPayload(scriptPath, []),
             targets: [new TargetSpec("PC001")],
             transport: TransportKind.WinRm,
             dryRun: false,
@@ -172,9 +175,46 @@ public sealed class ScriptPreparationTests
         Assert.Empty(endpointFileSystem.CreatedDirectories);
         Assert.Empty(endpointFileSystem.Copies);
         var target = Assert.Single(result.Targets);
-        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.RemoteScriptPath);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Chunked.ps1", target.RemoteScriptPath);
         Assert.Null(target.AdminShareScriptPath);
+        var transferPlan = Assert.IsType<ScriptTransferPlan>(target.TransferPlan);
+        Assert.Equal(ScriptTransferMode.WinRmChunkedBase64, transferPlan.Mode);
+        Assert.Equal(8192, transferPlan.ChunkSizeBytes);
+        Assert.Equal(2, transferPlan.ChunkCount);
+
+        var scriptBytes = await File.ReadAllBytesAsync(scriptPath);
+        Assert.Equal(scriptBytes.Length, transferPlan.TotalBytes);
+        Assert.Equal(ComputeSha256(scriptBytes), transferPlan.ContentSha256);
+
+        var firstChunk = transferPlan.Chunks[0];
+        Assert.Equal(0, firstChunk.Index);
+        Assert.Equal(0, firstChunk.Offset);
+        Assert.Equal(8192, firstChunk.ByteLength);
+        Assert.Equal(
+            Convert.ToBase64String(scriptBytes.AsSpan(0, 8192).ToArray()),
+            firstChunk.Base64Data);
+        Assert.Equal(
+            ComputeSha256(scriptBytes.AsSpan(0, 8192).ToArray()),
+            firstChunk.Sha256);
+
+        var secondChunk = transferPlan.Chunks[1];
+        Assert.Equal(1, secondChunk.Index);
+        Assert.Equal(8192, secondChunk.Offset);
+        Assert.Equal(scriptBytes.Length - 8192, secondChunk.ByteLength);
+        Assert.Equal(
+            Convert.ToBase64String(scriptBytes.AsSpan(8192).ToArray()),
+            secondChunk.Base64Data);
+        Assert.Equal(
+            ComputeSha256(scriptBytes.AsSpan(8192).ToArray()),
+            secondChunk.Sha256);
+
+        Assert.NotNull(result.Manifest);
+        var manifestTarget = Assert.Single(result.Manifest.Targets);
+        Assert.Equal(transferPlan, manifestTarget.TransferPlan);
     }
+
+    private static string ComputeSha256(byte[] content) =>
+        Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
     private static ServiceProvider BuildProvider(string localRunRoot, IEndpointFileSystem endpointFileSystem)
     {

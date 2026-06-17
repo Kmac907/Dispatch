@@ -5,6 +5,7 @@ using Dispatch.Core.Transports;
 using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography;
 
 namespace Dispatch.Core.Tests;
 
@@ -93,8 +94,15 @@ public sealed class WinRmExecutionTests
         Assert.Empty(endpointFileSystem.CreatedDirectories);
         Assert.Empty(endpointFileSystem.Copies);
         Assert.Equal("winrm", target.TransportMetadata?["transport"]);
-        Assert.Equal("probe-only", target.TransportMetadata?["mode"]);
+        Assert.Equal("prepared-only", target.TransportMetadata?["mode"]);
+        Assert.Equal("completed", target.TransportMetadata?["preparation"]);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.TransportMetadata?["plannedRemoteScriptPath"]);
+        var scriptBytes = await File.ReadAllBytesAsync(script.Path);
+        Assert.Equal("WinRmChunkedBase64", target.TransportMetadata?["transferMode"]);
+        Assert.Equal(scriptBytes.Length.ToString(), target.TransportMetadata?["scriptByteLength"]);
+        Assert.Equal(ComputeSha256(scriptBytes), target.TransportMetadata?["scriptSha256"]);
+        Assert.Equal("8192", target.TransportMetadata?["chunkSizeBytes"]);
+        Assert.Equal("1", target.TransportMetadata?["chunkCount"]);
         Assert.Equal(
             [
                 TargetExecutionState.Probing,
@@ -191,6 +199,9 @@ public sealed class WinRmExecutionTests
             .AddSingleton<IWinRmPortProbe>(portProbe ?? new RecordingPortProbe((_, _) => WinRmProbeResult.Success))
             .BuildServiceProvider(validateScopes: true);
     }
+
+    private static string ComputeSha256(byte[] content) =>
+        Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
 
     private sealed class FixedRunIdGenerator(string runId) : IRunIdGenerator
     {

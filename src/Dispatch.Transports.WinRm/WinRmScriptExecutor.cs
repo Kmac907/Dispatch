@@ -14,12 +14,23 @@ public sealed class WinRmScriptExecutor : ITransportScriptExecutor
         cancellationToken.ThrowIfCancellationRequested();
 
         var startedAt = DateTimeOffset.UtcNow;
+        var transferPlan = request.Preparation.TransferPlan;
         var metadata = new Dictionary<string, string>
         {
             ["transport"] = "winrm",
-            ["mode"] = "probe-only",
+            ["mode"] = "prepared-only",
+            ["preparation"] = transferPlan is null ? "missing" : "completed",
             ["plannedRemoteScriptPath"] = request.Target.PlannedRemoteScriptPath ?? string.Empty
         };
+
+        if (transferPlan is not null)
+        {
+            metadata["transferMode"] = transferPlan.Mode.ToString();
+            metadata["scriptByteLength"] = transferPlan.TotalBytes.ToString();
+            metadata["scriptSha256"] = transferPlan.ContentSha256;
+            metadata["chunkSizeBytes"] = transferPlan.ChunkSizeBytes.ToString();
+            metadata["chunkCount"] = transferPlan.ChunkCount.ToString();
+        }
 
         return Task.FromResult(new TransportScriptExecutionResult(
             ExitCode: null,
@@ -28,7 +39,7 @@ public sealed class WinRmScriptExecutor : ITransportScriptExecutor
             StartedAt: startedAt,
             EndedAt: DateTimeOffset.UtcNow,
             FailureCategory: FailureCategory.ExecutionFailed,
-            FailureMessage: "Raw WinRM shell execution is not implemented yet. This slice validates WinRM reachability and planning only.",
+            FailureMessage: "Raw WinRM shell execution is not implemented yet. This slice validates WinRM reachability and prepares chunked script transfer planning only.",
             Metadata: metadata));
     }
 }
