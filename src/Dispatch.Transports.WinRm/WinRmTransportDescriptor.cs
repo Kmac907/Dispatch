@@ -12,11 +12,11 @@ public sealed class WinRmTransportDescriptor : ITransportDescriptor
     public string Name => TransportName;
 
     public TransportCapabilities Capabilities { get; } = new(
-        SupportsScriptExecution: false,
+        SupportsScriptExecution: true,
         SupportsCommandExecution: false,
         RequiresEndpointLocalScriptPath: true,
         SupportsNativeFileCopy: false,
-        SupportsStreamedFileTransfer: false,
+        SupportsStreamedFileTransfer: true,
         SupportsPowerShellStreams: false,
         SupportsCurrentUser: true,
         SupportsExplicitCredential: false,

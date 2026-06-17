@@ -63,7 +63,7 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
-    public async Task ExecutorReturnsExplicitNotImplementedFailureAfterSuccessfulWinRmProbe()
+    public async Task ExecutorExecutesUploadedScriptOverRawWinRmShell()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
         using var outputRoot = TemporaryDirectory.Create();
@@ -74,10 +74,21 @@ public sealed class WinRmExecutionTests
                 ["scheme"] = "https",
                 ["port"] = "5986"
             }));
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "audit complete",
+            string.Empty,
+            null,
+            new Dictionary<string, string>
+            {
+                ["shell"] = "command"
+            }));
         using var provider = BuildProvider(
             outputRoot.Path,
             endpointFileSystem,
             transferClient,
+            shellClient,
             dnsResolver: new RecordingDnsResolver(WinRmProbeResult.Success),
             portProbe: new RecordingPortProbe((_, port) => port == 5986
                 ? WinRmProbeResult.Success
@@ -96,17 +107,20 @@ public sealed class WinRmExecutionTests
         var result = await executor.ExecuteAsync(plan, observer, CancellationToken.None);
 
         var target = Assert.Single(result.Targets);
-        Assert.Equal(TargetExecutionState.Failed, target.State);
-        Assert.Equal(FailureCategory.ExecutionFailed, target.FailureCategory);
-        Assert.Contains("not implemented", target.FailureMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal(FailureCategory.None, target.FailureCategory);
+        Assert.Null(target.FailureMessage);
         Assert.Equal("skipped", target.ArtifactCollectionStatus);
         Assert.Contains("not implemented", target.ArtifactCollectionFailureMessage, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(endpointFileSystem.CreatedDirectories);
         Assert.Empty(endpointFileSystem.Copies);
+        Assert.Equal(0, target.ExitCode);
         Assert.Equal("winrm", target.TransportMetadata?["transport"]);
-        Assert.Equal("upload-only", target.TransportMetadata?["mode"]);
+        Assert.Equal("executed", target.TransportMetadata?["mode"]);
         Assert.Equal("completed", target.TransportMetadata?["preparation"]);
         Assert.Equal("completed", target.TransportMetadata?["uploadStatus"]);
+        Assert.Equal("completed", target.TransportMetadata?["executionStatus"]);
+        Assert.Equal("powershell.exe", target.TransportMetadata?["executable"]);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.TransportMetadata?["plannedRemoteScriptPath"]);
         var scriptBytes = await File.ReadAllBytesAsync(script.Path);
         Assert.Equal("WinRmChunkedBase64", target.TransportMetadata?["transferMode"]);
@@ -116,19 +130,73 @@ public sealed class WinRmExecutionTests
         Assert.Equal("1", target.TransportMetadata?["chunkCount"]);
         Assert.Equal("https", target.TransportMetadata?["scheme"]);
         Assert.Equal("5986", target.TransportMetadata?["port"]);
+        Assert.Equal("command", target.TransportMetadata?["shell"]);
+        Assert.NotNull(target.StdoutPath);
+        Assert.NotNull(target.StderrPath);
+        Assert.Equal("audit complete", await File.ReadAllTextAsync(target.StdoutPath));
+        Assert.Equal(string.Empty, await File.ReadAllTextAsync(target.StderrPath));
         var uploadRequest = Assert.Single(transferClient.Requests);
         Assert.Equal("PC001", uploadRequest.Target);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", uploadRequest.RemoteScriptPath);
         Assert.Equal(1, uploadRequest.TransferPlan.ChunkCount);
+        var shellRequest = Assert.Single(shellClient.Requests);
+        Assert.Equal("PC001", shellRequest.Target);
+        Assert.Equal("powershell.exe", shellRequest.Executable);
+        Assert.Equal(
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", "-Mode", "Audit"],
+            shellRequest.Arguments);
+        Assert.Empty(shellRequest.StandardInputFrames);
         Assert.Equal(
             [
                 TargetExecutionState.Probing,
                 TargetExecutionState.PreparingScript,
                 TargetExecutionState.Executing,
                 TargetExecutionState.CollectingArtifacts,
-                TargetExecutionState.Failed
+                TargetExecutionState.Succeeded
             ],
             observer.Progress.Select(static progress => progress.State));
+    }
+
+    [Fact]
+    public async Task ExecutorMapsUnexpectedWinRmExitCodeToUnexpectedExitCode()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            5,
+            "partial output",
+            "stderr line",
+            null));
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            endpointFileSystem,
+            transferClient,
+            shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.UnexpectedExitCode, target.FailureCategory);
+        Assert.Contains("expected 0", target.FailureMessage);
+        Assert.Equal("executed", target.TransportMetadata?["mode"]);
+        Assert.Equal("completed", target.TransportMetadata?["executionStatus"]);
+        Assert.NotNull(target.StdoutPath);
+        Assert.NotNull(target.StderrPath);
+        Assert.Equal("partial output", await File.ReadAllTextAsync(target.StdoutPath));
+        Assert.Equal("stderr line", await File.ReadAllTextAsync(target.StderrPath));
     }
 
     [Fact]
@@ -198,6 +266,145 @@ public sealed class WinRmExecutionTests
         Assert.Equal("upload-failed", target.TransportMetadata?["mode"]);
         Assert.Equal("completed", target.TransportMetadata?["preparation"]);
         Assert.Equal("failed", target.TransportMetadata?["uploadStatus"]);
+    }
+
+    [Fact]
+    public async Task ExecutorMapsWinRmShellFailureToExecutionFailed()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.Failed(
+            "Shell failed.",
+            new Dictionary<string, string>
+            {
+                ["shellStage"] = "invoke"
+            }));
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            endpointFileSystem,
+            transferClient,
+            shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.ExecutionFailed, target.FailureCategory);
+        Assert.Contains("Shell failed", target.FailureMessage);
+        Assert.Equal("execution-failed", target.TransportMetadata?["mode"]);
+        Assert.Equal("completed", target.TransportMetadata?["uploadStatus"]);
+        Assert.Equal("failed", target.TransportMetadata?["executionStatus"]);
+        Assert.Equal("invoke", target.TransportMetadata?["shellStage"]);
+    }
+
+    [Fact]
+    public async Task ScriptExecutorReturnsSuccessTransportResultAfterUpload()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success(
+            new Dictionary<string, string>
+            {
+                ["scheme"] = "https",
+                ["port"] = "5986"
+            }));
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "audit complete",
+            string.Empty,
+            null));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(["-Mode", "Audit"]),
+            CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Null(result.FailureMessage);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("audit complete", result.Stdout);
+        Assert.Equal(string.Empty, result.Stderr);
+        Assert.Equal("executed", result.Metadata?["mode"]);
+        Assert.Equal("completed", result.Metadata?["uploadStatus"]);
+        Assert.Equal("completed", result.Metadata?["executionStatus"]);
+        Assert.Equal("https", result.Metadata?["scheme"]);
+        Assert.Equal("5986", result.Metadata?["port"]);
+        Assert.Equal(
+            @"powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1 -Mode Audit",
+            result.Metadata?["executionCommand"]);
+
+        var uploadRequest = Assert.Single(transferClient.Requests);
+        Assert.Equal("PC001", uploadRequest.Target);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", uploadRequest.RemoteScriptPath);
+
+        var shellRequest = Assert.Single(shellClient.Requests);
+        Assert.Equal("powershell.exe", shellRequest.Executable);
+        Assert.Equal(
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", "-Mode", "Audit"],
+            shellRequest.Arguments);
+        Assert.Empty(shellRequest.StandardInputFrames);
+    }
+
+    [Fact]
+    public async Task ScriptExecutorMapsNonZeroExitCodeAtTransportResultLevel()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            5,
+            "partial output",
+            "stderr line",
+            null));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(),
+            CancellationToken.None);
+
+        Assert.Equal(5, result.ExitCode);
+        Assert.Equal("partial output", result.Stdout);
+        Assert.Equal("stderr line", result.Stderr);
+        Assert.Equal(FailureCategory.UnexpectedExitCode, result.FailureCategory);
+        Assert.Contains("expected 0", result.FailureMessage);
+        Assert.Equal("executed", result.Metadata?["mode"]);
+        Assert.Equal("completed", result.Metadata?["executionStatus"]);
+    }
+
+    [Fact]
+    public async Task ScriptExecutorMapsShellFailureAtTransportResultLevel()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.Failed(
+            "Shell failed.",
+            new Dictionary<string, string>
+            {
+                ["shellStage"] = "invoke"
+            }));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(),
+            CancellationToken.None);
+
+        Assert.Null(result.ExitCode);
+        Assert.Equal(string.Empty, result.Stdout);
+        Assert.Equal(string.Empty, result.Stderr);
+        Assert.Equal(FailureCategory.ExecutionFailed, result.FailureCategory);
+        Assert.Equal("Shell failed.", result.FailureMessage);
+        Assert.Equal("execution-failed", result.Metadata?["mode"]);
+        Assert.Equal("completed", result.Metadata?["uploadStatus"]);
+        Assert.Equal("failed", result.Metadata?["executionStatus"]);
+        Assert.Equal("invoke", result.Metadata?["shellStage"]);
     }
 
     [Fact]
@@ -279,6 +486,55 @@ public sealed class WinRmExecutionTests
         Assert.Equal("expectedhash", result.Metadata?["uploadExpectedSha256"]);
     }
 
+    private static TransportScriptExecutionRequest CreateScriptExecutionRequest(IReadOnlyList<string>? scriptArguments = null)
+    {
+        var arguments = scriptArguments ?? [];
+        var target = new TargetExecution(
+            RunId: "run-001",
+            Target: new TargetSpec("PC001"),
+            State: TargetExecutionState.Pending,
+            PlannedLocalTargetRoot: null,
+            PlannedLocalResultPath: null,
+            PlannedRemoteScriptPath: @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1",
+            PlannedCommand: new DirectExecutionCommand(
+                "powershell.exe",
+                ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", .. arguments]));
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 4,
+            ContentSha256: "expectedhash",
+            ChunkSizeBytes: 8192,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA==")
+            ]);
+        var plan = new ExecutionPlan(
+            RunId: "run-001",
+            CreatedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
+            Job: new DispatchJob(
+                RunId: "run-001",
+                Targets: [new TargetSpec("PC001")],
+                Payload: new ScriptPayload(@"C:\Scripts\Fix.ps1", arguments),
+                Transport: TransportKind.WinRm,
+                ExecutionContext: new ExecutionContextOptions(),
+                ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", RequiresEndpointLocalScriptPath: true),
+                TimeoutPolicy: new TimeoutPolicy(),
+                RetryPolicy: new RetryPolicy(),
+                ExpectedExitCodes: [0],
+                ArtifactPolicy: new ArtifactPolicy(),
+                ResultPolicy: new ResultPolicy(@"C:\Dispatch\Runs\run-001")),
+            Targets: [target],
+            DryRun: false);
+        var preparation = new TargetScriptPreparationResult(
+            Target: target.Target,
+            RemoteScriptPath: @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1",
+            AdminShareScriptPath: null,
+            Succeeded: true,
+            TransferPlan: transferPlan);
+
+        return new TransportScriptExecutionRequest(plan, target, preparation);
+    }
+
     private static TransportEndpointProbeRequest CreateProbeRequest(string targetName)
     {
         var target = new TargetExecution(
@@ -313,6 +569,7 @@ public sealed class WinRmExecutionTests
         string localRunRoot,
         RecordingEndpointFileSystem endpointFileSystem,
         RecordingScriptTransferClient? transferClient = null,
+        RecordingShellClient? shellClient = null,
         IWinRmDnsResolver? dnsResolver = null,
         IWinRmPortProbe? portProbe = null)
     {
@@ -335,6 +592,7 @@ public sealed class WinRmExecutionTests
             .AddSingleton<IWinRmDnsResolver>(dnsResolver ?? new RecordingDnsResolver(WinRmProbeResult.Success))
             .AddSingleton<IWinRmPortProbe>(portProbe ?? new RecordingPortProbe((_, _) => WinRmProbeResult.Success))
             .AddSingleton<IWinRmScriptTransferClient>(transferClient ?? new RecordingScriptTransferClient(WinRmScriptTransferResult.Success()))
+            .AddSingleton<IWinRmShellClient>(shellClient ?? new RecordingShellClient(new WinRmShellCommandResult(true, 0, string.Empty, string.Empty, null)))
             .BuildServiceProvider(validateScopes: true);
     }
 

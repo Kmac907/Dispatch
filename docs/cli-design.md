@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a narrow raw WinRM slice that wires `winrm` into DI, validates `winrm + ScriptPayload`, plans endpoint-local script paths, probes DNS plus default WinRM TCP ports, prepares chunked script-transfer plans without SMB/admin shares, uploads the prepared script through raw WinRM shell semantics, and returns an explicit not-yet-implemented execution failure after upload. YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution remain roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a narrow raw WinRM slice that wires `winrm` into DI, validates `winrm + ScriptPayload`, plans endpoint-local script paths, probes DNS plus default WinRM TCP ports, prepares chunked script-transfer plans without SMB/admin shares, uploads the prepared script through raw WinRM shell semantics, and executes the prepared PowerShell script over the same raw shell path. YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution remain roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -8,7 +8,7 @@ This document records the active CLI design that supersedes the earlier Terminal
 
 Dispatch is a Windows-native C# automation runner for Windows hosts. The product design covers ad-hoc execution, declared jobs, host inventories, structured logs, credential references, and explicit transports. Current implementation status is tracked in `docs/plan.md` and `workflow/build/implementation-plan.md`.
 
-Current transport priority is raw WinRM first, then PSRP. PsExec remains the only end-to-end execution transport today. The current raw WinRM slice now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, and remote script upload without SMB/admin shares; shell execution, command execution, and artifact collection still remain roadmap work.
+Current transport priority is raw WinRM first, then PSRP. PsExec remains the only fully completed transport path today. The current raw WinRM slice now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, and raw-shell-backed PowerShell script execution; command execution, artifact collection, and successful live validation still remain roadmap work.
 
 The operator model is:
 
@@ -38,7 +38,7 @@ Transports are not top-level commands. They are selected with:
 --transport auto|psrp|winrm|psexec
 ```
 
-Accepted transport names are broader than the currently implemented executors. `psrp` remains a command-contract value and roadmap target. `winrm` is now a partial execution path that can validate requests, build plans, probe endpoint reachability, and upload a prepared script, but it still returns an explicit not-yet-implemented failure for raw WinRM shell execution.
+Accepted transport names are broader than the currently implemented executors. `psrp` remains a command-contract value and roadmap target. `winrm` is now a partial execution path that can validate requests, build plans, probe endpoint reachability, upload a prepared script, and execute that prepared PowerShell script, but direct command execution and artifact collection are still not implemented.
 
 ## Global Options
 

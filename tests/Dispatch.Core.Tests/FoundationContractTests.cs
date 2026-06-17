@@ -84,11 +84,11 @@ public sealed class FoundationContractTests
         var descriptor = new WinRmTransportDescriptor();
 
         Assert.Equal(TransportKind.WinRm, descriptor.Kind);
-        Assert.False(descriptor.Capabilities.SupportsScriptExecution);
+        Assert.True(descriptor.Capabilities.SupportsScriptExecution);
         Assert.True(descriptor.Capabilities.RequiresEndpointLocalScriptPath);
         Assert.False(descriptor.Capabilities.SupportsCommandExecution);
         Assert.False(descriptor.Capabilities.SupportsNativeFileCopy);
-        Assert.False(descriptor.Capabilities.SupportsStreamedFileTransfer);
+        Assert.True(descriptor.Capabilities.SupportsStreamedFileTransfer);
         Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
         Assert.False(descriptor.Capabilities.SupportsExplicitCredential);
     }
