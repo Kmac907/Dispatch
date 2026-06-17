@@ -23,7 +23,7 @@ internal static class SpectreConsoleRenderer
     {
         var console = CreateConsole(writer);
         console.MarkupLine("[bold]Dispatch[/]");
-        console.WriteLine("Windows-native automation runner for PowerShell scripts; PsExec executes today, and WinRM now supports planning, endpoint probes, prepared-script upload, raw-shell-backed PowerShell script execution, and artifact collection while command execution and live validation remain in progress.");
+        console.WriteLine("Windows-native automation runner for PowerShell scripts and commands; PsExec executes today, and WinRM now supports planning, endpoint probes, prepared-script upload, raw-shell-backed PowerShell script execution, direct command execution, and artifact collection while live validation remains in progress.");
         console.WriteLine();
         console.WriteLine("Usage:");
         console.WriteLine("  dispatch <command> [arguments] [options]");
@@ -65,7 +65,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("  dispatch run ps <script.ps1> [options]");
         console.WriteLine("  dispatch run cmd <command> [options]");
         console.WriteLine("  dispatch run exe <path> [-- <args>]");
-        console.WriteLine("  Current execution support: run ps only");
+        console.WriteLine("  Current execution support: run ps through psexec or winrm; run cmd and run exe through winrm");
         console.WriteLine();
         console.WriteLine("Progress options:");
         console.WriteLine("      --no-progress          Disable live progress rendering");
@@ -82,6 +82,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
         console.WriteLine("Examples:");
         console.WriteLine(@"  dispatch run ps .\scripts\Collect-Disk.ps1 --target web -i .\hosts\prod.yml");
+        console.WriteLine(@"  dispatch run cmd whoami --target PC001 --transport winrm");
         console.WriteLine();
         console.WriteLine("Compatibility:");
         console.WriteLine(@"  dispatch run --script .\Fix.ps1 --computer-name PC001 --transport psexec");

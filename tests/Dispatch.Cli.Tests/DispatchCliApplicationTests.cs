@@ -17,9 +17,13 @@ public sealed class DispatchCliApplicationTests
         var application = CreateApplication(planner);
 
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync([], CancellationToken.None));
+        var normalized = NormalizeWhitespace(output);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("Windows-native automation runner", output);
+        Assert.Contains("PowerShell scripts and commands", normalized);
+        Assert.Contains("direct command execution", normalized);
+        Assert.Contains("live validation remains in progress", normalized);
         Assert.Contains("apply", output);
         Assert.Contains("dispatch run", output);
         Assert.Contains("dispatch doctor", output);
@@ -1868,6 +1872,7 @@ public sealed class DispatchCliApplicationTests
         var application = CreateApplication(new CapturingPlanner());
 
         var (exitCode, output, _) = await CaptureConsoleAsync(() => application.RunAsync(["run", "--help"], CancellationToken.None));
+        var normalized = NormalizeWhitespace(output);
 
         Assert.Equal(0, exitCode);
         Assert.Contains("dispatch run", output);
@@ -1879,6 +1884,8 @@ public sealed class DispatchCliApplicationTests
         Assert.Contains("--trace", output);
         Assert.Contains("Compatibility", output);
         Assert.Contains("Usage:", output);
+        Assert.Contains("Current execution support: run ps through psexec or winrm; run cmd and run exe through winrm", normalized);
+        Assert.Contains("dispatch run cmd whoami --target PC001 --transport winrm", normalized);
     }
 
     [Fact]
@@ -1928,6 +1935,9 @@ public sealed class DispatchCliApplicationTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
             .Select(static line => JsonDocument.Parse(line))
             .ToArray();
+
+    private static string NormalizeWhitespace(string value) =>
+        string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {
