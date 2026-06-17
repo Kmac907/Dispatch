@@ -151,14 +151,14 @@ Initial inventory direction is also explicit rather than arbitrary YAML. The `6.
   - `hosts.<host>.tags`
   - `hosts.<host>.vars.transport`
 - supported syntax today:
-  - top-level `hosts:` block-list, inline-list, and mapping-form host entries
+  - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
   - `groups.<group>.hosts` / `children` block-list, inline-list, and mapping-form entries
   - block-map or inline-map syntax for the supported `transport` fields, including `defaults: { transport: winrm }`, `groups.<group>.vars: { transport: psrp }`, and `hosts.<host>.vars: { transport: psexec }`
   - block-list or inline-list tags
 
 Explicit `--config` overrides ambient config values where it supplies them, and inventory transport still overrides config/default transport when CLI transport is omitted. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly.
 
-This item does not own generic host/group variable bags, credential references, or job YAML merge behavior. Those belong to later roadmap items. The only remaining planned parser-depth gap inside `6.2` is top-level inline-map host entries using the already-supported `tags` and `vars.transport` semantics. After that lands, `6.2` is complete unless the roadmap is explicitly amended.
+This item does not own generic host/group variable bags, credential references, or job YAML merge behavior. Those belong to later roadmap items. `6.2` is now complete unless the roadmap is explicitly amended.
 
 Initial YAML job task vocabulary:
 

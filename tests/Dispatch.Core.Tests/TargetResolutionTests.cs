@@ -211,6 +211,53 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void ResolvesTopLevelInlineMapHostEntriesUsingTagsAndVarsTransport()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults: { transport: winrm }
+            hosts:
+              WEB01: { tags: [prod, iis], vars: { transport: psexec } }
+              WEB02: { tags: [prod] }
+            """);
+
+        var taggedHost = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["tag:prod"],
+            InventoryPath: inventory.Path,
+            ExcludeSelectors: ["WEB02"]));
+        var defaultsFallback = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB02"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(taggedHost.IsValid);
+        Assert.Equal(["WEB01"], taggedHost.Targets.Select(static target => target.Name));
+        Assert.Equal(TransportKind.PsExec, taggedHost.InventoryTransport);
+        Assert.True(defaultsFallback.IsValid);
+        Assert.Equal(TransportKind.WinRm, defaultsFallback.InventoryTransport);
+    }
+
+    [Fact]
+    public void UnsupportedTopLevelInlineMapHostFieldFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            hosts:
+              WEB01: { credential: prod-admin }
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+    }
+
+    [Fact]
     public void ResolvesNestedInventoryGroupsAndInheritedTransport()
     {
         using var inventory = TemporaryTargetFile.Create("""

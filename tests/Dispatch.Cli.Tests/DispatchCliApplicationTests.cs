@@ -480,6 +480,48 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteSupportsTopLevelInlineMapHostEntries()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults: { transport: winrm }
+            hosts:
+              WEB01: { tags: [prod], vars: { transport: psexec } }
+              WEB02: { tags: [test] }
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "tag:prod",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(["WEB01"], planner.LastRequest!.Targets.Select(static target => target.Name));
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteAutoTransportUsesInventoryTransportBeforeConfiguredDefault()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

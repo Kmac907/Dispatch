@@ -778,6 +778,16 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (indent == 2 && TryParseInlineNamedMapEntry(trimmed, out var inlineHostName, out var inlineHostMap))
+                    {
+                        currentHost = inlineHostName;
+                        AddInventoryHost(path, hosts, currentHost);
+                        inHostTags = false;
+                        inHostVars = false;
+                        ApplyInlineHostMap(hosts, tags, errors, currentHost, inlineHostMap);
+                        continue;
+                    }
+
                     if (indent == 2 && trimmed.EndsWith(':'))
                     {
                         currentHost = trimmed.TrimEnd(':');
@@ -1051,6 +1061,47 @@ public static class TargetResolver
                 .Trim('[', ']')
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+        private static void ApplyInlineHostMap(
+            IDictionary<string, InventoryHost> hosts,
+            IDictionary<string, List<string>> tags,
+            ICollection<DispatchValidationError> errors,
+            string hostName,
+            string inlineHostMap)
+        {
+            foreach (var field in SplitInlineMapFields(inlineHostMap))
+            {
+                if (field.StartsWith("tags:", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (var tag in ParseInlineTags(field["tags:".Length..]))
+                    {
+                        AddInventoryTag(tags, tag, hostName);
+                    }
+
+                    continue;
+                }
+
+                if (TryParseInlineMap(field, "vars", out var inlineHostVars))
+                {
+                    if (TryParseTransportAssignment(inlineHostVars, out var inlineHostTransport))
+                    {
+                        if (inlineHostTransport is null)
+                        {
+                            errors.Add(new("InventoryTransportInvalid", $"Host '{hostName}' has unsupported transport '{ReadAssignedValue(inlineHostVars)}'."));
+                            continue;
+                        }
+
+                        hosts[hostName] = hosts[hostName] with { Transport = inlineHostTransport };
+                        continue;
+                    }
+
+                    errors.Add(new("InventoryFieldUnsupported", $"Host '{hostName}' var '{ReadFieldName(inlineHostVars)}' is not supported."));
+                    continue;
+                }
+
+                errors.Add(new("InventoryFieldUnsupported", $"Host '{hostName}' field '{ReadFieldName(field)}' is not supported."));
+            }
+        }
+
         private static bool TryParseInlineGroupMembers(
             string value,
             string fieldName,
@@ -1073,6 +1124,79 @@ public static class TargetResolver
                 .Trim('[', ']')
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             return true;
+        }
+
+        private static bool TryParseInlineNamedMapEntry(
+            string value,
+            out string name,
+            out string mapValue)
+        {
+            name = string.Empty;
+            mapValue = string.Empty;
+
+            var separatorIndex = value.IndexOf(':', StringComparison.Ordinal);
+            if (separatorIndex <= 0)
+            {
+                return false;
+            }
+
+            name = value[..separatorIndex].Trim();
+            if (name.Length == 0)
+            {
+                return false;
+            }
+
+            var assigned = value[(separatorIndex + 1)..].Trim();
+            if (!assigned.StartsWith("{", StringComparison.Ordinal) || !assigned.EndsWith("}", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            mapValue = assigned[1..^1].Trim();
+            return true;
+        }
+
+        private static IEnumerable<string> SplitInlineMapFields(string value)
+        {
+            var fields = new List<string>();
+            var start = 0;
+            var bracketDepth = 0;
+            var braceDepth = 0;
+
+            for (var index = 0; index < value.Length; index++)
+            {
+                switch (value[index])
+                {
+                    case '[':
+                        bracketDepth++;
+                        break;
+                    case ']':
+                        bracketDepth--;
+                        break;
+                    case '{':
+                        braceDepth++;
+                        break;
+                    case '}':
+                        braceDepth--;
+                        break;
+                    case ',' when bracketDepth == 0 && braceDepth == 0:
+                        AddInlineMapField(fields, value[start..index]);
+                        start = index + 1;
+                        break;
+                }
+            }
+
+            AddInlineMapField(fields, value[start..]);
+            return fields;
+        }
+
+        private static void AddInlineMapField(ICollection<string> fields, string value)
+        {
+            var trimmed = value.Trim();
+            if (trimmed.Length > 0)
+            {
+                fields.Add(trimmed);
+            }
         }
 
         private static bool IsSupportedTopLevelSection(string sectionName) =>

@@ -1133,7 +1133,7 @@ Scope:
   - `hosts.<host>.tags`
   - `hosts.<host>.vars.transport`
 - Accept only the documented syntactic forms for that subset today:
-  - top-level `hosts:` block-list, inline-list, and mapping-form host entries
+  - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
   - `groups.<group>.hosts` and `groups.<group>.children` block-list, inline-list, and mapping-form entries
   - block-map or inline-map transport syntax for the supported `transport` fields
   - block-list or inline-list syntax for host tags
@@ -1162,7 +1162,7 @@ Definition of done:
 - Generic vars, credential references, and job YAML precedence are explicitly left to later roadmap items rather than extending `6.2`.
 
 Current implementation note:
-- `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, top-level `hosts:` block-list, inline-list, and mapping-form host entries, groups, nested `groups.<group>.children`, block-list, inline-list, and mapping-form group members under `groups.<group>.hosts`/`children`, host names, `tag:<name>`, and `file:<path>`.
+- `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries, groups, nested `groups.<group>.children`, block-list, inline-list, and mapping-form group members under `groups.<group>.hosts`/`children`, host names, `tag:<name>`, and `file:<path>`.
 - Ambient bound `Dispatch` config values now provide `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path when the corresponding CLI flags are omitted and no explicit `--config <path>` is supplied.
 - Explicit `--config <path>` currently provides the same `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path and overrides ambient config values where it supplies them.
 - The current YAML inventory subset now includes transport precedence from inventory defaults, group vars, and host vars when CLI transport is not explicitly set, including inherited group membership through nested child groups.
@@ -1170,7 +1170,6 @@ Current implementation note:
 - Inventory transport policy still overrides config/default transport when CLI transport is omitted.
 - Defaults-only inventories are treated as YAML and fail clearly when they do not resolve any real hosts, rather than being parsed as text host files.
 - Unsupported inventory sections and unsupported fields inside the current YAML subset now fail validation clearly before planning, and cyclic nested group graphs fail validation clearly before planning.
-- The only remaining planned parser-depth gap inside `6.2` is top-level inline-map host entries such as `WEB01: { tags: [prod], vars: { transport: winrm } }`, using the already-supported `tags` and `vars.transport` semantics.
 - Advanced selectors, credential references, and future job-YAML precedence work remain pending in later roadmap items, not as open-ended `6.2` expansion.
 
 #### 6.3 Structured Run Logs And Log Commands
