@@ -761,6 +761,32 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public void ShellResponseParserExtractsShellIdFromSelectorShape()
+    {
+        const string response = """
+<s:Envelope xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+            xmlns:w="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd"
+            xmlns:a="http://schemas.xmlsoap.org/ws/2004/08/addressing">
+  <s:Body>
+    <x:ResourceCreated xmlns:x="http://schemas.xmlsoap.org/ws/2004/09/transfer">
+      <a:ReferenceParameters>
+        <w:SelectorSet>
+          <w:Selector Name="ShellId">00000000-0000-0000-0000-000000000123</w:Selector>
+        </w:SelectorSet>
+      </a:ReferenceParameters>
+    </x:ResourceCreated>
+  </s:Body>
+</s:Envelope>
+""";
+
+        var extracted = WinRmShellResponseParser.TryExtractShellId(response, out var shellId, out var source);
+
+        Assert.True(extracted);
+        Assert.Equal("00000000-0000-0000-0000-000000000123", shellId);
+        Assert.Equal("selector", source);
+    }
+
+    [Fact]
     public async Task ScriptTransferClientUploadsPreparedChunksAndValidatesReportedHash()
     {
         var shellClient = new RecordingShellClient(new WinRmShellCommandResult(

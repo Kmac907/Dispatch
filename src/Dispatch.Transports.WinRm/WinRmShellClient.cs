@@ -83,6 +83,14 @@ public sealed class WinRmShellClient : IWinRmShellClient
             var failureCategory = exception is WinRmShellOpenException shellOpenException
                 ? shellOpenException.FailureCategory
                 : WinRmFailureClassifier.Classify(exception.Message, metadata);
+            if (exception is WinRmShellOpenException detailedShellOpenException
+                && detailedShellOpenException.Metadata is not null)
+            {
+                foreach (var pair in detailedShellOpenException.Metadata)
+                {
+                    metadata[pair.Key] = pair.Value;
+                }
+            }
             if (!metadata.ContainsKey("failureKind"))
             {
                 WinRmFailureClassifier.Classify(exception.Message, metadata);
@@ -96,6 +104,7 @@ public sealed class WinRmShellClient : IWinRmShellClient
     {
         var failures = new List<string>();
         var failureCategories = new List<FailureCategory>();
+        var failureMetadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var attempt in GetConnectionAttempts(target))
         {
             try
@@ -124,12 +133,21 @@ public sealed class WinRmShellClient : IWinRmShellClient
             {
                 failures.Add($"{attempt.ConnectionUri}: {exception.Message}");
                 failureCategories.Add(WinRmFailureClassifier.Classify(exception.Message, null));
+                if (exception is WinRmShellOpenException shellOpenException
+                    && shellOpenException.Metadata is not null)
+                {
+                    foreach (var pair in shellOpenException.Metadata)
+                    {
+                        failureMetadata[$"{attempt.MetadataPrefix}{pair.Key}"] = pair.Value;
+                    }
+                }
             }
         }
 
         throw new WinRmShellOpenException(
             $"Could not open a raw WinRM shell for '{target}'. {string.Join(" ", failures)}",
-            WinRmFailureClassifier.Choose(failureCategories));
+            WinRmFailureClassifier.Choose(failureCategories),
+            failureMetadata);
     }
 
     private static string CreateShell(dynamic session, string connectionUri)
@@ -144,8 +162,19 @@ public sealed class WinRmShellClient : IWinRmShellClient
 """,
             0);
 
-        return GetRequiredElementValue(response, "ShellId")
-               ?? throw new InvalidOperationException($"Raw WinRM shell creation did not return a ShellId for '{connectionUri}'.");
+        if (WinRmShellResponseParser.TryExtractShellId(response, out var shellId, out var source))
+        {
+            return shellId!;
+        }
+
+        throw new WinRmShellOpenException(
+            $"Raw WinRM shell creation did not return a ShellId for '{connectionUri}'.",
+            FailureCategory.TransportUnavailable,
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["shellCreateResponseXml"] = WinRmShellResponseParser.GetDiagnosticPayload(response),
+                ["shellIdSource"] = source
+            });
     }
 
     private static string CreateCommand(
@@ -280,8 +309,8 @@ public sealed class WinRmShellClient : IWinRmShellClient
 
     private static IEnumerable<ConnectionAttempt> GetConnectionAttempts(string target)
     {
-        yield return new ConnectionAttempt($"http://{target}:5985/wsman", UseSsl: false, Port: 5985);
-        yield return new ConnectionAttempt($"https://{target}:5986/wsman", UseSsl: true, Port: 5986);
+        yield return new ConnectionAttempt($"http://{target}:5985/wsman", UseSsl: false, Port: 5985, MetadataPrefix: "http5985.");
+        yield return new ConnectionAttempt($"https://{target}:5986/wsman", UseSsl: true, Port: 5986, MetadataPrefix: "https5986.");
     }
 
     private static int GetSessionTimeoutMilliseconds(TimeSpan? executionTimeout)
@@ -301,12 +330,17 @@ public sealed class WinRmShellClient : IWinRmShellClient
 
     private sealed record OpenShellSession(dynamic Automation, dynamic Session);
 
-    private sealed record ConnectionAttempt(string ConnectionUri, bool UseSsl, int Port);
+    private sealed record ConnectionAttempt(string ConnectionUri, bool UseSsl, int Port, string MetadataPrefix);
 
     private sealed record ReceiveResult(int ExitCode, string Stdout, string Stderr);
 
-    private sealed class WinRmShellOpenException(string message, FailureCategory failureCategory) : InvalidOperationException(message)
+    private sealed class WinRmShellOpenException(
+        string message,
+        FailureCategory failureCategory,
+        IReadOnlyDictionary<string, string>? metadata = null) : InvalidOperationException(message)
     {
         public FailureCategory FailureCategory { get; } = failureCategory;
+
+        public IReadOnlyDictionary<string, string>? Metadata { get; } = metadata;
     }
 }
