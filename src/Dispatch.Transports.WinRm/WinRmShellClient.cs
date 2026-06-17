@@ -1,6 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 using System.Runtime.Versioning;
+using Dispatch.Core.Models;
 
 namespace Dispatch.Transports.WinRm;
 
@@ -78,13 +79,23 @@ public sealed class WinRmShellClient : IWinRmShellClient
         }
         catch (Exception exception)
         {
-            return Task.FromResult(WinRmShellCommandResult.Failed(exception.Message, metadata));
+            metadata ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var failureCategory = exception is WinRmShellOpenException shellOpenException
+                ? shellOpenException.FailureCategory
+                : WinRmFailureClassifier.Classify(exception.Message, metadata);
+            if (!metadata.ContainsKey("failureKind"))
+            {
+                WinRmFailureClassifier.Classify(exception.Message, metadata);
+            }
+            metadata["failureCategory"] = failureCategory.ToString();
+            return Task.FromResult(WinRmShellCommandResult.Failed(exception.Message, metadata, failureCategory));
         }
     }
 
     private static OpenShellSession OpenShell(string target, TimeSpan? executionTimeout, out string shellId, out string scheme, out int port)
     {
         var failures = new List<string>();
+        var failureCategories = new List<FailureCategory>();
         foreach (var attempt in GetConnectionAttempts(target))
         {
             try
@@ -112,10 +123,13 @@ public sealed class WinRmShellClient : IWinRmShellClient
             catch (Exception exception)
             {
                 failures.Add($"{attempt.ConnectionUri}: {exception.Message}");
+                failureCategories.Add(WinRmFailureClassifier.Classify(exception.Message, null));
             }
         }
 
-        throw new InvalidOperationException($"Could not open a raw WinRM shell for '{target}'. {string.Join(" ", failures)}");
+        throw new WinRmShellOpenException(
+            $"Could not open a raw WinRM shell for '{target}'. {string.Join(" ", failures)}",
+            WinRmFailureClassifier.Choose(failureCategories));
     }
 
     private static string CreateShell(dynamic session, string connectionUri)
@@ -290,4 +304,9 @@ public sealed class WinRmShellClient : IWinRmShellClient
     private sealed record ConnectionAttempt(string ConnectionUri, bool UseSsl, int Port);
 
     private sealed record ReceiveResult(int ExitCode, string Stdout, string Stderr);
+
+    private sealed class WinRmShellOpenException(string message, FailureCategory failureCategory) : InvalidOperationException(message)
+    {
+        public FailureCategory FailureCategory { get; } = failureCategory;
+    }
 }

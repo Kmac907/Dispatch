@@ -385,6 +385,48 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorMapsWinRmAuthorizationFailureToAuthorizationFailed()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(
+            WinRmShellCommandResult.Failed(
+                "Access is denied.",
+                new Dictionary<string, string>
+                {
+                    ["failureKind"] = "authorization"
+                },
+                FailureCategory.AuthorizationFailed),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3),
+            WinRmShellCommandResult.SucceededResult(exitCode: 3));
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            endpointFileSystem,
+            transferClient,
+            shellClient);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Failed, target.State);
+        Assert.Equal(FailureCategory.AuthorizationFailed, target.FailureCategory);
+        Assert.Contains("Access is denied", target.FailureMessage);
+        Assert.Equal("AuthorizationFailed", target.TransportMetadata?["failureCategory"]);
+        Assert.Equal("authorization", target.TransportMetadata?["failureKind"]);
+    }
+
+    [Fact]
     public async Task ExecutorMapsWinRmShellTimeoutToTimedOut()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -625,6 +667,30 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ScriptExecutorMapsAuthorizationFailureAtTransportResultLevel()
+    {
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.Failed(
+            "Access is denied.",
+            new Dictionary<string, string>
+            {
+                ["failureKind"] = "authorization"
+            },
+            FailureCategory.AuthorizationFailed));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(),
+            CancellationToken.None);
+
+        Assert.Equal(FailureCategory.AuthorizationFailed, result.FailureCategory);
+        Assert.Equal("Access is denied.", result.FailureMessage);
+        Assert.Equal("execution-failed", result.Metadata?["mode"]);
+        Assert.Equal("AuthorizationFailed", result.Metadata?["failureCategory"]);
+        Assert.Equal("authorization", result.Metadata?["failureKind"]);
+    }
+
+    [Fact]
     public async Task ScriptExecutorMapsShellTimeoutAtTransportResultLevel()
     {
         var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
@@ -666,6 +732,32 @@ public sealed class WinRmExecutionTests
         Assert.Equal(FailureCategory.None, result.FailureCategory);
         var shellRequest = Assert.Single(shellClient.Requests);
         Assert.Equal(expectedTimeout, shellRequest.ExecutionTimeout);
+    }
+
+    [Theory]
+    [InlineData("Access is denied.", FailureCategory.AuthorizationFailed, "authorization")]
+    [InlineData("The user name or password is incorrect.", FailureCategory.AuthenticationFailed, "authentication")]
+    [InlineData("The client cannot connect to the destination specified in the request.", FailureCategory.TransportUnavailable, "transport")]
+    public void FailureClassifierMapsKnownWinRmMessages(
+        string message,
+        FailureCategory expectedCategory,
+        string expectedKind)
+    {
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        var category = WinRmFailureClassifier.Classify(message, metadata);
+
+        Assert.Equal(expectedCategory, category);
+        Assert.Equal(expectedKind, metadata["failureKind"]);
+    }
+
+    [Fact]
+    public void FailureClassifierPrefersAuthorizationWhenMultipleAttemptFailuresExist()
+    {
+        var category = WinRmFailureClassifier.Choose(
+            [FailureCategory.TransportUnavailable, FailureCategory.AuthorizationFailed]);
+
+        Assert.Equal(FailureCategory.AuthorizationFailed, category);
     }
 
     [Fact]

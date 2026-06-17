@@ -156,15 +156,21 @@ public sealed class WinRmScriptExecutor(
 
         if (!shellResult.Succeeded)
         {
+            var failureCategory = shellResult.TimedOut
+                ? FailureCategory.TimedOut
+                : shellResult.FailureCategory == FailureCategory.None
+                    ? FailureCategory.ExecutionFailed
+                    : shellResult.FailureCategory;
             metadata["mode"] = shellResult.TimedOut ? "execution-timed-out" : "execution-failed";
             metadata["executionStatus"] = shellResult.TimedOut ? "timed-out" : "failed";
+            metadata["failureCategory"] = failureCategory.ToString();
             return new TransportScriptExecutionResult(
                 ExitCode: shellResult.ExitCode,
                 Stdout: shellResult.Stdout,
                 Stderr: shellResult.Stderr,
                 StartedAt: startedAt,
                 EndedAt: DateTimeOffset.UtcNow,
-                FailureCategory: shellResult.TimedOut ? FailureCategory.TimedOut : FailureCategory.ExecutionFailed,
+                FailureCategory: failureCategory,
                 FailureMessage: shellResult.FailureMessage ?? $"Raw WinRM shell execution failed for '{request.Target.Target.Name}'.",
                 Metadata: metadata);
         }
