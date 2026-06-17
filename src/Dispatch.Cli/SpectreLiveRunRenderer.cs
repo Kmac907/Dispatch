@@ -60,36 +60,15 @@ internal sealed class SpectreLiveRunRenderer(
             .Cropping(VerticalOverflowCropping.Bottom)
             .StartAsync(async context =>
             {
-                using var heartbeat = new PeriodicTimer(HeartbeatInterval);
-                context.UpdateTarget(dashboard.BuildRenderable());
-                context.Refresh();
-
-                while (true)
-                {
-                    while (events.Reader.TryRead(out var progress))
+                await RunDashboardLoopAsync(
+                    events.Reader,
+                    dashboard.Update,
+                    () =>
                     {
-                        dashboard.Update(progress);
-                    }
-
-                    context.UpdateTarget(dashboard.BuildRenderable());
-                    context.Refresh();
-
-                    var waitForEvent = events.Reader.WaitToReadAsync(cancellationToken).AsTask();
-                    var waitForHeartbeat = heartbeat.WaitForNextTickAsync(cancellationToken).AsTask();
-                    var completed = await Task.WhenAny(waitForEvent, waitForHeartbeat).ConfigureAwait(false);
-                    if (completed == waitForHeartbeat)
-                    {
-                        continue;
-                    }
-
-                    if (!await waitForEvent.ConfigureAwait(false))
-                    {
-                        break;
-                    }
-                }
-
-                context.UpdateTarget(dashboard.BuildRenderable());
-                context.Refresh();
+                        context.UpdateTarget(dashboard.BuildRenderable());
+                        context.Refresh();
+                    },
+                    cancellationToken).ConfigureAwait(false);
             })
             .ConfigureAwait(false);
 
@@ -100,6 +79,40 @@ internal sealed class SpectreLiveRunRenderer(
         }
 
         return result ?? throw new InvalidOperationException("Dispatch execution ended without a run result.");
+    }
+
+    internal static async Task RunDashboardLoopAsync(
+        ChannelReader<DispatchExecutionProgress> reader,
+        Action<DispatchExecutionProgress> onProgress,
+        Action refresh,
+        CancellationToken cancellationToken)
+    {
+        refresh();
+
+        while (true)
+        {
+            while (reader.TryRead(out var progress))
+            {
+                onProgress(progress);
+            }
+
+            refresh();
+
+            var waitForEvent = reader.WaitToReadAsync(cancellationToken).AsTask();
+            var waitForHeartbeat = Task.Delay(HeartbeatInterval, cancellationToken);
+            var completed = await Task.WhenAny(waitForEvent, waitForHeartbeat).ConfigureAwait(false);
+            if (completed == waitForHeartbeat)
+            {
+                continue;
+            }
+
+            if (!await waitForEvent.ConfigureAwait(false))
+            {
+                break;
+            }
+        }
+
+        refresh();
     }
 
     private async Task<DispatchRunResult> ExecuteAppendOnlyAsync(CancellationToken cancellationToken)

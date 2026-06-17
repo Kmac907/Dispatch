@@ -5,6 +5,7 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using System.Threading.Channels;
 
 namespace Dispatch.Cli.Tests;
 
@@ -1881,6 +1882,32 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task DashboardLoopDoesNotThrowWhenEventsBeatHeartbeat()
+    {
+        var channel = Channel.CreateUnbounded<DispatchExecutionProgress>();
+        var processed = new List<DispatchExecutionProgress>();
+        var refreshCount = 0;
+
+        var loopTask = SpectreLiveRunRenderer.RunDashboardLoopAsync(
+            channel.Reader,
+            processed.Add,
+            () => refreshCount++,
+            CancellationToken.None);
+
+        await channel.Writer.WriteAsync(
+            new DispatchExecutionProgress("run-test", "PC001", TargetExecutionState.Probing, DateTimeOffset.UnixEpoch));
+        await Task.Delay(10);
+        await channel.Writer.WriteAsync(
+            new DispatchExecutionProgress("run-test", "PC001", TargetExecutionState.Executing, DateTimeOffset.UnixEpoch.AddMilliseconds(10)));
+        channel.Writer.TryComplete();
+
+        await loopTask;
+
+        Assert.Equal(2, processed.Count);
+        Assert.True(refreshCount >= 2);
+    }
+
+    [Fact]
     public async Task RunHelpUsesDispatchSpectreHelp()
     {
         var application = CreateApplication(new CapturingPlanner());
@@ -2098,4 +2125,5 @@ public sealed class DispatchCliApplicationTests
     {
         public DispatchDoctorReport Run() => report;
     }
+
 }
