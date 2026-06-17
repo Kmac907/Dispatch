@@ -1142,6 +1142,7 @@ Current implementation note:
 - Ambient bound `Dispatch` config values now provide `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path when the corresponding CLI flags are omitted and no explicit `--config <path>` is supplied.
 - Explicit `--config <path>` currently provides the same `inventory`, `target`, `exclude`, and `DefaultTransport` defaults for the current `run ps` path and overrides ambient config values where it supplies them.
 - The current YAML inventory subset now includes transport precedence from inventory defaults, group vars, and host vars when CLI transport is not explicitly set, including inherited group membership through nested child groups.
+- The supported transport subset also accepts inline mapping syntax for those fields on the current `run ps` path, including `defaults: { transport: winrm }`, `groups.<group>.vars: { transport: psrp }`, and `hosts.<host>.vars: { transport: psexec }`.
 - Inventory transport policy still overrides config/default transport when CLI transport is omitted.
 - Defaults-only inventories are treated as YAML and fail clearly when they do not resolve any real hosts, rather than being parsed as text host files.
 - Unsupported inventory sections and unsupported fields inside the current YAML subset now fail validation clearly before planning, and cyclic nested group graphs fail validation clearly before planning.

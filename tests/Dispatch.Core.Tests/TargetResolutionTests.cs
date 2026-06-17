@@ -171,6 +171,46 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void ResolvesInventoryTransportFromInlineDefaultsGroupVarsAndHostVars()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults: { transport: winrm }
+            groups:
+              web:
+                vars: { transport: psrp }
+                hosts: [WEB01, WEB02]
+            hosts:
+              WEB01:
+                vars: { transport: psexec }
+              APP01:
+                tags: [prod]
+            """);
+
+        var hostOverride = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+        var groupOverride = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB02"],
+            InventoryPath: inventory.Path));
+        var defaultsFallback = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["APP01"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(hostOverride.IsValid);
+        Assert.Equal(TransportKind.PsExec, hostOverride.InventoryTransport);
+        Assert.True(groupOverride.IsValid);
+        Assert.Equal(TransportKind.Psrp, groupOverride.InventoryTransport);
+        Assert.True(defaultsFallback.IsValid);
+        Assert.Equal(TransportKind.WinRm, defaultsFallback.InventoryTransport);
+    }
+
+    [Fact]
     public void ResolvesNestedInventoryGroupsAndInheritedTransport()
     {
         using var inventory = TemporaryTargetFile.Create("""
@@ -465,6 +505,26 @@ public sealed class TargetResolutionTests
             [],
             null,
             TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+    }
+
+    [Fact]
+    public void UnsupportedInlineInventoryVarFieldFailsClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            groups:
+              web:
+                vars: { credential: prod-admin }
+                hosts: [WEB01]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["web"],
             InventoryPath: inventory.Path));
 
         Assert.False(result.IsValid);

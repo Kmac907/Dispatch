@@ -389,6 +389,61 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteUsesInlineInventoryTransportMapsWhenTransportIsNotSpecified()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            defaults: { transport: winrm }
+            groups:
+              web:
+                vars: { transport: psrp }
+                hosts: [WEB01, WEB02]
+            hosts:
+              WEB01:
+                vars: { transport: psexec }
+              APP01:
+                tags: [prod]
+            """);
+
+        async Task<TransportKind> ResolveTransportAsync(string target)
+        {
+            var planner = new CapturingPlanner();
+            var application = CreateApplication(planner);
+
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    target,
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            return planner.LastRequest!.Transport;
+        }
+
+        try
+        {
+            Assert.Equal(TransportKind.PsExec, await ResolveTransportAsync("WEB01"));
+            Assert.Equal(TransportKind.Psrp, await ResolveTransportAsync("WEB02"));
+            Assert.Equal(TransportKind.WinRm, await ResolveTransportAsync("APP01"));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteSupportsInlineListTopLevelHostInventory()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");

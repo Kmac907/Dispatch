@@ -300,6 +300,12 @@ public static class TargetResolver
             var withoutComments = line.Split('#', 2)[0].TrimEnd();
             var trimmed = withoutComments.Trim();
             if (withoutComments.Length == trimmed.Length
+                && TryParseInlineMap(trimmed, "defaults", out _))
+            {
+                return true;
+            }
+
+            if (withoutComments.Length == trimmed.Length
                 && TryParseInlineTopLevelHostsSection(trimmed, out _))
             {
                 return true;
@@ -345,6 +351,28 @@ public static class TargetResolver
         hosts = assigned
             .Trim('[', ']')
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return true;
+    }
+
+    private static bool TryParseInlineMap(
+        string value,
+        string fieldName,
+        out string innerValue)
+    {
+        innerValue = string.Empty;
+        var prefix = $"{fieldName}:";
+        if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var assigned = value[prefix.Length..].Trim();
+        if (!assigned.StartsWith("{", StringComparison.Ordinal) || !assigned.EndsWith("}", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        innerValue = assigned[1..^1].Trim();
         return true;
     }
 
@@ -477,6 +505,33 @@ public static class TargetResolver
                 }
 
                 var indent = line.Length - line.TrimStart().Length;
+                if (indent == 0 && TryParseInlineMap(trimmed, "defaults", out var inlineDefaultsValue))
+                {
+                    section = "defaults";
+                    currentGroup = null;
+                    currentHost = null;
+                    inGroupHosts = false;
+                    inGroupChildren = false;
+                    inGroupVars = false;
+                    inHostTags = false;
+                    inHostVars = false;
+
+                    if (TryParseTransportAssignment(inlineDefaultsValue, out var inlineDefaultTransport))
+                    {
+                        if (inlineDefaultTransport is null)
+                        {
+                            errors.Add(new("InventoryTransportInvalid", $"Inventory default transport '{ReadAssignedValue(inlineDefaultsValue)}' is not supported."));
+                            continue;
+                        }
+
+                        defaultTransport = inlineDefaultTransport.Value;
+                        continue;
+                    }
+
+                    errors.Add(new("InventoryFieldUnsupported", $"Inventory defaults field '{ReadFieldName(inlineDefaultsValue)}' is not supported."));
+                    continue;
+                }
+
                 if (indent == 0 && TryParseInlineTopLevelHostsSection(trimmed, out var inlineTopLevelHosts))
                 {
                     section = "hosts";
@@ -606,6 +661,30 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (currentGroup is not null
+                        && indent >= 4
+                        && TryParseInlineMap(trimmed, "vars", out var inlineGroupVars))
+                    {
+                        inGroupVars = false;
+                        inGroupHosts = false;
+                        inGroupChildren = false;
+
+                        if (TryParseTransportAssignment(inlineGroupVars, out var inlineGroupTransport))
+                        {
+                            if (inlineGroupTransport is null)
+                            {
+                                errors.Add(new("InventoryTransportInvalid", $"Group '{currentGroup}' has unsupported transport '{ReadAssignedValue(inlineGroupVars)}'."));
+                                continue;
+                            }
+
+                            groupTransports[currentGroup] = inlineGroupTransport.Value;
+                            continue;
+                        }
+
+                        errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' var '{ReadFieldName(inlineGroupVars)}' is not supported."));
+                        continue;
+                    }
+
                     if (indent >= 4 && trimmed.Equals("vars:", StringComparison.OrdinalIgnoreCase))
                     {
                         inGroupVars = currentGroup is not null;
@@ -723,6 +802,27 @@ public static class TargetResolver
                     if (currentHost is not null && inHostTags && trimmed.StartsWith("- ", StringComparison.Ordinal))
                     {
                         AddInventoryTag(tags, trimmed[2..].Trim(), currentHost);
+                        continue;
+                    }
+
+                    if (currentHost is not null && indent >= 4 && TryParseInlineMap(trimmed, "vars", out var inlineHostVars))
+                    {
+                        inHostVars = false;
+                        inHostTags = false;
+
+                        if (TryParseTransportAssignment(inlineHostVars, out var inlineHostTransport))
+                        {
+                            if (inlineHostTransport is null)
+                            {
+                                errors.Add(new("InventoryTransportInvalid", $"Host '{currentHost}' has unsupported transport '{ReadAssignedValue(inlineHostVars)}'."));
+                                continue;
+                            }
+
+                            hosts[currentHost] = hosts[currentHost] with { Transport = inlineHostTransport };
+                            continue;
+                        }
+
+                        errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' var '{ReadFieldName(inlineHostVars)}' is not supported."));
                         continue;
                     }
 
