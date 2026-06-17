@@ -75,16 +75,16 @@ Use this file for:
 - automation that wants the final run outcome
 - operators who need the final state without replaying the full event stream
 
-## Live dashboard file locations
+## Final summary file locations
 
-The interactive Spectre dashboard now exposes the key persisted paths while the run is in progress:
+The rich/table completion summary exposes the key persisted paths after the target outcome table:
 
 - `Admin\results.json`
 - `Admin\events.ndjson`
 - `Targets\<Target>\stdout.txt`
 - `Targets\<Target>\stderr.txt`
 
-It also shows the per-target local root pattern so an operator can move from live terminal status to the durable files without reconstructing the run layout by hand.
+It also shows the per-target local root pattern so an operator can move from the completion summary to the durable files without reconstructing the run layout by hand.
 
 ## Console output modes
 

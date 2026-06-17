@@ -236,6 +236,10 @@ internal static class SpectreConsoleRenderer
     public static void RenderRunResult(TextWriter writer, DispatchRunResult result)
     {
         var console = CreateConsole(writer);
+        var resultFilePath = string.IsNullOrWhiteSpace(result.ResultPath) ? "-" : result.ResultPath;
+        var eventFilePath = TryGetEventFilePath(result.ResultPath) ?? "-";
+        var targetRootPattern = TryGetTargetRootPattern(result.ResultPath) ?? TryGetTargetRootFromStdout(result.Targets) ?? "-";
+        var stdoutStderrPattern = TryFormatStdoutStderrPattern(targetRootPattern);
         console.MarkupLine(result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0
             ? "[green]Dispatch run complete[/]"
             : "[red]Dispatch run completed with failures[/]");
@@ -249,7 +253,10 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
         console.Write(CreateResultTable(result.Targets));
         console.WriteLine();
-        console.WriteLine($"Result file: {result.ResultPath}");
+        console.WriteLine($"Result file: {resultFilePath}");
+        console.WriteLine($"Event file: {eventFilePath}");
+        console.WriteLine($"Target root: {targetRootPattern}");
+        console.WriteLine($"Stdout/Stderr: {stdoutStderrPattern}");
     }
 
     public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report)
@@ -332,4 +339,45 @@ internal static class SpectreConsoleRenderer
             DispatchDoctorStatus.Fail => "FAIL",
             _ => status.ToString().ToUpperInvariant()
         };
+
+    private static string? TryGetEventFilePath(string? resultPath)
+    {
+        if (string.IsNullOrWhiteSpace(resultPath))
+        {
+            return null;
+        }
+
+        var adminRoot = Path.GetDirectoryName(resultPath);
+        return string.IsNullOrWhiteSpace(adminRoot)
+            ? null
+            : Path.Combine(adminRoot, "events.ndjson");
+    }
+
+    private static string? TryGetTargetRootPattern(string? resultPath)
+    {
+        if (string.IsNullOrWhiteSpace(resultPath))
+        {
+            return null;
+        }
+
+        var adminRoot = Path.GetDirectoryName(resultPath);
+        var runRoot = string.IsNullOrWhiteSpace(adminRoot) ? null : Path.GetDirectoryName(adminRoot);
+        return string.IsNullOrWhiteSpace(runRoot)
+            ? null
+            : Path.Combine(runRoot, "Targets", "<target>");
+    }
+
+    private static string? TryGetTargetRootFromStdout(IEnumerable<TargetExecutionResult> targets)
+    {
+        var stdoutPath = targets
+            .Select(static target => target.StdoutPath)
+            .FirstOrDefault(static path => !string.IsNullOrWhiteSpace(path));
+
+        return string.IsNullOrWhiteSpace(stdoutPath) ? null : Path.GetDirectoryName(stdoutPath);
+    }
+
+    private static string TryFormatStdoutStderrPattern(string targetRootPattern) =>
+        string.IsNullOrWhiteSpace(targetRootPattern) || targetRootPattern == "-"
+            ? "-"
+            : $"{Path.Combine(targetRootPattern, "stdout.txt")} / {Path.Combine(targetRootPattern, "stderr.txt")}";
 }

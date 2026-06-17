@@ -243,7 +243,6 @@ internal sealed class SpectreRunDashboard
         {
             new Rule($"[bold]Dispatch Run[/] [grey]{Markup.Escape(plan.RunId)}[/]"),
             CreateSummaryTable(now),
-            CreateOutputLocationsPanel(),
             CreateCompletionPanel(),
             CreatePhaseSummaryPanel(),
             CreateOutcomeChart(),
@@ -325,23 +324,6 @@ internal sealed class SpectreRunDashboard
 
         return new Panel(table)
             .Header("Phase Counts")
-            .Border(BoxBorder.Rounded)
-            .Expand();
-    }
-
-    private IRenderable CreateOutputLocationsPanel()
-    {
-        var targetRootPattern = Path.Combine(plan.LocalRunRoot, "Targets", "<target>");
-        var lines = new[]
-        {
-            $"[bold]Results[/]: {Markup.Escape(plan.LocalResultsJsonPath)}",
-            $"[bold]Events[/]: {Markup.Escape(plan.LocalEventsNdjsonPath ?? "-")}",
-            $"[bold]Target Root[/]: {Markup.Escape(targetRootPattern)}",
-            $"[bold]Stdout/Stderr[/]: {Markup.Escape(Path.Combine(targetRootPattern, "stdout.txt"))} / {Markup.Escape(Path.Combine(targetRootPattern, "stderr.txt"))}"
-        };
-
-        return new Panel(new Rows(lines.Select(static line => (IRenderable)new Markup(line)).ToArray()))
-            .Header("Outputs")
             .Border(BoxBorder.Rounded)
             .Expand();
     }

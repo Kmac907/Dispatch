@@ -108,11 +108,6 @@ The live dashboard contract is:
 - refresh on new execution events and on a one-second heartbeat while the run is active
 - a summary row with aggregate running/succeeded/failed/pending counts and run elapsed time
 - one measurable completion bar based only on completed targets versus total targets
-- an output-locations widget that shows:
-  - `Admin\results.json`
-  - `Admin\events.ndjson`
-  - the per-target local root pattern
-  - the default `stdout.txt` / `stderr.txt` locations
 - a phase-count summary widget sourced from the same target-state model as the main table
 - per-target rows that show:
   - target name
@@ -124,6 +119,11 @@ The live dashboard contract is:
   - detail text or failure message
 - active targets ordered ahead of pending and completed targets so the operator sees active work first
 - a recent-events view sourced from the same run-event stream
+- the final rich/table summary, after live rendering ends, prints:
+  - `Admin\results.json`
+  - `Admin\events.ndjson`
+  - the per-target local root pattern
+  - the default `stdout.txt` / `stderr.txt` locations
 
 Current measurable per-target progress sources are:
 

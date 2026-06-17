@@ -285,6 +285,49 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public void RenderRunResultShowsResultEventAndTargetPaths()
+    {
+        var result = new DispatchRunResult(
+            RunId: "run-test",
+            StartedAt: DateTimeOffset.Parse("2026-06-17T20:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-17T20:01:00Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.PsExec,
+            PayloadType: PayloadKind.Script,
+            PayloadName: "Fix.ps1",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "run-test",
+                    Target: "PC001",
+                    Transport: TransportKind.PsExec,
+                    PayloadType: PayloadKind.Script,
+                    PayloadName: "Fix.ps1",
+                    State: TargetExecutionState.Succeeded,
+                    ExitCode: 0,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-17T20:00:05Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-17T20:00:45Z"),
+                    FailureCategory: FailureCategory.None,
+                    FailureMessage: null,
+                    StdoutPath: @"C:\Dispatch\Tests\run-test\Targets\PC001\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\run-test\Targets\PC001\stderr.txt")
+            ],
+            ResultPath: @"C:\Dispatch\Tests\run-test\Admin\results.json");
+
+        using var writer = new StringWriter();
+        SpectreConsoleRenderer.RenderRunResult(writer, result);
+        var output = writer.ToString();
+
+        Assert.Contains(@"Result file: C:\Dispatch\Tests\run-test\Admin\results.json", output);
+        Assert.Contains(@"Event file: C:\Dispatch\Tests\run-test\Admin\events.ndjson", output);
+        Assert.Contains(@"Target root: C:\Dispatch\Tests\run-test\Targets\<target>", output);
+        Assert.Contains("Stdout/Stderr:", output);
+        Assert.Contains(@"C:\Dispatch\Tests\run-test\Targets\<target>\stdout.txt", output);
+        Assert.Contains(@"C:\Dispatch\Tests\run-test\Targets\<target>\stderr.txt", output);
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteUsesNewCommandShapeAndSharedRequest()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -1868,14 +1911,11 @@ public sealed class DispatchCliApplicationTests
             var output = writer.ToString();
 
             Assert.Contains("Dispatch Run", output);
-            Assert.Contains("Outputs", output);
             Assert.Contains("Completion", output);
             Assert.Contains("Phase Counts", output);
             Assert.Contains("Outcome Chart", output);
             Assert.Contains("run-test", output);
             Assert.Contains("psexec", output);
-            Assert.Contains(@"C:\Dispatch\Tests\run-test\Admin\results.json", output);
-            Assert.Contains(@"C:\Dispatch\Tests\run-test\Admin\events.ndjson", output);
             Assert.Contains("PC001", output);
             Assert.Contains("Running", output);
             Assert.Contains("Executing", output);
