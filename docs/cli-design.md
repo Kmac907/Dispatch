@@ -69,6 +69,16 @@ Precedence:
 CLI flag > job YAML > inventory host/group vars > user config > machine config > defaults
 ```
 
+This is the long-term product precedence, not the current `6.2` completion boundary by itself. For the current non-job `run ps` path, `6.2` only owns:
+
+- CLI defaults/overrides for `inventory`, `target`, `exclude`, and `transport`
+- inventory transport policy from the supported YAML subset
+- explicit `--config` defaults
+- ambient bound `Dispatch` config defaults
+- application defaults
+
+Job YAML precedence belongs to roadmap item `6.5`. Credential-reference precedence belongs to roadmap item `6.4`.
+
 ## Output Model
 
 Dispatch uses Spectre.Console for human terminal output and durable JSON/NDJSON/YAML files or streams for automation.
@@ -130,7 +140,25 @@ tasks
 
 Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
 
-Initial inventory direction is also explicit rather than arbitrary YAML. The current `run ps` implementation supports a small YAML inventory subset for `defaults`, `groups`, `hosts`, host `tags`, ambient bound `Dispatch` config defaults for `inventory`, `target`, `exclude`, and `DefaultTransport`, explicit `--config <path>` defaults for the same fields, top-level `hosts:` block-list, inline-list, and mapping-form host entries, nested `groups.<group>.children`, block-list, inline-list, and mapping-form group members under `groups.<group>.hosts`/`children`, and inventory transport precedence from YAML defaults/group vars/host vars across inherited group membership. The current subset also accepts inline transport-map syntax for the supported transport fields, including `defaults: { transport: winrm }`, `groups.<group>.vars: { transport: psrp }`, and `hosts.<host>.vars: { transport: psexec }`. Explicit `--config` overrides ambient config values where it supplies them, and inventory transport still overrides config/default transport when CLI transport is omitted. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly. Broader inventory schema behavior, additional host/group vars, credential references, and future job-YAML precedence remain roadmap work.
+Initial inventory direction is also explicit rather than arbitrary YAML. The `6.2` completion boundary for the current `run ps` path is a closed subset:
+
+- top-level sections: `defaults`, `groups`, `hosts`
+- supported fields only:
+  - `defaults.transport`
+  - `groups.<group>.hosts`
+  - `groups.<group>.children`
+  - `groups.<group>.vars.transport`
+  - `hosts.<host>.tags`
+  - `hosts.<host>.vars.transport`
+- supported syntax only:
+  - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
+  - `groups.<group>.hosts` / `children` block-list, inline-list, and mapping-form entries
+  - block-map or inline-map syntax for the supported `transport` fields, including `defaults: { transport: winrm }`, `groups.<group>.vars: { transport: psrp }`, and `hosts.<host>.vars: { transport: psexec }`
+  - block-list or inline-list tags
+
+Explicit `--config` overrides ambient config values where it supplies them, and inventory transport still overrides config/default transport when CLI transport is omitted. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly.
+
+This item does not own generic host/group variable bags, credential references, or job YAML merge behavior. Those belong to later roadmap items. The only remaining planned parser-depth gap inside `6.2` is top-level inline-map host entries using the already-supported `tags` and `vars.transport` semantics. After that lands, `6.2` is complete unless the roadmap is explicitly amended.
 
 Initial YAML job task vocabulary:
 

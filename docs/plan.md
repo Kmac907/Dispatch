@@ -1122,12 +1122,30 @@ Scope:
 - Support `-i|--inventory <path>` for YAML inventories and simple text host files.
 - Support `-t|--target <selector>` with `all`, group name, host name, comma-separated names, `tag:<name>`, and `file:<path>` forms.
 - Support `--exclude <selector>`.
-- Define precedence: CLI flag > job YAML > inventory host/group vars > user config > machine config > defaults.
+- For the current non-job `run ps` path, support config-backed defaults for `inventory`, `target`, `exclude`, and `DefaultTransport` only when the corresponding CLI flags are omitted.
+- For the current non-job `run ps` path, support inventory transport policy only through `defaults.transport`, `groups.<group>.vars.transport`, and `hosts.<host>.vars.transport`.
+- Close the initial YAML inventory subset to these sections and fields only:
+  - top-level `defaults`, `groups`, and `hosts`
+  - `defaults.transport`
+  - `groups.<group>.hosts`
+  - `groups.<group>.children`
+  - `groups.<group>.vars.transport`
+  - `hosts.<host>.tags`
+  - `hosts.<host>.vars.transport`
+- Accept only the documented syntactic forms for that subset:
+  - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
+  - `groups.<group>.hosts` and `groups.<group>.children` block-list, inline-list, and mapping-form entries
+  - block-map or inline-map transport syntax for the supported `transport` fields
+  - block-list or inline-list syntax for host tags
 - Preserve deterministic ordering, trimming, comments, blank-line skipping, and case-insensitive de-duplication from current target resolution.
 
 Non-goals:
 - No advanced selector expressions such as `web:&prod` or `web:!canary` in the first implementation.
 - No dynamic discovery.
+- No credential references; that belongs to roadmap item `6.4`.
+- No generic host/group/default variable bag beyond the documented transport and tag fields.
+- No job YAML merge/precedence behavior; that belongs to roadmap item `6.5`.
+- No additional inventory schema growth unless `docs/plan.md` is explicitly amended again.
 
 Dependencies:
 - 6.
@@ -1135,7 +1153,13 @@ Dependencies:
 Definition of done:
 - Existing `--computer-name` and `--target-file` can be represented through the new selector resolver.
 - YAML and text host files resolve to stable target lists.
-- Tests cover groups, hosts, simple files, excludes, and duplicate handling.
+- Tests cover groups, hosts, simple files, excludes, duplicate handling, inventory transport precedence, and validation failure for unsupported inventory sections/fields.
+- The accepted YAML inventory subset is explicit and closed; unsupported schema outside that subset fails before planning.
+- The current non-job `run ps` precedence surface is explicit and closed:
+  - CLI target/input flags win when present
+  - explicit `--transport` wins over inventory transport policy
+  - omitted or `auto` transport uses inventory transport policy first, then explicit `--config`, then ambient bound `Dispatch` config, then application defaults
+- Generic vars, credential references, and job YAML precedence are explicitly left to later roadmap items rather than extending `6.2`.
 
 Current implementation note:
 - `run ps` supports `-i|--inventory`, `-t|--target`, and `--exclude` for direct host selectors, simple text inventories, a small YAML inventory subset, top-level `hosts:` block-list, inline-list, and mapping-form host entries, groups, nested `groups.<group>.children`, block-list, inline-list, and mapping-form group members under `groups.<group>.hosts`/`children`, host names, `tag:<name>`, and `file:<path>`.
@@ -1146,7 +1170,8 @@ Current implementation note:
 - Inventory transport policy still overrides config/default transport when CLI transport is omitted.
 - Defaults-only inventories are treated as YAML and fail clearly when they do not resolve any real hosts, rather than being parsed as text host files.
 - Unsupported inventory sections and unsupported fields inside the current YAML subset now fail validation clearly before planning, and cyclic nested group graphs fail validation clearly before planning.
-- Advanced selectors, broader YAML inventory schema behavior, credential references, and future job-YAML precedence work remain pending.
+- The only remaining planned parser-depth gap inside `6.2` is top-level inline-map host entries such as `WEB01: { tags: [prod], vars: { transport: winrm } }`, using the already-supported `tags` and `vars.transport` semantics.
+- Advanced selectors, credential references, and future job-YAML precedence work remain pending in later roadmap items, not as open-ended `6.2` expansion.
 
 #### 6.3 Structured Run Logs And Log Commands
 
