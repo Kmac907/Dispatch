@@ -1124,6 +1124,7 @@ Scope:
 - Support `--exclude <selector>`.
 - For the current non-job `run ps` path, support config-backed defaults for `inventory`, `target`, `exclude`, and `DefaultTransport` only when the corresponding CLI flags are omitted.
 - For the current non-job `run ps` path, support inventory transport policy only through `defaults.transport`, `groups.<group>.vars.transport`, and `hosts.<host>.vars.transport`.
+- Treat inventory `vars` as host/group metadata only. In `6.2`, that metadata is intentionally limited to transport policy and does not create a generic runtime variable bag.
 - Close the initial YAML inventory subset to these sections and fields only:
   - top-level `defaults`, `groups`, and `hosts`
   - `defaults.transport`
@@ -1157,8 +1158,9 @@ Definition of done:
 - The accepted YAML inventory subset is explicit and closed; unsupported schema outside that subset fails before planning.
 - The current non-job `run ps` precedence surface is explicit and closed:
   - CLI target/input flags win when present
-  - explicit `--transport` wins over inventory transport policy
-  - omitted or `auto` transport uses inventory transport policy first, then explicit `--config`, then ambient bound `Dispatch` config, then application defaults
+  - explicit `--transport` values other than `auto` win over lower-precedence transport sources
+  - omitted or `--transport auto` uses inventory transport policy in this order: host `vars.transport`, then inherited group `vars.transport`, then `defaults.transport`
+  - if inventory does not resolve a transport, omitted or `--transport auto` falls through to explicit `--config`, then ambient bound `Dispatch` config, then application defaults
 - Generic vars, credential references, and job YAML precedence are explicitly left to later roadmap items rather than extending `6.2`.
 
 Current implementation note:
@@ -1236,6 +1238,16 @@ Reference:
 Scope:
 - Implement `dispatch apply <job.yml>`.
 - Define YAML job schema version 1 with `name`, `description`, `hosts`, `transport`, `credential`, `strategy`, `defaults`, `vars`, and `tasks`.
+- Define variable ownership explicitly:
+  - inventory `vars` remain host/group metadata and must not be merged into runtime task/input variables
+  - `job.vars` is the inline job runtime/task-input bag for v1
+  - separate vars files such as `group_vars`, `host_vars`, `vars_files`, or `include_vars` are not part of v1
+- Keep `transport` as a first-class job field and reject `transport` inside generic `job.vars`.
+- Define precedence explicitly:
+  - explicit CLI flags win
+  - explicit CLI `--transport` values other than `auto` win over lower-precedence transport sources
+  - omitted or `--transport auto` falls through to `job.transport`, then inventory transport policy, then explicit `--config`, then ambient bound `Dispatch` config, then application defaults
+  - runtime task/input variables come from inline `job.vars` in v1; inventory vars do not participate in that runtime-variable bag
 - Initial task vocabulary: `ps`, `cmd`, `exe`, `copy`, `fetch`, `wait`, and `reboot`, with only supported task types enabled by implementation slices.
 - Implement `--plan` and `--check` as distinct behaviors.
 - Implement `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--yes`, `--diff`, and common output/log options as planned settings.
@@ -1251,6 +1263,7 @@ Dependencies:
 
 Definition of done:
 - `dispatch apply <job.yml> --plan` resolves inventory, variables, selected tasks, batches, and transport decisions.
+- Validation rejects unsupported vars sources, unsupported vars-file concepts, and `transport` under `job.vars` before endpoint work.
 - Supported `ps` tasks execute through the same planner/executor model as `dispatch run ps`.
 - Validation reports unsupported task types and unsafe secret fields before endpoint work.
 

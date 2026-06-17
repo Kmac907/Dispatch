@@ -63,13 +63,21 @@ These options should be consistent across host-targeting commands as implementat
 --trace
 ```
 
-Precedence:
+Transport selection precedence:
 
 ```text
-CLI flag > job YAML > inventory host/group vars > user config > machine config > defaults
+CLI --transport (except auto) > job.transport > inventory transport policy > explicit --config > ambient bound Dispatch config > application defaults
 ```
 
-This is the long-term product precedence, not the current `6.2` completion boundary by itself. For the current non-job `run ps` path, `6.2` only owns:
+Runtime variable precedence:
+
+```text
+job.vars only in v1
+```
+
+`--transport auto` is a deliberate fall-through request, not a forcing override. Inventory transport policy resolves in this order: host `vars.transport`, then inherited group `vars.transport`, then `defaults.transport`.
+
+Inventory vars are not a general runtime-variable source. They are target metadata, and in the current implementation they are only used for inventory transport policy. For v1 job work, `job.vars` is an inline runtime/task-input bag and does not merge inventory vars into task variables. Job YAML precedence belongs to roadmap item `6.5`. For the current non-job `run ps` path, `6.2` only owns:
 
 - CLI defaults/overrides for `inventory`, `target`, `exclude`, and `transport`
 - inventory transport policy from the supported YAML subset
@@ -77,7 +85,7 @@ This is the long-term product precedence, not the current `6.2` completion bound
 - ambient bound `Dispatch` config defaults
 - application defaults
 
-Job YAML precedence belongs to roadmap item `6.5`. Credential-reference precedence belongs to roadmap item `6.4`.
+Credential-reference precedence belongs to roadmap item `6.4`.
 
 ## Output Model
 
@@ -104,7 +112,7 @@ Current execution rendering uses `DispatchExecutionProgress` events, a channel-f
 
 ## Inventory And Jobs
 
-YAML inventory is the documented default because it supports groups, variables, transport policy, and credential references. Simple text host files remain supported for quick ad-hoc work.
+YAML inventory is the documented default because it supports groups, transport policy, host metadata, and later credential references. Simple text host files remain supported for quick ad-hoc work.
 
 Dispatch YAML is intended to be structured and validated, not free-form. The project contract is to define explicit schema versions, accepted top-level fields, accepted task types, selector rules, and validation errors before endpoint work starts. This is similar in spirit to Ansible inventory and playbook parsing, but narrower in scope and versioned around Dispatch's own model.
 
@@ -138,6 +146,10 @@ vars
 tasks
 ```
 
+`transport` is a first-class job field. It is not part of the generic job `vars` bag and must not be accepted under `job.vars`.
+
+`job.vars` is the planned task/runtime input map for `dispatch apply`. It is inline job data in v1, not a reference to separate vars files. The v1 design does not include Ansible-style `group_vars`, `host_vars`, `vars_files`, or `include_vars`.
+
 Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
 
 Initial inventory direction is also explicit rather than arbitrary YAML. The `6.2` completion boundary for the current `run ps` path is a closed subset:
@@ -158,7 +170,9 @@ Initial inventory direction is also explicit rather than arbitrary YAML. The `6.
 
 Explicit `--config` overrides ambient config values where it supplies them, and inventory transport still overrides config/default transport when CLI transport is omitted. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly.
 
-This item does not own generic host/group variable bags, credential references, or job YAML merge behavior. Those belong to later roadmap items. `6.2` is now complete unless the roadmap is explicitly amended.
+Inventory vars are host/group metadata only. In the current `6.2` subset they are limited to `vars.transport`, which controls transport policy and nothing else. They do not flow into task/runtime variables.
+
+This item does not own generic host/group variable bags, credential references, job runtime vars, or job YAML merge behavior. Those belong to later roadmap items. `6.2` is now complete unless the roadmap is explicitly amended.
 
 Initial YAML job task vocabulary:
 
