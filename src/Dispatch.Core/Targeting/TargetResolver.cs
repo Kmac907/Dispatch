@@ -522,9 +522,39 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (currentGroup is not null
+                        && indent >= 4
+                        && TryParseInlineGroupMembers(trimmed, "hosts", out var inlineHosts))
+                    {
+                        foreach (var host in inlineHosts)
+                        {
+                            AddInventoryGroupHost(path, hosts, groups, currentGroup, host);
+                        }
+
+                        inGroupHosts = false;
+                        inGroupChildren = false;
+                        inGroupVars = false;
+                        continue;
+                    }
+
                     if (indent >= 4 && trimmed.Equals("children:", StringComparison.OrdinalIgnoreCase))
                     {
                         inGroupChildren = currentGroup is not null;
+                        inGroupHosts = false;
+                        inGroupVars = false;
+                        continue;
+                    }
+
+                    if (currentGroup is not null
+                        && indent >= 4
+                        && TryParseInlineGroupMembers(trimmed, "children", out var inlineChildren))
+                    {
+                        foreach (var child in inlineChildren)
+                        {
+                            AddInventoryGroupChild(groups, currentGroup, child);
+                        }
+
+                        inGroupChildren = false;
                         inGroupHosts = false;
                         inGroupVars = false;
                         continue;
@@ -874,6 +904,30 @@ public static class TargetResolver
             value.Trim()
                 .Trim('[', ']')
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        private static bool TryParseInlineGroupMembers(
+            string value,
+            string fieldName,
+            out IReadOnlyList<string> members)
+        {
+            members = [];
+            var prefix = $"{fieldName}:";
+            if (!value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            var assigned = value[prefix.Length..].Trim();
+            if (!assigned.StartsWith("[", StringComparison.Ordinal) || !assigned.EndsWith("]", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            members = assigned
+                .Trim('[', ']')
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            return true;
+        }
 
         private static bool IsSupportedTopLevelSection(string sectionName) =>
             sectionName.Equals("defaults", StringComparison.OrdinalIgnoreCase)

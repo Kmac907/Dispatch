@@ -1117,6 +1117,48 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellRouteSupportsInlineListFormGroupMembers()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+            groups:
+              web:
+                children: [prod]
+              prod:
+                hosts: [WEB01, WEB02]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "web",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(["WEB01", "WEB02"], planner.LastRequest!.Targets.Select(static target => target.Name));
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
     public async Task RunPowerShellRouteResolvesNestedInventoryGroupsAndInheritedTransport()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
