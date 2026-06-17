@@ -150,8 +150,8 @@ Initial inventory direction is also explicit rather than arbitrary YAML. The `6.
   - `groups.<group>.vars.transport`
   - `hosts.<host>.tags`
   - `hosts.<host>.vars.transport`
-- supported syntax only:
-  - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
+- supported syntax today:
+  - top-level `hosts:` block-list, inline-list, and mapping-form host entries
   - `groups.<group>.hosts` / `children` block-list, inline-list, and mapping-form entries
   - block-map or inline-map syntax for the supported `transport` fields, including `defaults: { transport: winrm }`, `groups.<group>.vars: { transport: psrp }`, and `hosts.<host>.vars: { transport: psexec }`
   - block-list or inline-list tags

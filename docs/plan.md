@@ -1132,8 +1132,8 @@ Scope:
   - `groups.<group>.vars.transport`
   - `hosts.<host>.tags`
   - `hosts.<host>.vars.transport`
-- Accept only the documented syntactic forms for that subset:
-  - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
+- Accept only the documented syntactic forms for that subset today:
+  - top-level `hosts:` block-list, inline-list, and mapping-form host entries
   - `groups.<group>.hosts` and `groups.<group>.children` block-list, inline-list, and mapping-form entries
   - block-map or inline-map transport syntax for the supported `transport` fields
   - block-list or inline-list syntax for host tags
