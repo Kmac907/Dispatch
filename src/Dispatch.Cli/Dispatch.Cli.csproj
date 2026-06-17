@@ -9,6 +9,7 @@
 
     <ProjectReference Include="..\Dispatch.Core\Dispatch.Core.csproj" />
     <ProjectReference Include="..\Dispatch.Transports.PsExec\Dispatch.Transports.PsExec.csproj" />
+    <ProjectReference Include="..\Dispatch.Transports.WinRm\Dispatch.Transports.WinRm.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

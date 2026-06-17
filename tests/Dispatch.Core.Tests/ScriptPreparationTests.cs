@@ -149,6 +149,33 @@ public sealed class ScriptPreparationTests
         Assert.EndsWith(@"\Install-App.ps1", copy.DestinationPath);
     }
 
+    [Fact]
+    public async Task ScriptPreparationDoesNotAttemptAdminShareCopyForWinRmSlice()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        using var provider = BuildProvider(outputRoot.Path, endpointFileSystem);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var preparation = provider.GetRequiredService<IScriptPreparationService>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await preparation.PrepareAsync(plan, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Empty(endpointFileSystem.CreatedDirectories);
+        Assert.Empty(endpointFileSystem.Copies);
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", target.RemoteScriptPath);
+        Assert.Null(target.AdminShareScriptPath);
+    }
+
     private static ServiceProvider BuildProvider(string localRunRoot, IEndpointFileSystem endpointFileSystem)
     {
         var configuration = new ConfigurationBuilder()

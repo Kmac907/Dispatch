@@ -47,7 +47,8 @@ public static class DispatchRequestValidator
     }
 
     public static bool IsSupportedPayload(TransportKind transport, PayloadKind payload) =>
-        transport == TransportKind.PsExec && payload == PayloadKind.Script;
+        payload == PayloadKind.Script
+        && (transport == TransportKind.PsExec || transport == TransportKind.WinRm);
 
     private static void AddScriptArgumentSecretErrors(ScriptPayload payload, ICollection<DispatchValidationError> errors)
     {

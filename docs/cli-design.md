@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, initial inventory/target selectors for `run ps`, and initial inventory transport precedence from YAML defaults/group vars/host vars, including inline transport maps in the current supported subset, and keeps YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution as roadmap work. Transport execution is still PsExec-only today; raw WinRM and PSRP are the next transport roadmap slices because the current validation environment has working WinRM targets and unreliable `\\<device>\C$` admin-share staging for PsExec-first validation.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, and a narrow raw WinRM slice that wires `winrm` into DI, validates `winrm + ScriptPayload`, plans endpoint-local script paths, probes DNS plus default WinRM TCP ports, and returns an explicit not-yet-implemented execution failure after probe. YAML jobs, durable run logs, credentials, push/hosts/init behavior, `run cmd`, and `run exe` execution remain roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -8,7 +8,7 @@ This document records the active CLI design that supersedes the earlier Terminal
 
 Dispatch is a Windows-native C# automation runner for Windows hosts. The product design covers ad-hoc execution, declared jobs, host inventories, structured logs, credential references, and explicit transports. Current implementation status is tracked in `docs/plan.md` and `workflow/build/implementation-plan.md`.
 
-Current transport priority is raw WinRM first, then PSRP. PsExec remains an explicit transport in the command contract and the only implemented executor today, but additional PsExec-first roadmap work is deferred until the target environment provides reliable admin-share staging.
+Current transport priority is raw WinRM first, then PSRP. PsExec remains the only end-to-end execution transport today. The current raw WinRM slice is limited to request validation, planning, DI registration, and endpoint reachability probes; execution, transfer, and artifact collection still return explicit not-yet-implemented behavior.
 
 The operator model is:
 
@@ -38,7 +38,7 @@ Transports are not top-level commands. They are selected with:
 --transport auto|psrp|winrm|psexec
 ```
 
-Accepted transport names are broader than the currently implemented executors. At the moment, `psrp` and `winrm` are command-contract values and roadmap targets, not working execution paths.
+Accepted transport names are broader than the currently implemented executors. `psrp` remains a command-contract value and roadmap target. `winrm` is now a partial execution path that can validate requests, build plans, and probe endpoint reachability, but it still returns an explicit not-yet-implemented failure for raw WinRM script execution.
 
 ## Global Options
 

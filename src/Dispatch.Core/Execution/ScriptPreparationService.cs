@@ -40,6 +40,20 @@ internal sealed class ScriptPreparationService(IEndpointFileSystem endpointFileS
                 continue;
             }
 
+            if (!UsesAdminShareScriptTransfer(plan.Job.Transport))
+            {
+                targetManifests.Add(new TargetScriptManifest(
+                    target.Target,
+                    target.PlannedRemoteScriptPath,
+                    null));
+                targetResults.Add(new TargetScriptPreparationResult(
+                    Target: target.Target,
+                    RemoteScriptPath: target.PlannedRemoteScriptPath,
+                    AdminShareScriptPath: null,
+                    Succeeded: true));
+                continue;
+            }
+
             var adminSharePath = AdminSharePath.FromRemoteWindowsPath(target.Target.Name, target.PlannedRemoteScriptPath);
             if (!adminSharePath.IsValid)
             {
@@ -109,6 +123,8 @@ internal sealed class ScriptPreparationService(IEndpointFileSystem endpointFileS
 
         return new ScriptPreparationResult(manifest, targetResults);
     }
+
+    private static bool UsesAdminShareScriptTransfer(TransportKind transport) => transport == TransportKind.PsExec;
 
     private static TargetScriptPreparationResult Failed(
         TargetSpec target,

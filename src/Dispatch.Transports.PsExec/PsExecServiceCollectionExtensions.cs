@@ -7,6 +7,7 @@ public static class PsExecServiceCollectionExtensions
 {
     public static IServiceCollection AddDispatchPsExecTransport(this IServiceCollection services)
     {
+        services.AddSingleton<ITransportDescriptor, PsExecTransportDescriptor>();
         services.AddSingleton<PsExecCommandBuilder>();
         services.AddSingleton<IPsExecDnsResolver, PsExecDnsResolver>();
         services.AddSingleton<IPsExecPortProbe, PsExecPortProbe>();

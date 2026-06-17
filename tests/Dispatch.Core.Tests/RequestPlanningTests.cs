@@ -93,6 +93,25 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerAllowsWinRmScriptPayloadAndRequiresEndpointLocalScriptPath()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm,
+            dryRun: true);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+
+        Assert.Equal(TransportKind.WinRm, plan.Job.Transport);
+        Assert.True(plan.Job.ScriptTransferPolicy.RequiresEndpointLocalScriptPath);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", Assert.Single(plan.Targets).PlannedRemoteScriptPath);
+    }
+
+    [Fact]
     public async Task PlannerRejectsLikelySecretScriptArgumentsBeforeDryRunRendering()
     {
         using var script = TemporaryScript.Create("Fix.ps1");

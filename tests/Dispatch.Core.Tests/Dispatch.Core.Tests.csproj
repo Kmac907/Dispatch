@@ -28,6 +28,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dispatch.Core\Dispatch.Core.csproj" />
     <ProjectReference Include="..\..\src\Dispatch.Transports.PsExec\Dispatch.Transports.PsExec.csproj" />
+    <ProjectReference Include="..\..\src\Dispatch.Transports.WinRm\Dispatch.Transports.WinRm.csproj" />
   </ItemGroup>
 
 </Project>

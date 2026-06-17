@@ -70,12 +70,17 @@ public sealed class JobResultModelTests
     }
 
     [Fact]
-    public void RequestValidationAllowsOnlyV1SupportedTransportPayloadCombination()
+    public void RequestValidationAllowsCurrentSupportedScriptTransportPayloadCombinations()
     {
-        var valid = DispatchRequestValidator.Validate(new DispatchRequest(
+        var psexecScript = DispatchRequestValidator.Validate(new DispatchRequest(
             payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
             targets: [new TargetSpec("PC001")],
             transport: TransportKind.PsExec));
+
+        var winrmScript = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.WinRm));
 
         var psexecCommand = DispatchRequestValidator.Validate(new DispatchRequest(
             payload: new CommandPayload("whoami", "cmd", null),
@@ -87,7 +92,8 @@ public sealed class JobResultModelTests
             targets: [new TargetSpec("PC001")],
             transport: TransportKind.Psrp));
 
-        Assert.True(valid.IsValid);
+        Assert.True(psexecScript.IsValid);
+        Assert.True(winrmScript.IsValid);
         Assert.Contains(psexecCommand.Errors, error => error.Code == "UnsupportedTransportPayload");
         Assert.Contains(psrpScript.Errors, error => error.Code == "UnsupportedTransportPayload");
     }

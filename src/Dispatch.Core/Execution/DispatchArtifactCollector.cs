@@ -13,6 +13,14 @@ internal sealed class DispatchArtifactCollector(IEndpointFileSystem endpointFile
     {
         cancellationToken.ThrowIfCancellationRequested();
 
+        if (!SupportsArtifactCopyBack(plan.Job.Transport))
+        {
+            return new ArtifactCollectionResult(
+                "skipped",
+                [],
+                $"Artifact collection is not implemented for transport '{plan.Job.Transport.ToDispatchString()}' in this slice.");
+        }
+
         if (string.IsNullOrWhiteSpace(target.PlannedLocalTargetRoot))
         {
             return new ArtifactCollectionResult("skipped", [], "No local target root was planned.");
@@ -60,6 +68,8 @@ internal sealed class DispatchArtifactCollector(IEndpointFileSystem endpointFile
             copiedArtifacts.Count > 0 ? "collected" : "not-found",
             copiedArtifacts);
     }
+
+    private static bool SupportsArtifactCopyBack(TransportKind transport) => transport == TransportKind.PsExec;
 
     private static IReadOnlyList<string> GetArtifactFolders(ArtifactPolicy policy) =>
         policy.Paths is { Count: > 0 }

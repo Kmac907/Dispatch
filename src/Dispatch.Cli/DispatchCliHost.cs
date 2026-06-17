@@ -1,5 +1,6 @@
 using Dispatch.Core.Hosting;
 using Dispatch.Transports.PsExec;
+using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -21,6 +22,7 @@ public static class DispatchCliHost
         builder.Logging.AddConsole();
         builder.Services.AddDispatchCore(builder.Configuration);
         builder.Services.AddDispatchPsExecTransport();
+        builder.Services.AddDispatchWinRmTransport();
         builder.Services.AddSingleton<IDispatchDoctor, DispatchDoctor>();
         builder.Services.AddSingleton<DispatchCliApplication>();
 

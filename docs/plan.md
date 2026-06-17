@@ -55,7 +55,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 ### Current transport priority
 
-As of 2026-06-16, the next transport implementation priority is WinRM-based execution: raw WinRM first, then PSRP. The current codebase still implements only the PsExec execution path, but further PsExec-first roadmap work is deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging. Test hosts `82H9704` and `92H9704` are now reserved for WinRM-based live validation rather than PsExec-first validation.
+As of 2026-06-16, the next transport implementation priority is WinRM-based execution: raw WinRM first, then PSRP. The current codebase still has PsExec as the only end-to-end execution transport, but it now includes a narrow raw WinRM slice for request validation, planning, DI registration, and endpoint reachability probes. Full raw WinRM shell execution, transfer, and artifact collection remain roadmap work, and further PsExec-first roadmap work is deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging. Test hosts `82H9704` and `92H9704` are now reserved for WinRM-based live validation rather than PsExec-first validation.
 
 ## 3. Non-Goals
 
@@ -77,7 +77,7 @@ As of 2026-06-16, the next transport implementation priority is WinRM-based exec
 - `Dispatch.Core` owns planning, target normalization, script transfer/preparation, orchestration, result models, logging abstractions, artifact collection, and transport interfaces.
 - `Dispatch.Transports.PsExec` owns PsExec command construction and captured process execution.
 - `Dispatch.Transports.Psrp` is a planned transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
-- `Dispatch.Transports.WinRm` is a planned raw WinRM transport using WS-Management shell/command semantics.
+- `Dispatch.Transports.WinRm` is a partially implemented raw WinRM transport with current request-validation, planning, DI, and endpoint-probe coverage; WS-Management shell/command execution remains roadmap work.
 - `Dispatch.Cli` owns `dispatch.exe`, Spectre.Console.Cli command routing, automation commands, operator output, live rendering, and structured output modes.
 - `Dispatch.PowerShell` owns wrapper functions such as `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
 
@@ -171,7 +171,7 @@ psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
 psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
 psrp   + ScriptPayload   = next transport roadmap work after raw WinRM
 psrp   + CommandPayload  = same transport family; not yet implemented
-winrm  + ScriptPayload   = next transport roadmap work
+winrm  + ScriptPayload   = partial; planning and probe path implemented, explicit not-yet-implemented execution failure remains
 winrm  + CommandPayload  = same transport family; not yet implemented
 ```
 
@@ -382,7 +382,7 @@ Raw WinRM:
 
 #### PsExec transport
 
-PsExec is the only implemented execution transport today. It uses SMB/admin-share file preparation and PsExec process execution from the admin workstation, but further PsExec-first roadmap work is deferred behind WinRM-based transports because the current validation environment does not provide reliable `\\<device>\C$` admin-share staging.
+PsExec is the only implemented end-to-end execution transport today. It uses SMB/admin-share file preparation and PsExec process execution from the admin workstation, but further PsExec-first roadmap work is deferred behind WinRM-based transports because the current validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
 PsExec example:
 

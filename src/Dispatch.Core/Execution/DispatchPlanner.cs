@@ -42,7 +42,9 @@ internal sealed class DispatchPlanner(
             ? request.ExpectedExitCodes
             : options.Value.ExpectedExitCodes;
 
-        var requiresEndpointLocalScriptPath = request.Transport == TransportKind.PsExec;
+        var requiresEndpointLocalScriptPath =
+            request.Transport == TransportKind.PsExec
+            || request.Transport == TransportKind.WinRm;
         var job = new DispatchJob(
             RunId: runId,
             Targets: request.Targets,
