@@ -67,6 +67,7 @@ Must define:
 - artifact
 - log
 - direct execution vs managed execution
+- the distinction between Dispatch-captured process output and script-created files
 
 ### 5. `docs/command-reference.md`
 
@@ -96,6 +97,9 @@ Must include:
 - using `--config`
 - using expected exit codes
 - examples that are safe and realistic
+- how scripts should write retrievable files into the remote run folder
+- recommended use of remote `logs\` and `artifacts\` folders
+- what happens when a script only writes to stdout/stderr and does not create artifact folders
 
 ### 7. `docs/inventory.md`
 
@@ -198,6 +202,10 @@ Must include:
 - CSV/JSON summaries
 - artifact location
 - what automation should read
+- the local run folder layout vs the remote endpoint run folder layout
+- the difference between `stdout.txt` / `stderr.txt` and copied-back script-created files
+- the default artifact folders: `logs` and `artifacts`
+- what artifact status values mean, including `collected`, `not-found`, `failed`, and `skipped`
 
 ### 15. `docs/troubleshooting.md`
 
@@ -213,6 +221,8 @@ Must include:
 - config errors
 - common error messages
 - what `dispatch doctor` proves and does not prove
+- why a script can succeed while artifact collection is `not-found` or `failed`
+- why `stdout.txt` may exist even when no copied-back script logs/artifacts exist
 
 ### 16. `docs/security.md`
 
@@ -240,6 +250,7 @@ Must continue to cover:
 - installer/media ownership
 - script arguments
 - secret handling expectations
+- cross-reference where script-created logs and artifacts should be written, but do not make this the primary output/results doc
 
 ## Reference and contract documentation
 
@@ -429,5 +440,7 @@ Based on the current repo state, these are the highest-value docs to create firs
 - `docs/plan.md` remains the authoritative roadmap, not the operator wiki.
 - `docs/cli-design.md` remains the CLI contract/design doc, not the operator quickstart.
 - `docs/wiki.md` is the inventory of required docs, not the end-user docs themselves.
+- The shared artifact/logging model belongs primarily in `docs/output-and-results.md`, with supporting operator and troubleshooting coverage in `docs/running-scripts.md`, `docs/concepts.md`, and `docs/troubleshooting.md`.
+- Do not use `docs/transports.md`, `docs/transport-winrm.md`, or `docs/transport-psexec.md` as the primary home for shared artifact/logging semantics. Those docs should only describe transport-specific behavior and limitations.
 - Items under `Required docs for unfinished v1 roadmap features` are still required for Dispatch v1; they are only deferred until the corresponding roadmap feature is implemented.
 - Only items under `Docs only required if out-of-scope v1 features are later brought back into scope` are outside the current v1 documentation completion set.
