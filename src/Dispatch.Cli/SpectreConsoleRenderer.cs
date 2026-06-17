@@ -1,6 +1,7 @@
 using Dispatch.Core;
 using Dispatch.Core.Models;
 using Spectre.Console;
+using Spectre.Console.Rendering;
 
 namespace Dispatch.Cli;
 
@@ -239,7 +240,6 @@ internal static class SpectreConsoleRenderer
         var resultFilePath = string.IsNullOrWhiteSpace(result.ResultPath) ? "-" : result.ResultPath;
         var eventFilePath = TryGetEventFilePath(result.ResultPath) ?? "-";
         var targetRootPattern = TryGetTargetRootPattern(result.ResultPath) ?? TryGetTargetRootFromStdout(result.Targets) ?? "-";
-        var stdoutStderrPattern = TryFormatStdoutStderrPattern(targetRootPattern);
         console.MarkupLine(result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0
             ? "[green]Dispatch run complete[/]"
             : "[red]Dispatch run completed with failures[/]");
@@ -253,10 +253,8 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
         console.Write(CreateResultTable(result.Targets));
         console.WriteLine();
-        console.WriteLine($"Result file: {resultFilePath}");
-        console.WriteLine($"Event file: {eventFilePath}");
-        console.WriteLine($"Target root: {targetRootPattern}");
-        console.WriteLine($"Stdout/Stderr: {stdoutStderrPattern}");
+        console.Write(CreateOutputSummaryPanel(resultFilePath, eventFilePath, targetRootPattern));
+        console.WriteLine();
     }
 
     public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report)
@@ -331,6 +329,30 @@ internal static class SpectreConsoleRenderer
         return table;
     }
 
+    private static IRenderable CreateOutputSummaryPanel(string resultFilePath, string eventFilePath, string targetRootPattern)
+    {
+        var stdoutPath = string.IsNullOrWhiteSpace(targetRootPattern) || targetRootPattern == "-"
+            ? "-"
+            : Path.Combine(targetRootPattern, "stdout.txt");
+        var stderrPath = string.IsNullOrWhiteSpace(targetRootPattern) || targetRootPattern == "-"
+            ? "-"
+            : Path.Combine(targetRootPattern, "stderr.txt");
+
+        var lines = new[]
+        {
+            $"[bold]Results[/]: {Markup.Escape(resultFilePath)}",
+            $"[bold]Events[/]: {Markup.Escape(eventFilePath)}",
+            $"[bold]Target Root[/]: {Markup.Escape(targetRootPattern)}",
+            $"[bold]Stdout[/]: {Markup.Escape(stdoutPath)}",
+            $"[bold]Stderr[/]: {Markup.Escape(stderrPath)}"
+        };
+
+        return new Panel(new Rows(lines.Select(static line => (IRenderable)new Markup(line)).ToArray()))
+            .Header("Outputs")
+            .Border(BoxBorder.Rounded)
+            .Expand();
+    }
+
     private static string FormatDoctorStatus(DispatchDoctorStatus status) =>
         status switch
         {
@@ -376,8 +398,4 @@ internal static class SpectreConsoleRenderer
         return string.IsNullOrWhiteSpace(stdoutPath) ? null : Path.GetDirectoryName(stdoutPath);
     }
 
-    private static string TryFormatStdoutStderrPattern(string targetRootPattern) =>
-        string.IsNullOrWhiteSpace(targetRootPattern) || targetRootPattern == "-"
-            ? "-"
-            : $"{Path.Combine(targetRootPattern, "stdout.txt")} / {Path.Combine(targetRootPattern, "stderr.txt")}";
 }

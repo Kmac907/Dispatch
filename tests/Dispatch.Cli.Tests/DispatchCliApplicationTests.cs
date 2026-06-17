@@ -319,11 +319,13 @@ public sealed class DispatchCliApplicationTests
         SpectreConsoleRenderer.RenderRunResult(writer, result);
         var output = writer.ToString();
 
-        Assert.Contains(@"Result file: C:\Dispatch\Tests\run-test\Admin\results.json", output);
-        Assert.Contains(@"Event file: C:\Dispatch\Tests\run-test\Admin\events.ndjson", output);
-        Assert.Contains(@"Target root: C:\Dispatch\Tests\run-test\Targets\<target>", output);
-        Assert.Contains("Stdout/Stderr:", output);
+        Assert.Contains("Outputs", output);
+        Assert.Contains(@"Results: C:\Dispatch\Tests\run-test\Admin\results.json", output);
+        Assert.Contains(@"Events: C:\Dispatch\Tests\run-test\Admin\events.ndjson", output);
+        Assert.Contains(@"Target Root: C:\Dispatch\Tests\run-test\Targets\<target>", output);
+        Assert.Contains("Stdout:", output);
         Assert.Contains(@"C:\Dispatch\Tests\run-test\Targets\<target>\stdout.txt", output);
+        Assert.Contains("Stderr:", output);
         Assert.Contains(@"C:\Dispatch\Tests\run-test\Targets\<target>\stderr.txt", output);
     }
 
@@ -1912,7 +1914,6 @@ public sealed class DispatchCliApplicationTests
 
             Assert.Contains("Dispatch Run", output);
             Assert.Contains("Completion", output);
-            Assert.Contains("Phase Counts", output);
             Assert.Contains("Outcome Chart", output);
             Assert.Contains("run-test", output);
             Assert.Contains("psexec", output);

@@ -77,14 +77,14 @@ Use this file for:
 
 ## Final summary file locations
 
-The rich/table completion summary exposes the key persisted paths after the target outcome table:
+The rich/table completion summary exposes an `Outputs` panel after the target outcome table:
 
 - `Admin\results.json`
 - `Admin\events.ndjson`
 - `Targets\<Target>\stdout.txt`
 - `Targets\<Target>\stderr.txt`
 
-It also shows the per-target local root pattern so an operator can move from the completion summary to the durable files without reconstructing the run layout by hand.
+It also shows the per-target local root pattern plus separate stdout/stderr lines so an operator can move from the completion summary to the durable files without reconstructing the run layout by hand.
 
 ## Console output modes
 

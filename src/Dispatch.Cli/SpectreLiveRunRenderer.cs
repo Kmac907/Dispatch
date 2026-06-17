@@ -188,7 +188,9 @@ internal sealed class SpectreRunDashboard
         var targetStartedAt = existing.TargetStartedAt ?? GetTargetStartedAt(progress.State, progress.Timestamp);
         var stateStartedAt = progress.State == existing.State && existing.StateStartedAt is not null
             ? existing.StateStartedAt
-            : GetStateStartedAt(progress.State, progress.Timestamp);
+            : IsTerminal(progress.State) && existing.StateStartedAt is not null
+                ? existing.StateStartedAt
+                : GetStateStartedAt(progress.State, progress.Timestamp);
         DateTimeOffset? endedAt = IsTerminal(progress.State) ? progress.Timestamp : null;
 
         targets[progress.Target] = existing with
@@ -217,9 +219,8 @@ internal sealed class SpectreRunDashboard
         {
             var existing = targets[target.Target];
             var targetStartedAt = existing.TargetStartedAt ?? target.StartedAt;
-            var stateStartedAt = existing.State == target.State && existing.StateStartedAt is not null
-                ? existing.StateStartedAt
-                : target.EndedAt;
+            var stateStartedAt = existing.StateStartedAt
+                ?? target.StartedAt;
 
             targets[target.Target] = existing with
             {
@@ -244,7 +245,6 @@ internal sealed class SpectreRunDashboard
             new Rule($"[bold]Dispatch Run[/] [grey]{Markup.Escape(plan.RunId)}[/]"),
             CreateSummaryTable(now),
             CreateCompletionPanel(),
-            CreatePhaseSummaryPanel(),
             CreateOutcomeChart(),
             CreateTargetTable(now),
             CreateRecentEventsTable()
@@ -300,30 +300,6 @@ internal sealed class SpectreRunDashboard
 
         return new Panel(new Markup(details))
             .Header("Completion")
-            .Border(BoxBorder.Rounded)
-            .Expand();
-    }
-
-    private IRenderable CreatePhaseSummaryPanel()
-    {
-        var phaseGroups = targets.Values
-            .GroupBy(target => FormatPhase(target.State))
-            .Select(group => new { Phase = group.Key, Count = group.Count(), SortOrder = GetPhaseSortOrder(group.First().State) })
-            .OrderBy(group => group.SortOrder)
-            .ThenBy(group => group.Phase, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        var table = new Table().Border(TableBorder.Rounded).Expand();
-        table.AddColumn("Phase");
-        table.AddColumn("Count");
-
-        foreach (var phase in phaseGroups)
-        {
-            table.AddRow(Markup.Escape(phase.Phase), phase.Count.ToString());
-        }
-
-        return new Panel(table)
-            .Header("Phase Counts")
             .Border(BoxBorder.Rounded)
             .Expand();
     }
@@ -533,22 +509,6 @@ internal sealed class SpectreRunDashboard
             TargetExecutionState.TimedOut => 6,
             TargetExecutionState.Cancelled => 7,
             TargetExecutionState.Pending => 8,
-            TargetExecutionState.Succeeded => 9,
-            _ => 10
-        };
-
-    private static int GetPhaseSortOrder(TargetExecutionState state) =>
-        state switch
-        {
-            TargetExecutionState.Executing => 0,
-            TargetExecutionState.CollectingArtifacts => 1,
-            TargetExecutionState.PreparingScript => 2,
-            TargetExecutionState.Probing => 3,
-            TargetExecutionState.Resolving => 4,
-            TargetExecutionState.Pending => 5,
-            TargetExecutionState.Failed => 6,
-            TargetExecutionState.TimedOut => 7,
-            TargetExecutionState.Cancelled => 8,
             TargetExecutionState.Succeeded => 9,
             _ => 10
         };
