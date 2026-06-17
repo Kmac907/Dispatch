@@ -544,9 +544,21 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (inGroupHosts && indent >= 6 && trimmed.EndsWith(':'))
+                    {
+                        AddInventoryGroupHost(path, hosts, groups, currentGroup!, trimmed.TrimEnd(':').Trim());
+                        continue;
+                    }
+
                     if (inGroupChildren && trimmed.StartsWith("- ", StringComparison.Ordinal))
                     {
                         AddInventoryGroupChild(groups, currentGroup!, trimmed[2..].Trim());
+                        continue;
+                    }
+
+                    if (inGroupChildren && indent >= 6 && trimmed.EndsWith(':'))
+                    {
+                        AddInventoryGroupChild(groups, currentGroup!, trimmed.TrimEnd(':').Trim());
                         continue;
                     }
 

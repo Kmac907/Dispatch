@@ -354,6 +354,51 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
+    public void MappingFormGroupHostsResolveTargets()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            groups:
+              web:
+                hosts:
+                  WEB01:
+                  WEB02:
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["web"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["WEB01", "WEB02"], result.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
+    public void MappingFormGroupChildrenResolveTransitively()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            groups:
+              web:
+                children:
+                  prod:
+              prod:
+                hosts:
+                  WEB01:
+                  WEB02:
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["web"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(result.IsValid);
+        Assert.Equal(["WEB01", "WEB02"], result.Targets.Select(static target => target.Name));
+    }
+
+    [Fact]
     public void UnsupportedInventoryHostFieldFailsClearly()
     {
         using var inventory = TemporaryTargetFile.Create("""
