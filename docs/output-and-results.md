@@ -57,7 +57,7 @@ Use this file when you need:
 
 - durable replay of a run
 - machine ingestion
-- a stable event history for future `logs` commands
+- a stable event history for `dispatch logs show latest` and later `logs tail|export|retry`
 
 ## Summary file
 
@@ -74,6 +74,7 @@ Use this file for:
 
 - automation that wants the final run outcome
 - operators who need the final state without replaying the full event stream
+- `dispatch logs list`, which enumerates local run history from the reduced summaries
 
 ## Final summary file locations
 
@@ -103,6 +104,11 @@ Stdout NDJSON and durable `events.ndjson` are related but different:
 
 - stdout NDJSON is the live command-output stream
 - `Admin\events.ndjson` is the durable local run-history file
+
+The current local log-inspection surface reads those same files:
+
+- `dispatch logs list` enumerates local runs from `Admin\results.json`
+- `dispatch logs show latest` reads the latest local `Admin\results.json` and exposes the same final-summary/output-location view as the original run result
 
 ## Live dashboard progress contract
 

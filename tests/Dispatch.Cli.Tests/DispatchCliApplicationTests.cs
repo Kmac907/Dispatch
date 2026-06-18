@@ -1776,7 +1776,6 @@ public sealed class DispatchCliApplicationTests
 
     [Theory]
     [InlineData("hosts", "list")]
-    [InlineData("logs", "list")]
     [InlineData("creds", "list")]
     [InlineData("init", "job")]
     public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
@@ -1788,6 +1787,141 @@ public sealed class DispatchCliApplicationTests
         Assert.Equal(1, exitCode);
         Assert.Contains("Planned Dispatch command", error);
         Assert.Contains($"{command} {subcommand}", error);
+    }
+
+    [Fact]
+    public async Task LogsListReadsLocalRunHistory()
+    {
+        var runRoot = CreateRunHistoryRoot(
+            new DispatchRunResult(
+                RunId: "20260618010000-a",
+                StartedAt: DateTimeOffset.Parse("2026-06-18T01:00:00Z"),
+                EndedAt: DateTimeOffset.Parse("2026-06-18T01:00:05Z"),
+                RequestedBy: "tester",
+                Transport: TransportKind.Psrp,
+                PayloadType: PayloadKind.Command,
+                PayloadName: "whoami",
+                Targets:
+                [
+                    new TargetExecutionResult(
+                        RunId: "20260618010000-a",
+                        Target: "PC001",
+                        Transport: TransportKind.Psrp,
+                        PayloadType: PayloadKind.Command,
+                        PayloadName: "whoami",
+                        State: TargetExecutionState.Succeeded,
+                        ExitCode: 0,
+                        ExpectedExitCodes: [0],
+                        StartedAt: DateTimeOffset.Parse("2026-06-18T01:00:00Z"),
+                        EndedAt: DateTimeOffset.Parse("2026-06-18T01:00:04Z"),
+                        FailureCategory: FailureCategory.None,
+                        FailureMessage: null,
+                        StdoutPath: @"C:\Dispatch\Tests\Runs\20260618010000-a\Targets\PC001\stdout.txt",
+                        StderrPath: @"C:\Dispatch\Tests\Runs\20260618010000-a\Targets\PC001\stderr.txt")
+                ],
+                ResultPath: string.Empty),
+            new DispatchRunResult(
+                RunId: "20260618020000-b",
+                StartedAt: DateTimeOffset.Parse("2026-06-18T02:00:00Z"),
+                EndedAt: DateTimeOffset.Parse("2026-06-18T02:00:05Z"),
+                RequestedBy: "tester",
+                Transport: TransportKind.WinRm,
+                PayloadType: PayloadKind.Script,
+                PayloadName: "Fix.ps1",
+                Targets:
+                [
+                    new TargetExecutionResult(
+                        RunId: "20260618020000-b",
+                        Target: "PC002",
+                        Transport: TransportKind.WinRm,
+                        PayloadType: PayloadKind.Script,
+                        PayloadName: "Fix.ps1",
+                        State: TargetExecutionState.Failed,
+                        ExitCode: 1603,
+                        ExpectedExitCodes: [0],
+                        StartedAt: DateTimeOffset.Parse("2026-06-18T02:00:00Z"),
+                        EndedAt: DateTimeOffset.Parse("2026-06-18T02:00:04Z"),
+                        FailureCategory: FailureCategory.UnexpectedExitCode,
+                        FailureMessage: "Installer failed.",
+                        StdoutPath: @"C:\Dispatch\Tests\Runs\20260618020000-b\Targets\PC002\stdout.txt",
+                        StderrPath: @"C:\Dispatch\Tests\Runs\20260618020000-b\Targets\PC002\stderr.txt")
+                ],
+                ResultPath: string.Empty));
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "list", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            var runs = document.RootElement.EnumerateArray().ToArray();
+            Assert.Equal("20260618020000-b", runs[0].GetProperty("runId").GetString());
+            Assert.Equal("20260618010000-a", runs[1].GetProperty("runId").GetString());
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsShowLatestReadsMostRecentRunResult()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618030000-c",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T03:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T03:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618030000-c",
+                    Target: "PC003",
+                    Transport: TransportKind.Psrp,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami",
+                    State: TargetExecutionState.Succeeded,
+                    ExitCode: 0,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T03:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T03:00:04Z"),
+                    FailureCategory: FailureCategory.None,
+                    FailureMessage: null,
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618030000-c\Targets\PC003\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618030000-c\Targets\PC003\stderr.txt")
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["logs", "show", "latest"], CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Contains("Dispatch run complete", output);
+            Assert.Contains("20260618030000-c", output);
+            Assert.Contains("Outputs", output);
+            Assert.Contains("events.ndjson", output);
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
     }
 
     [Fact]
@@ -2028,6 +2162,24 @@ public sealed class DispatchCliApplicationTests
             .Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)
             .Select(static line => JsonDocument.Parse(line))
             .ToArray();
+
+    private static string CreateRunHistoryRoot(params DispatchRunResult[] results)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-runs-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+
+        foreach (var result in results)
+        {
+            var adminRoot = Path.Combine(root, result.RunId, "Admin");
+            Directory.CreateDirectory(adminRoot);
+            var resultPath = Path.Combine(adminRoot, "results.json");
+            var normalized = result with { ResultPath = resultPath };
+            File.WriteAllText(resultPath, DispatchJson.Serialize(normalized));
+            File.WriteAllText(Path.Combine(adminRoot, "events.ndjson"), "{\"type\":\"result\"}");
+        }
+
+        return root;
+    }
 
     private static string NormalizeWhitespace(string value) =>
         string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));

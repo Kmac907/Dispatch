@@ -15,6 +15,8 @@ public sealed class DispatchCliApplication(
     DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
     TextWriter? statusWriter = null)
 {
+    private readonly DispatchRunHistoryReader runHistoryReader = new();
+
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
         if (args.Any(static arg => arg is "--version" or "-v"))
@@ -259,6 +261,51 @@ public sealed class DispatchCliApplication(
         return report.Succeeded ? 0 : 1;
     }
 
+    internal int RunLogsListCommand(string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error!);
+            return 1;
+        }
+
+        var runs = runHistoryReader.ListRuns(options.Value.LocalRunRoot);
+        if (runs.Count == 0)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Not Found",
+                $"No completed runs were found under '{options.Value.LocalRunRoot}'.");
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderRunHistory(Console.Out, options.Value.LocalRunRoot, runs, outputMode);
+        return 0;
+    }
+
+    internal int RunLogsShowCommand(string? selector, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error!);
+            return 1;
+        }
+
+        var result = runHistoryReader.ReadRun(options.Value.LocalRunRoot, selector);
+        if (result is null)
+        {
+            var missingSelector = string.IsNullOrWhiteSpace(selector) ? "latest" : selector;
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Not Found",
+                $"Run '{missingSelector}' was not found under '{options.Value.LocalRunRoot}'.");
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, outputMode);
+        return 0;
+    }
+
     internal static int RenderPlannedCommand(string command, string roadmapItem)
     {
         SpectreConsoleRenderer.RenderPlannedFeature(Console.Error, command, roadmapItem);
@@ -272,6 +319,38 @@ public sealed class DispatchCliApplication(
             "Unknown Dispatch Command",
             $"'{command}' is not a Dispatch command.");
         return 1;
+    }
+
+    private static bool TryParseOutputMode(string? value, out DispatchOutputMode outputMode, out string? error)
+    {
+        outputMode = DispatchOutputMode.Rich;
+        error = null;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        outputMode = value.Trim().ToLowerInvariant() switch
+        {
+            "rich" => DispatchOutputMode.Rich,
+            "table" => DispatchOutputMode.Table,
+            "json" => DispatchOutputMode.Json,
+            "ndjson" => DispatchOutputMode.Ndjson,
+            "yaml" => DispatchOutputMode.Yaml,
+            _ => default
+        };
+
+        if (value.Trim().Equals("rich", StringComparison.OrdinalIgnoreCase)
+            || value.Trim().Equals("table", StringComparison.OrdinalIgnoreCase)
+            || value.Trim().Equals("json", StringComparison.OrdinalIgnoreCase)
+            || value.Trim().Equals("ndjson", StringComparison.OrdinalIgnoreCase)
+            || value.Trim().Equals("yaml", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        error = $"Unsupported output mode '{value}'. Expected rich, table, json, ndjson, or yaml.";
+        return false;
     }
 
 }

@@ -257,6 +257,37 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
     }
 
+    public static void RenderRunHistory(TextWriter writer, string localRunRoot, IReadOnlyList<DispatchRunHistoryEntry> runs)
+    {
+        var console = CreateConsole(writer);
+        console.MarkupLine("[bold]Dispatch runs[/]");
+        console.WriteLine($"Local run root: {localRunRoot}");
+        console.WriteLine();
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("Run");
+        table.AddColumn("Started");
+        table.AddColumn("Transport");
+        table.AddColumn("Payload");
+        table.AddColumn("Targets");
+        table.AddColumn("Succeeded");
+        table.AddColumn("Failed");
+        table.AddColumn("Timed Out");
+        foreach (var run in runs)
+        {
+            table.AddRow(
+                Markup.Escape(run.RunId),
+                Markup.Escape(run.StartedAt.ToString("u")),
+                Markup.Escape(run.Transport.ToString()),
+                Markup.Escape(run.PayloadName),
+                Markup.Escape(run.TargetCount.ToString()),
+                Markup.Escape(run.SuccessCount.ToString()),
+                Markup.Escape(run.FailedCount.ToString()),
+                Markup.Escape(run.TimedOutCount.ToString()));
+        }
+
+        console.Write(table);
+    }
+
     public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report)
     {
         var console = CreateConsole(writer);

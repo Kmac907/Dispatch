@@ -52,6 +52,33 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderRunHistory(TextWriter writer, string localRunRoot, IReadOnlyList<DispatchRunHistoryEntry> runs, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(runs));
+                break;
+            case DispatchOutputMode.Ndjson:
+                foreach (var run in runs)
+                {
+                    writer.WriteLine(JsonSerializer.Serialize(
+                        run,
+                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                }
+
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, runs);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                SpectreConsoleRenderer.RenderRunHistory(writer, localRunRoot, runs);
+                break;
+        }
+    }
+
     private static void WriteYaml<T>(TextWriter writer, T value)
     {
         var node = JsonSerializer.SerializeToNode(value, DispatchJson.Options);

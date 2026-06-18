@@ -141,6 +141,16 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new RunExeCommand(application);
             }
 
+            if (type == typeof(LogsListCommand))
+            {
+                return new LogsListCommand(application);
+            }
+
+            if (type == typeof(LogsShowCommand))
+            {
+                return new LogsShowCommand(application);
+            }
+
             if (PlannedCommandTypes.Contains(type))
             {
                 return Activator.CreateInstance(type);
@@ -230,9 +240,17 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
     private sealed class HostsVarsCommand() : PlannedCommand("hosts vars", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
 
-    private sealed class LogsListCommand() : PlannedCommand("logs list", "6.3 Structured Run Logs And Log Commands");
+    private sealed class LogsListCommand(DispatchCliApplication application) : Command<LogsListSettings>
+    {
+        protected override int Execute(CommandContext context, LogsListSettings settings, CancellationToken cancellationToken) =>
+            application.RunLogsListCommand(settings.Output);
+    }
 
-    private sealed class LogsShowCommand() : PlannedCommand("logs show", "6.3 Structured Run Logs And Log Commands");
+    private sealed class LogsShowCommand(DispatchCliApplication application) : Command<LogsShowSettings>
+    {
+        protected override int Execute(CommandContext context, LogsShowSettings settings, CancellationToken cancellationToken) =>
+            application.RunLogsShowCommand(settings.Selector, settings.Output);
+    }
 
     private sealed class LogsTailCommand() : PlannedCommand("logs tail", "6.3 Structured Run Logs And Log Commands");
 
@@ -266,6 +284,21 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         [CommandArgument(0, "[source]")]
         public string? Source { get; init; }
+    }
+
+    private sealed class LogsListSettings : CommandSettings
+    {
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
+    private sealed class LogsShowSettings : CommandSettings
+    {
+        [CommandArgument(0, "[run-id|latest]")]
+        public string? Selector { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
     }
 
     private abstract class RunTargetedSettings : CommandSettings, IRunSharedSettings
@@ -400,8 +433,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         typeof(HostsValidateCommand),
         typeof(HostsGraphCommand),
         typeof(HostsVarsCommand),
-        typeof(LogsListCommand),
-        typeof(LogsShowCommand),
         typeof(LogsTailCommand),
         typeof(LogsExportCommand),
         typeof(LogsRetryCommand),
