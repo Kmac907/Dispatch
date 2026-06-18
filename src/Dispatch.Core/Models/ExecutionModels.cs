@@ -10,8 +10,10 @@ public enum PsrpAuthenticationKind
 {
     Default,
     Negotiate,
+    Kerberos,
     Basic,
-    Certificate
+    Certificate,
+    CredSsp
 }
 
 public sealed record TargetSpec(string Name, string? Source = null);

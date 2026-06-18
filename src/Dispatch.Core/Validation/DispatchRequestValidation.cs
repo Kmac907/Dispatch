@@ -155,7 +155,7 @@ public static class DispatchRequestValidator
         {
             errors.Add(new(
                 "UnsupportedPsrpAuthentication",
-                "Dispatch PSRP currently supports current-user Default or Negotiate authentication only. Explicit Basic and Certificate authentication remain later roadmap slices."));
+                "Dispatch PSRP currently supports current-user Default or Negotiate authentication only. Kerberos, CredSSP, Basic, and Certificate authentication remain later roadmap slices."));
         }
 
         if (!string.IsNullOrWhiteSpace(request.ExecutionContext.PsrpCertificateThumbprint)

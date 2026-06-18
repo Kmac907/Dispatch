@@ -165,6 +165,16 @@ public sealed class JobResultModelTests
             targets: [new TargetSpec("PC001")],
             transport: TransportKind.Psrp,
             executionContext: new ExecutionContextOptions(PsrpAuthentication: PsrpAuthenticationKind.Basic)));
+        var kerberosRequest = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            executionContext: new ExecutionContextOptions(PsrpAuthentication: PsrpAuthenticationKind.Kerberos)));
+        var credSspRequest = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            executionContext: new ExecutionContextOptions(PsrpAuthentication: PsrpAuthenticationKind.CredSsp)));
 
         var certificateRequest = DispatchRequestValidator.Validate(new DispatchRequest(
             payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
@@ -175,7 +185,12 @@ public sealed class JobResultModelTests
                 PsrpCertificateThumbprint: "ABC123")));
 
         Assert.Contains(sshRequest.Errors, error => error.Code == "UnsupportedPsrpConnectionKind");
-        Assert.Contains(basicRequest.Errors, error => error.Code == "UnsupportedPsrpAuthentication");
+        Assert.Contains(basicRequest.Errors, error =>
+            error.Code == "UnsupportedPsrpAuthentication"
+            && error.Message.Contains("Kerberos", StringComparison.Ordinal)
+            && error.Message.Contains("CredSSP", StringComparison.Ordinal));
+        Assert.Contains(kerberosRequest.Errors, error => error.Code == "UnsupportedPsrpAuthentication");
+        Assert.Contains(credSspRequest.Errors, error => error.Code == "UnsupportedPsrpAuthentication");
         Assert.Contains(certificateRequest.Errors, error => error.Code == "UnsupportedPsrpAuthentication");
     }
 
