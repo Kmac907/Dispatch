@@ -2128,6 +2128,122 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task LogsExportWritesSelectedRunFiles()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618080000-h",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T08:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T08:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618080000-h",
+                    Target: "PC008",
+                    Transport: TransportKind.Psrp,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami",
+                    State: TargetExecutionState.Succeeded,
+                    ExitCode: 0,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T08:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T08:00:04Z"),
+                    FailureCategory: FailureCategory.None,
+                    FailureMessage: null,
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618080000-h\Targets\PC008\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618080000-h\Targets\PC008\stderr.txt")
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var eventPath = Path.Combine(runRoot, result.RunId, "Admin", "events.ndjson");
+        File.WriteAllText(
+            eventPath,
+            "{\"type\":\"run.summary\",\"runId\":\"20260618080000-h\",\"timestamp\":\"2026-06-18T08:00:05Z\"}");
+        var exportRoot = Path.Combine(Path.GetTempPath(), $"dispatch-export-{Guid.NewGuid():N}");
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "export", "latest", "--dest", exportRoot, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            var root = document.RootElement;
+            Assert.Equal("20260618080000-h", root.GetProperty("runId").GetString());
+
+            var exportedResults = root.GetProperty("resultsJsonPath").GetString()!;
+            var exportedEvents = root.GetProperty("eventsNdjsonPath").GetString()!;
+            var exportedCsv = root.GetProperty("resultsCsvPath").GetString()!;
+
+            Assert.True(File.Exists(exportedResults), exportedResults);
+            Assert.True(File.Exists(exportedEvents), exportedEvents);
+            Assert.True(File.Exists(exportedCsv), exportedCsv);
+            Assert.Contains("20260618080000-h", File.ReadAllText(exportedResults));
+            Assert.Contains("run.summary", File.ReadAllText(exportedEvents));
+            var csv = File.ReadAllText(exportedCsv);
+            Assert.Contains("RunId,RunStartedAt", csv);
+            Assert.Contains("PC008", csv);
+        }
+        finally
+        {
+            if (Directory.Exists(runRoot))
+            {
+                Directory.Delete(runRoot, recursive: true);
+            }
+
+            if (Directory.Exists(exportRoot))
+            {
+                Directory.Delete(exportRoot, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task LogsExportRequiresDestination()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618090000-i",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T09:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T09:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets: [],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "export", "latest"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Invalid Dispatch Command", error);
+            Assert.Contains("logs export requires --dest <path>.", error);
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunCommandRouteUsesSharedRequestAndCommandPayload()
     {
         var planner = new CapturingPlanner();

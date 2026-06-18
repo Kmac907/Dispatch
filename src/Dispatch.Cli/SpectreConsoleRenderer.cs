@@ -323,6 +323,23 @@ internal static class SpectreConsoleRenderer
         console.Write(table);
     }
 
+    public static void RenderRunLogExport(TextWriter writer, DispatchRunLogExportResult result)
+    {
+        var console = CreateConsole(writer);
+        console.MarkupLine("[bold]Dispatch log export[/]");
+        console.WriteLine($"Run ID: {result.RunId}");
+        console.WriteLine($"Export root: {result.ExportRoot}");
+        console.WriteLine();
+
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("File");
+        table.AddColumn("Path");
+        table.AddRow("Results", Markup.Escape(result.ResultsJsonPath));
+        table.AddRow("Events", Markup.Escape(result.EventsNdjsonPath ?? "-"));
+        table.AddRow("CSV", Markup.Escape(result.ResultsCsvPath));
+        console.Write(table);
+    }
+
     public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report)
     {
         var console = CreateConsole(writer);

@@ -57,7 +57,7 @@ Use this file when you need:
 
 - durable replay of a run
 - machine ingestion
-- a stable event history for `dispatch logs tail` now, and later `logs export|retry`
+- a stable event history for `dispatch logs tail` and `dispatch logs export` now, and later `logs retry`
 
 ## Summary file
 
@@ -110,6 +110,7 @@ The current local log-inspection surface reads those same files:
 - `dispatch logs list` enumerates local runs from `Admin\results.json`
 - `dispatch logs show latest` reads the latest local `Admin\results.json` and exposes the same final-summary/output-location view as the original run result
 - `dispatch logs tail [run-id|latest] --count <n>` reads the canonical `Admin\events.ndjson` stream for the selected run and returns the last `n` durable events, defaulting to `20`
+- `dispatch logs export [run-id|latest] --dest <path>` writes a per-run export folder under the destination with `results.json`, `events.ndjson` when present, and `results.csv`
 
 ## Live dashboard progress contract
 

@@ -17,6 +17,7 @@ public sealed class DispatchCliApplication(
     TextWriter? statusWriter = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
+    private readonly DispatchRunLogExporter runLogExporter = new();
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -366,6 +367,60 @@ public sealed class DispatchCliApplication(
         }
 
         DispatchStructuredOutputRenderer.RenderRunEventTail(Console.Out, tail, outputMode);
+        return 0;
+    }
+
+    internal int RunLogsExportCommand(string? selector, string? destination, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error!);
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(destination))
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Command",
+                "logs export requires --dest <path>.");
+            return 1;
+        }
+
+        var run = runHistoryReader.ReadRunEntry(options.Value.LocalRunRoot, selector);
+        if (run is null)
+        {
+            var missingSelector = string.IsNullOrWhiteSpace(selector) ? "latest" : selector;
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Not Found",
+                $"Run '{missingSelector}' was not found under '{options.Value.LocalRunRoot}'.");
+            return 1;
+        }
+
+        DispatchRunLogExportResult exportResult;
+        try
+        {
+            exportResult = runLogExporter.Export(run, destination);
+        }
+        catch (IOException exception)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Export Failed",
+                $"The run log export could not be written. {exception.Message}");
+            return 1;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Export Failed",
+                $"The run log export could not be written. {exception.Message}");
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderRunLogExport(Console.Out, exportResult, outputMode);
         return 0;
     }
 

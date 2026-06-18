@@ -156,6 +156,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new LogsTailCommand(application);
             }
 
+            if (type == typeof(LogsExportCommand))
+            {
+                return new LogsExportCommand(application);
+            }
+
             if (PlannedCommandTypes.Contains(type))
             {
                 return Activator.CreateInstance(type);
@@ -263,7 +268,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             application.RunLogsTailCommand(settings.Selector, settings.Count, settings.Output);
     }
 
-    private sealed class LogsExportCommand() : PlannedCommand("logs export", "6.3 Structured Run Logs And Log Commands");
+    private sealed class LogsExportCommand(DispatchCliApplication application) : Command<LogsExportSettings>
+    {
+        protected override int Execute(CommandContext context, LogsExportSettings settings, CancellationToken cancellationToken) =>
+            application.RunLogsExportCommand(settings.Selector, settings.Destination, settings.Output);
+    }
 
     private sealed class LogsRetryCommand() : PlannedCommand("logs retry", "6.3 Structured Run Logs And Log Commands");
 
@@ -317,6 +326,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("-n|--count <n>")]
         public int? Count { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
+    private sealed class LogsExportSettings : CommandSettings
+    {
+        [CommandArgument(0, "[run-id|latest]")]
+        public string? Selector { get; init; }
+
+        [CommandOption("--dest <path>")]
+        public string? Destination { get; init; }
 
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }
@@ -454,7 +475,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         typeof(HostsValidateCommand),
         typeof(HostsGraphCommand),
         typeof(HostsVarsCommand),
-        typeof(LogsExportCommand),
         typeof(LogsRetryCommand),
         typeof(CredsAddCommand),
         typeof(CredsListCommand),
