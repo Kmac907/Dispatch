@@ -6,6 +6,7 @@ using Dispatch.Transports.Psrp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.Management.Automation;
 using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -138,6 +139,52 @@ public sealed class PsrpExecutionTests
         Assert.Equal("cmd.exe", result.Metadata["executable"]);
         Assert.Equal("5985", result.Metadata["port"]);
         Assert.Equal("http", result.Metadata["scheme"]);
+    }
+
+    [Fact]
+    public void PsrpPowerShellStreamMapperCapturesCurrentPowerShellStreams()
+    {
+        using var powerShell = PowerShell.Create();
+        powerShell.Streams.Warning.Add(new WarningRecord("warn"));
+        powerShell.Streams.Verbose.Add(new VerboseRecord("verbose"));
+        powerShell.Streams.Debug.Add(new DebugRecord("debug"));
+        powerShell.Streams.Information.Add(new InformationRecord("info", "Dispatch"));
+        powerShell.Streams.Error.Add(new ErrorRecord(
+            new InvalidOperationException("boom"),
+            "Dispatch.StreamFailure",
+            ErrorCategory.InvalidOperation,
+            null));
+
+        var streams = PsrpPowerShellStreamMapper.Capture(powerShell.Streams);
+
+        Assert.NotNull(streams);
+        Assert.Collection(
+            streams!,
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Error, stream.Stream);
+                Assert.Contains("boom", stream.Message);
+            },
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Warning, stream.Stream);
+                Assert.Equal("warn", stream.Message);
+            },
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Verbose, stream.Stream);
+                Assert.Equal("verbose", stream.Message);
+            },
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Debug, stream.Stream);
+                Assert.Equal("debug", stream.Message);
+            },
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Information, stream.Stream);
+                Assert.Equal("info", stream.Message);
+            });
     }
 
     [Fact]
@@ -296,6 +343,50 @@ public sealed class PsrpExecutionTests
             && item.State == TargetExecutionState.CollectingArtifacts
             && item.Details is { Operation: "artifact-download", TotalBytes: > 0 });
         Assert.True(File.Exists(Path.Combine(outputRoot.Path, "run-001", "Targets", "PC001", "artifacts", "summary.json")));
+    }
+
+    [Fact]
+    public async Task ExecutorPropagatesPsrpPowerShellStreamsIntoTargetResult()
+    {
+        using var outputRoot = TemporaryDirectory.Create();
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            commandClient: new StubCommandClient(
+                PsrpCommandResult.Success(
+                    0,
+                    "ok\r\n",
+                    string.Empty,
+                    streamRecords:
+                    [
+                        new PowerShellStreamRecord(PowerShellStreamKind.Warning, "warn"),
+                        new PowerShellStreamRecord(PowerShellStreamKind.Information, "info")
+                    ])));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new CommandPayload("whoami", "cmd", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.NotNull(target.StreamRecords);
+        Assert.Collection(
+            target.StreamRecords!,
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Warning, stream.Stream);
+                Assert.Equal("warn", stream.Message);
+            },
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Information, stream.Stream);
+                Assert.Equal("info", stream.Message);
+            });
     }
 
     private static ExecutionPlan CreatePlan(string scriptPath, TransportKind transport) =>

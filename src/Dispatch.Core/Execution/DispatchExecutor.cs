@@ -343,7 +343,8 @@ internal sealed class DispatchExecutor(
             ArtifactCollectionFailureMessage: artifacts.FailureMessage,
             SecretHandoffStatus: "not-supported",
             CleanupStatus: "not-started",
-            TransportMetadata: execution.Metadata);
+            TransportMetadata: execution.Metadata,
+            StreamRecords: execution.StreamRecords);
     }
 
     private static TargetExecutionResult CreateFailureResult(

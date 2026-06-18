@@ -93,9 +93,8 @@ catch {
                 powerShell.AddParameter("WorkingDirectory", request.WorkingDirectory ?? string.Empty);
 
                 var output = powerShell.Invoke();
-                var errorText = string.Join(
-                    Environment.NewLine,
-                    powerShell.Streams.Error.Select(static record => record.ToString()).Where(static text => !string.IsNullOrWhiteSpace(text)));
+                var streamRecords = PsrpPowerShellStreamMapper.Capture(powerShell.Streams);
+                var errorText = PsrpPowerShellStreamMapper.GetErrorText(streamRecords);
 
                 if (powerShell.HadErrors && string.IsNullOrWhiteSpace(errorText))
                 {
@@ -110,10 +109,11 @@ catch {
                         string.IsNullOrWhiteSpace(errorText)
                             ? $"PSRP command execution did not return a result for '{request.Target}'."
                             : errorText,
-                        metadata: AttemptMetadata(attempt));
+                        metadata: AttemptMetadata(attempt),
+                        streamRecords: streamRecords);
                 }
 
-                var parsed = ParseResult(payload, errorText, attempt.Scheme, attempt.Port);
+                var parsed = ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
                 return parsed;
             }
             catch (OperationCanceledException)
@@ -154,7 +154,12 @@ catch {
         return connectionInfo;
     }
 
-    internal static PsrpCommandResult ParseResult(string payload, string errorText, string scheme, int port)
+    internal static PsrpCommandResult ParseResult(
+        string payload,
+        string errorText,
+        string scheme,
+        int port,
+        IReadOnlyList<PowerShellStreamRecord>? streamRecords = null)
     {
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
@@ -174,7 +179,8 @@ catch {
                         ? "PSRP command execution failed."
                         : errorText
                     : failureMessage,
-                metadata);
+                metadata,
+                streamRecords);
         }
 
         var exitCode = root.TryGetProperty("exitCode", out var exitCodeProperty)
@@ -192,7 +198,7 @@ catch {
                 : $"{stderr}{Environment.NewLine}{errorText}";
         }
 
-        return PsrpCommandResult.Success(exitCode, stdout, stderr, metadata);
+        return PsrpCommandResult.Success(exitCode, stdout, stderr, metadata, streamRecords);
     }
 
     private static Dictionary<string, string> AttemptMetadata(EndpointAttempt attempt) =>

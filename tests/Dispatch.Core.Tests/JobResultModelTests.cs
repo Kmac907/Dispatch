@@ -28,6 +28,39 @@ public sealed class JobResultModelTests
     }
 
     [Fact]
+    public void TargetResultRoundTripsOptionalPowerShellStreams()
+    {
+        var result = CreateTargetResult(
+            TargetExecutionState.Succeeded,
+            FailureCategory.None) with
+        {
+            StreamRecords =
+            [
+                new PowerShellStreamRecord(PowerShellStreamKind.Warning, "careful"),
+                new PowerShellStreamRecord(PowerShellStreamKind.Information, "details")
+            ]
+        };
+
+        var json = DispatchJson.Serialize(result);
+        var roundTripped = JsonSerializer.Deserialize<TargetExecutionResult>(json, DispatchJson.Options);
+
+        Assert.NotNull(roundTripped);
+        Assert.NotNull(roundTripped.StreamRecords);
+        Assert.Collection(
+            roundTripped.StreamRecords,
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Warning, stream.Stream);
+                Assert.Equal("careful", stream.Message);
+            },
+            stream =>
+            {
+                Assert.Equal(PowerShellStreamKind.Information, stream.Stream);
+                Assert.Equal("details", stream.Message);
+            });
+    }
+
+    [Fact]
     public void ExecutionPlanRoundTripsThroughJson()
     {
         var job = new DispatchJob(

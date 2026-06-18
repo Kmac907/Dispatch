@@ -21,7 +21,8 @@ public sealed record TargetExecutionResult(
     string? ArtifactCollectionFailureMessage = null,
     string? SecretHandoffStatus = null,
     string? CleanupStatus = null,
-    IReadOnlyDictionary<string, string>? TransportMetadata = null)
+    IReadOnlyDictionary<string, string>? TransportMetadata = null,
+    IReadOnlyList<PowerShellStreamRecord>? StreamRecords = null)
 {
     public long DurationMs => Convert.ToInt64((EndedAt - StartedAt).TotalMilliseconds);
 }

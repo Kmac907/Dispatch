@@ -9,21 +9,24 @@ public sealed record PsrpCommandResult(
     string Stderr,
     FailureCategory FailureCategory = FailureCategory.None,
     string? FailureMessage = null,
-    IReadOnlyDictionary<string, string>? Metadata = null)
+    IReadOnlyDictionary<string, string>? Metadata = null,
+    IReadOnlyList<PowerShellStreamRecord>? StreamRecords = null)
 {
     public static PsrpCommandResult Success(
         int exitCode,
         string stdout,
         string stderr,
-        IReadOnlyDictionary<string, string>? metadata = null) =>
-        new(true, exitCode, stdout, stderr, Metadata: metadata);
+        IReadOnlyDictionary<string, string>? metadata = null,
+        IReadOnlyList<PowerShellStreamRecord>? streamRecords = null) =>
+        new(true, exitCode, stdout, stderr, Metadata: metadata, StreamRecords: streamRecords);
 
     public static PsrpCommandResult Failed(
         FailureCategory failureCategory,
         string failureMessage,
         IReadOnlyDictionary<string, string>? metadata = null,
+        IReadOnlyList<PowerShellStreamRecord>? streamRecords = null,
         int? exitCode = null,
         string stdout = "",
         string stderr = "") =>
-        new(false, exitCode, stdout, stderr, failureCategory, failureMessage, metadata);
+        new(false, exitCode, stdout, stderr, failureCategory, failureMessage, metadata, streamRecords);
 }

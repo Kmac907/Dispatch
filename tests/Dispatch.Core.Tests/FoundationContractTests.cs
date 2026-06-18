@@ -103,7 +103,7 @@ public sealed class FoundationContractTests
         Assert.True(descriptor.Capabilities.SupportsScriptExecution);
         Assert.True(descriptor.Capabilities.SupportsCommandExecution);
         Assert.False(descriptor.Capabilities.RequiresEndpointLocalScriptPath);
-        Assert.False(descriptor.Capabilities.SupportsPowerShellStreams);
+        Assert.True(descriptor.Capabilities.SupportsPowerShellStreams);
         Assert.True(descriptor.Capabilities.SupportsStreamedFileTransfer);
         Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
         Assert.False(descriptor.Capabilities.SupportsExplicitCredential);

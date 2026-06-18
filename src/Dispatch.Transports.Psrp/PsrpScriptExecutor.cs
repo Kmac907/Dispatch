@@ -39,7 +39,8 @@ public sealed class PsrpScriptExecutor(
                     EndedAt: DateTimeOffset.UtcNow,
                     FailureCategory: FailureCategory.PayloadPreparationFailed,
                     FailureMessage: $"PSRP script execution requires a planned remote script path for '{request.Target.Target.Name}'.",
-                    Metadata: metadata);
+                    Metadata: metadata,
+                    StreamRecords: null);
             }
 
             metadata["remoteScriptPath"] = remoteScriptPath;
@@ -70,7 +71,8 @@ public sealed class PsrpScriptExecutor(
                 EndedAt: DateTimeOffset.UtcNow,
                 FailureCategory: FailureCategory.PayloadPreparationFailed,
                 FailureMessage: $"PSRP command execution requires a prepared command for '{request.Target.Target.Name}'.",
-                Metadata: metadata);
+                Metadata: metadata,
+                StreamRecords: null);
         }
 
         metadata["commandShell"] = commandPayload.Shell;
@@ -122,7 +124,8 @@ public sealed class PsrpScriptExecutor(
                 EndedAt: DateTimeOffset.UtcNow,
                 FailureCategory: result.FailureCategory,
                 FailureMessage: result.FailureMessage,
-                Metadata: metadata);
+                Metadata: metadata,
+                StreamRecords: result.StreamRecords);
         }
 
         var effectiveExitCode = result.ExitCode ?? 0;
@@ -140,7 +143,8 @@ public sealed class PsrpScriptExecutor(
             FailureMessage: succeeded
                 ? null
                 : $"PSRP execution exited with code {effectiveExitCode}; expected {string.Join(", ", request.Plan.Job.ExpectedExitCodes)}.",
-            Metadata: metadata);
+            Metadata: metadata,
+            StreamRecords: result.StreamRecords);
     }
 
     private static string RenderArguments(IReadOnlyList<string> arguments) =>

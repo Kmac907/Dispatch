@@ -10,4 +10,5 @@ public sealed record TransportScriptExecutionResult(
     DateTimeOffset EndedAt,
     FailureCategory FailureCategory,
     string? FailureMessage,
-    IReadOnlyDictionary<string, string>? Metadata = null);
+    IReadOnlyDictionary<string, string>? Metadata = null,
+    IReadOnlyList<PowerShellStreamRecord>? StreamRecords = null);

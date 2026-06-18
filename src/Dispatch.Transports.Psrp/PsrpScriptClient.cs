@@ -131,9 +131,8 @@ catch {
                 powerShell.AddParameter("ScriptArguments", request.ScriptArguments.ToArray());
 
                 var output = powerShell.Invoke();
-                var errorText = string.Join(
-                    Environment.NewLine,
-                    powerShell.Streams.Error.Select(static record => record.ToString()).Where(static text => !string.IsNullOrWhiteSpace(text)));
+                var streamRecords = PsrpPowerShellStreamMapper.Capture(powerShell.Streams);
+                var errorText = PsrpPowerShellStreamMapper.GetErrorText(streamRecords);
 
                 if (powerShell.HadErrors && string.IsNullOrWhiteSpace(errorText))
                 {
@@ -148,10 +147,11 @@ catch {
                         string.IsNullOrWhiteSpace(errorText)
                             ? $"PSRP script execution did not return a result for '{request.Target}'."
                             : errorText,
-                        metadata: PsrpCommandClient.AttemptMetadata(attempt.Scheme, attempt.Port));
+                        metadata: PsrpCommandClient.AttemptMetadata(attempt.Scheme, attempt.Port),
+                        streamRecords: streamRecords);
                 }
 
-                return PsrpCommandClient.ParseResult(payload, errorText, attempt.Scheme, attempt.Port);
+                return PsrpCommandClient.ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
             }
             catch (OperationCanceledException)
             {
