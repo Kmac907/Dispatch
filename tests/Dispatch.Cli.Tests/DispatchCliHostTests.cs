@@ -30,6 +30,7 @@ public sealed class DispatchCliHostTests
         Assert.Contains(TransportKind.WinRm, probeKinds);
         Assert.Contains(TransportKind.WinRm, descriptorKinds);
         Assert.Contains(TransportKind.Psrp, executorKinds);
+        Assert.Contains(TransportKind.Psrp, probeKinds);
         Assert.Contains(TransportKind.Psrp, descriptorKinds);
     }
 }
