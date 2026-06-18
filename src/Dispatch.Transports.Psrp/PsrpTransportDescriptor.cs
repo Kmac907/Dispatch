@@ -16,7 +16,7 @@ public sealed class PsrpTransportDescriptor : ITransportDescriptor
         SupportsCommandExecution: true,
         RequiresEndpointLocalScriptPath: false,
         SupportsNativeFileCopy: false,
-        SupportsStreamedFileTransfer: false,
+        SupportsStreamedFileTransfer: true,
         SupportsPowerShellStreams: false,
         SupportsCurrentUser: true,
         SupportsExplicitCredential: false,

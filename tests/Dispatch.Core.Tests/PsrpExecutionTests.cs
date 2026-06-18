@@ -1,10 +1,19 @@
 using Dispatch.Core.Execution;
+using Dispatch.Core.Hosting;
 using Dispatch.Core.Models;
 using Dispatch.Core.Transports;
 using Dispatch.Transports.Psrp;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using System.IO.Compression;
+using System.Runtime.Versioning;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Dispatch.Core.Tests;
 
+[SupportedOSPlatform("windows")]
 public sealed class PsrpExecutionTests
 {
     [Fact]
@@ -158,6 +167,137 @@ public sealed class PsrpExecutionTests
         Assert.Equal(FailureCategory.AuthorizationFailed, category);
     }
 
+    [Fact]
+    public async Task PsrpArtifactCollectorUsesDefaultFoldersAndCollectsArtifacts()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        var client = new RecordingArtifactClient(request =>
+            request.RemoteFolder.EndsWith(@"\logs", StringComparison.OrdinalIgnoreCase)
+                ? PsrpArtifactDownloadResult.Success(Convert.FromBase64String(CreateZipBase64(("install.log", "ok"))))
+                : PsrpArtifactDownloadResult.Missing());
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path);
+        var plan = CreateArtifactPlan(targetRoot.Path, target, new ArtifactPolicy());
+
+        var result = await collector.CollectAsync(plan, target, CancellationToken.None);
+
+        Assert.Equal("collected", result.Status);
+        Assert.Equal([Path.Combine("logs", "install.log")], result.Artifacts);
+        Assert.Equal(
+            [
+                @"C:\ProgramData\Dispatch\Runs\run-001\logs",
+                @"C:\ProgramData\Dispatch\Runs\run-001\artifacts"
+            ],
+            client.Requests.Select(static request => request.RemoteFolder));
+        Assert.True(File.Exists(Path.Combine(targetRoot.Path, "logs", "install.log")));
+    }
+
+    [Fact]
+    public async Task PsrpArtifactCollectorUsesDeclaredFoldersAndReturnsNotFound()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        var client = new RecordingArtifactClient(_ => PsrpArtifactDownloadResult.Missing());
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path);
+        var plan = CreateArtifactPlan(targetRoot.Path, target, new ArtifactPolicy(["custom", @"reports\daily"]));
+
+        var result = await collector.CollectAsync(plan, target, CancellationToken.None);
+
+        Assert.Equal("not-found", result.Status);
+        Assert.Empty(result.Artifacts);
+        Assert.Equal(
+            [
+                @"C:\ProgramData\Dispatch\Runs\run-001\custom",
+                @"C:\ProgramData\Dispatch\Runs\run-001\reports\daily"
+            ],
+            client.Requests.Select(static request => request.RemoteFolder));
+    }
+
+    [Fact]
+    public async Task PsrpArtifactCollectorReturnsFailedWhenDownloadFails()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        var client = new RecordingArtifactClient(_ => PsrpArtifactDownloadResult.Failed("no access"));
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path);
+        var plan = CreateArtifactPlan(targetRoot.Path, target, new ArtifactPolicy(["logs"]));
+
+        var result = await collector.CollectAsync(plan, target, CancellationToken.None);
+
+        Assert.Equal("failed", result.Status);
+        Assert.Empty(result.Artifacts);
+        Assert.Equal("no access", result.FailureMessage);
+    }
+
+    [Fact]
+    public async Task PsrpArtifactCollectorReportsMeasuredDownloadProgressWhenArchiveSizeIsKnown()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        var zipBytes = Convert.FromBase64String(CreateZipBase64(("install.log", "ok")));
+        var progress = new List<DispatchExecutionProgress>();
+        var client = new RecordingArtifactClient(request =>
+        {
+            request.ProgressReporter?.Invoke(new PsrpArtifactProgress(zipBytes.Length / 2, zipBytes.Length));
+            request.ProgressReporter?.Invoke(new PsrpArtifactProgress(zipBytes.Length, zipBytes.Length));
+            return PsrpArtifactDownloadResult.Success(zipBytes);
+        });
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path);
+        var plan = CreateArtifactPlan(targetRoot.Path, target, new ArtifactPolicy(["logs"]));
+
+        var result = await collector.CollectAsync(plan, target, CancellationToken.None, progress.Add);
+
+        Assert.Equal("collected", result.Status);
+        Assert.Contains(progress, item =>
+            item.Target == "PC001"
+            && item.State == TargetExecutionState.CollectingArtifacts
+            && item.Details is
+            {
+                Operation: "artifact-download",
+                CompletedBytes: > 0,
+                TotalBytes: > 0
+            });
+    }
+
+    [Fact]
+    public async Task ExecutorCollectsArtifactsOverPsrpWhenCollectorIsRegisteredInDi()
+    {
+        using var outputRoot = TemporaryDirectory.Create();
+        var artifactZip = Convert.FromBase64String(CreateZipBase64(("summary.json", "{\"ok\":true}")));
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            commandClient: new StubCommandClient(PsrpCommandResult.Success(0, "scf\\admin\r\n", string.Empty)),
+            artifactClient: new RecordingArtifactClient(request =>
+            {
+                request.ProgressReporter?.Invoke(new PsrpArtifactProgress(artifactZip.Length, artifactZip.Length));
+                return request.RemoteFolder.EndsWith(@"\logs", StringComparison.OrdinalIgnoreCase)
+                    ? PsrpArtifactDownloadResult.Missing()
+                    : PsrpArtifactDownloadResult.Success(artifactZip);
+            }));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var observer = new RecordingExecutionObserver();
+        var request = new DispatchRequest(
+            payload: new CommandPayload("whoami", "cmd", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, observer, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.Succeeded, target.State);
+        Assert.Equal("collected", target.ArtifactCollectionStatus);
+        Assert.Equal([Path.Combine("artifacts", "summary.json")], target.Artifacts);
+        Assert.Contains(observer.Progress, item =>
+            item.Target == "PC001"
+            && item.State == TargetExecutionState.CollectingArtifacts
+            && item.Details is { Operation: "artifact-download", TotalBytes: > 0 });
+        Assert.True(File.Exists(Path.Combine(outputRoot.Path, "run-001", "Targets", "PC001", "artifacts", "summary.json")));
+    }
+
     private static ExecutionPlan CreatePlan(string scriptPath, TransportKind transport) =>
         new(
             RunId: "run-001",
@@ -177,6 +317,26 @@ public sealed class PsrpExecutionTests
             Targets: [CreateTargetExecution()],
             DryRun: false);
 
+    private static ExecutionPlan CreateArtifactPlan(string targetRoot, TargetExecution target, ArtifactPolicy artifactPolicy) =>
+        new(
+            RunId: "run-001",
+            CreatedAt: DateTimeOffset.Parse("2026-06-18T20:00:00Z"),
+            Job: new DispatchJob(
+                RunId: "run-001",
+                Targets: [target.Target],
+                Payload: new CommandPayload("whoami", "cmd", null),
+                Transport: TransportKind.Psrp,
+                ExecutionContext: new ExecutionContextOptions(),
+                ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", false),
+                TimeoutPolicy: new TimeoutPolicy(),
+                RetryPolicy: new RetryPolicy(),
+                ExpectedExitCodes: [0],
+                ArtifactPolicy: artifactPolicy,
+                ResultPolicy: new ResultPolicy(targetRoot)),
+            Targets: [target],
+            DryRun: false,
+            RemoteRunRoot: @"C:\ProgramData\Dispatch\Runs\run-001");
+
     private static TargetExecution CreateTargetExecution() =>
         new(
             RunId: "run-001",
@@ -184,6 +344,16 @@ public sealed class PsrpExecutionTests
             State: TargetExecutionState.Pending,
             PlannedLocalTargetRoot: @"C:\Dispatch\Tests\run-001\Targets\PC001",
             PlannedLocalResultPath: @"C:\Dispatch\Tests\run-001\Targets\PC001\result.json",
+            PlannedRemoteScriptPath: null,
+            PlannedCommand: null);
+
+    private static TargetExecution CreateArtifactTargetExecution(string targetRoot) =>
+        new(
+            RunId: "run-001",
+            Target: new TargetSpec("PC001"),
+            State: TargetExecutionState.Pending,
+            PlannedLocalTargetRoot: targetRoot,
+            PlannedLocalResultPath: Path.Combine(targetRoot, "result.json"),
             PlannedRemoteScriptPath: null,
             PlannedCommand: null);
 
@@ -238,6 +408,55 @@ public sealed class PsrpExecutionTests
                 PlannedRemoteScriptPath: null,
                 PlannedCommand: null));
 
+    private static ServiceProvider BuildProvider(
+        string localRunRoot,
+        IPsrpCommandClient? commandClient = null,
+        IPsrpScriptClient? scriptClient = null,
+        IPsrpArtifactClient? artifactClient = null,
+        IPsrpDnsResolver? dnsResolver = null,
+        IPsrpPortProbe? portProbe = null)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Dispatch:LocalRunRoot"] = localRunRoot,
+                ["Dispatch:RemoteRunRoot"] = @"C:\ProgramData\Dispatch\Runs",
+                ["Dispatch:ExpectedExitCodes:0"] = "0"
+            })
+            .Build();
+
+        var services = new ServiceCollection()
+            .AddLogging()
+            .AddDispatchCore(configuration)
+            .AddDispatchPsrpTransport();
+
+        services.Replace(ServiceDescriptor.Singleton<IRunIdGenerator>(new FixedRunIdGenerator("run-001")));
+        services.Replace(ServiceDescriptor.Singleton<ISystemClock>(new FixedSystemClock(new DateTimeOffset(2026, 06, 18, 12, 0, 0, TimeSpan.Zero))));
+        services.Replace(ServiceDescriptor.Singleton<IPsrpDnsResolver>(dnsResolver ?? new StubDnsResolver(PsrpProbeResult.Success)));
+        services.Replace(ServiceDescriptor.Singleton<IPsrpPortProbe>(portProbe ?? new StubPortProbe(PsrpProbeResult.Success, PsrpProbeResult.Success)));
+        services.Replace(ServiceDescriptor.Singleton<IPsrpCommandClient>(commandClient ?? new StubCommandClient(PsrpCommandResult.Success(0, string.Empty, string.Empty))));
+        services.Replace(ServiceDescriptor.Singleton<IPsrpScriptClient>(scriptClient ?? new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty))));
+        services.Replace(ServiceDescriptor.Singleton<IPsrpArtifactClient>(artifactClient ?? new RecordingArtifactClient(_ => PsrpArtifactDownloadResult.Missing())));
+
+        return services.BuildServiceProvider(validateScopes: true);
+    }
+
+    private static string CreateZipBase64(params (string RelativePath, string Content)[] entries)
+    {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (relativePath, content) in entries)
+            {
+                var entry = archive.CreateEntry(relativePath.Replace('\\', '/'));
+                using var writer = new StreamWriter(entry.Open(), Encoding.UTF8, 1024, leaveOpen: false);
+                writer.Write(content);
+            }
+        }
+
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
     private sealed class StubDnsResolver(PsrpProbeResult result) : IPsrpDnsResolver
     {
         public Task<PsrpProbeResult> ResolveAsync(string target, CancellationToken cancellationToken) =>
@@ -260,5 +479,37 @@ public sealed class PsrpExecutionTests
     {
         public Task<PsrpCommandResult> ExecuteAsync(PsrpScriptRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(result);
+    }
+
+    private sealed class RecordingArtifactClient(Func<PsrpArtifactRequest, PsrpArtifactDownloadResult> resultFactory) : IPsrpArtifactClient
+    {
+        public List<PsrpArtifactRequest> Requests { get; } = [];
+
+        public Task<PsrpArtifactDownloadResult> DownloadFolderAsync(PsrpArtifactRequest request, CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(resultFactory(request));
+        }
+    }
+
+    private sealed class RecordingExecutionObserver : IDispatchExecutionObserver
+    {
+        public List<DispatchExecutionProgress> Progress { get; } = [];
+
+        public Task OnProgressAsync(DispatchExecutionProgress progress, CancellationToken cancellationToken)
+        {
+            Progress.Add(progress);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FixedRunIdGenerator(string runId) : IRunIdGenerator
+    {
+        public string CreateRunId() => runId;
+    }
+
+    private sealed class FixedSystemClock(DateTimeOffset utcNow) : ISystemClock
+    {
+        public DateTimeOffset UtcNow => utcNow;
     }
 }
