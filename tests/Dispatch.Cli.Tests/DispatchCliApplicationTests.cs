@@ -23,9 +23,8 @@ public sealed class DispatchCliApplicationTests
         Assert.Equal(0, exitCode);
         Assert.Contains("Windows-native automation runner", output);
         Assert.Contains("PowerShell scripts and commands", normalized);
-        Assert.Contains("direct WinRM command execution", normalized);
-        Assert.Contains("PsExec and raw WinRM execute today", normalized);
-        Assert.Contains("PSRP is the next transport priority", normalized);
+        Assert.Contains("PsExec, raw WinRM, and PSRP execute today", normalized);
+        Assert.Contains("raw WinRM and PSRP live-validated", normalized);
         Assert.Contains("apply", output);
         Assert.Contains("dispatch run", output);
         Assert.Contains("dispatch doctor", output);
@@ -1978,8 +1977,8 @@ public sealed class DispatchCliApplicationTests
         Assert.Contains("--trace", output);
         Assert.Contains("Compatibility", output);
         Assert.Contains("Usage:", output);
-        Assert.Contains("Current execution support: run ps through psexec or winrm; run cmd and run exe through winrm", normalized);
-        Assert.Contains("dispatch run cmd whoami --target PC001 --transport winrm", normalized);
+        Assert.Contains("Current execution support: run ps through psexec, winrm, or psrp; run cmd and run exe through winrm or psrp", normalized);
+        Assert.Contains("dispatch run cmd whoami --target PC001 --transport psrp", normalized);
     }
 
     [Fact]

@@ -76,7 +76,7 @@ As of 2026-06-18, raw WinRM is implemented and live-validated, and PSRP has scri
 
 - `Dispatch.Core` owns planning, target normalization, script transfer/preparation, orchestration, result models, logging abstractions, artifact collection, and transport interfaces.
 - `Dispatch.Transports.PsExec` owns PsExec command construction and captured process execution.
-- `Dispatch.Transports.Psrp` is a planned transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
+- `Dispatch.Transports.Psrp` is a partially implemented transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol. The current slices cover request validation, planning, DI registration, WSMan reachability probing, direct command execution, runspace-backed remote script execution, and approved-host live validation, while artifact collection plus richer PowerShell stream handling remain unfinished.
 - `Dispatch.Transports.WinRm` is an implemented raw WinRM transport with request-validation, planning, DI, endpoint-probe coverage, chunked script-transfer preparation planning, remote script upload, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, artifact collection, and successful elevated live validation against the current WinRM validation hosts.
 - `Dispatch.Cli` owns `dispatch.exe`, Spectre.Console.Cli command routing, automation commands, operator output, live rendering, and structured output modes.
 - `Dispatch.PowerShell` owns thin wrapper functions over the command tree, such as `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`.
@@ -421,7 +421,7 @@ PsExec SAS/secret handoff model:
 
 #### PSRP transport
 
-PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slices wire `psrp` into the shared request/validation/planning/DI surface, perform WSMan reachability probing, execute direct command payloads through a remote runspace, execute script payloads through a runspace-backed remote script path, successfully live-validate both current execution paths against the approved hosts, and still leave artifact collection plus richer stream mapping for later roadmap work.
+PSRP is the PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slices wire `psrp` into the shared request/validation/planning/DI surface, perform WSMan reachability probing, execute direct command payloads through a remote runspace, execute script payloads through a runspace-backed remote script path, successfully live-validate both current execution paths against the approved hosts, and still leave artifact collection plus richer stream mapping for later roadmap work.
 
 Script example:
 
