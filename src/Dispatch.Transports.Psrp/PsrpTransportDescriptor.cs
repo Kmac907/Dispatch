@@ -12,12 +12,12 @@ public sealed class PsrpTransportDescriptor : ITransportDescriptor
     public string Name => TransportName;
 
     public TransportCapabilities Capabilities { get; } = new(
-        SupportsScriptExecution: true,
+        SupportsScriptExecution: false,
         SupportsCommandExecution: true,
         RequiresEndpointLocalScriptPath: false,
         SupportsNativeFileCopy: false,
-        SupportsStreamedFileTransfer: true,
-        SupportsPowerShellStreams: true,
+        SupportsStreamedFileTransfer: false,
+        SupportsPowerShellStreams: false,
         SupportsCurrentUser: true,
         SupportsExplicitCredential: false,
         SupportsRunAsSystem: false,

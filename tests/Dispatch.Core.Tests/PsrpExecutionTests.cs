@@ -64,7 +64,7 @@ public sealed class PsrpExecutionTests
     public async Task PsrpExecutorReturnsStructuredNotImplementedFailure()
     {
         using var script = TemporaryScript.Create();
-        var executor = new PsrpScriptExecutor();
+        var executor = new PsrpScriptExecutor(new StubCommandClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
         var request = new TransportScriptExecutionRequest(
             CreatePlan(script.Path, TransportKind.Psrp),
             CreateTargetExecution(),
@@ -77,10 +77,68 @@ public sealed class PsrpExecutionTests
         var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
 
         Assert.Equal(FailureCategory.TransportUnavailable, result.FailureCategory);
-        Assert.Equal("PSRP execution is not implemented in this slice.", result.FailureMessage);
+        Assert.Equal("PSRP script execution is not implemented in this slice.", result.FailureMessage);
         Assert.NotNull(result.Metadata);
         Assert.Equal("psrp", result.Metadata["transport"]);
-        Assert.Equal("not-implemented", result.Metadata["mode"]);
+        Assert.Equal("script-not-implemented", result.Metadata["mode"]);
+    }
+
+    [Fact]
+    public async Task PsrpExecutorExecutesCommandPayloadThroughCommandClient()
+    {
+        var executor = new PsrpScriptExecutor(new StubCommandClient(
+            PsrpCommandResult.Success(
+                exitCode: 0,
+                stdout: "scf\\kmaclachlan1125\r\n",
+                stderr: string.Empty,
+                metadata: new Dictionary<string, string>
+                {
+                    ["scheme"] = "http",
+                    ["port"] = "5985"
+                })));
+        var request = CreateCommandExecutionRequest("whoami", "cmd");
+
+        var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Null(result.FailureMessage);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("scf\\kmaclachlan1125\r\n", result.Stdout);
+        Assert.Equal(string.Empty, result.Stderr);
+        Assert.NotNull(result.Metadata);
+        Assert.Equal("executed", result.Metadata["mode"]);
+        Assert.Equal("completed", result.Metadata["executionStatus"]);
+        Assert.Equal("cmd", result.Metadata["commandShell"]);
+        Assert.Equal("cmd.exe /c whoami", result.Metadata["executionCommand"]);
+        Assert.Equal("cmd.exe", result.Metadata["executable"]);
+        Assert.Equal("5985", result.Metadata["port"]);
+        Assert.Equal("http", result.Metadata["scheme"]);
+    }
+
+    [Fact]
+    public async Task PsrpExecutorMapsUnexpectedExitCodeForCommandPayload()
+    {
+        var executor = new PsrpScriptExecutor(new StubCommandClient(
+            PsrpCommandResult.Success(
+                exitCode: 5,
+                stdout: string.Empty,
+                stderr: "nope")));
+        var request = CreateCommandExecutionRequest("whoami", "cmd");
+
+        var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
+
+        Assert.Equal(FailureCategory.UnexpectedExitCode, result.FailureCategory);
+        Assert.Contains("expected 0", result.FailureMessage);
+        Assert.Equal(5, result.ExitCode);
+    }
+
+    [Fact]
+    public void PsrpFailureClassifierMapsAccessDeniedToAuthorizationFailed()
+    {
+        var category = PsrpFailureClassifier.Classify(
+            "Connecting to remote server 82H9704 failed with the following error message : Access is denied.");
+
+        Assert.Equal(FailureCategory.AuthorizationFailed, category);
     }
 
     private static ExecutionPlan CreatePlan(string scriptPath, TransportKind transport) =>
@@ -112,6 +170,45 @@ public sealed class PsrpExecutionTests
             PlannedRemoteScriptPath: null,
             PlannedCommand: null);
 
+    private static TransportScriptExecutionRequest CreateCommandExecutionRequest(
+        string commandLine,
+        string shell,
+        string? workingDirectory = null)
+    {
+        var target = new TargetExecution(
+            RunId: "run-001",
+            Target: new TargetSpec("PC001"),
+            State: TargetExecutionState.Pending,
+            PlannedLocalTargetRoot: @"C:\Dispatch\Tests\run-001\Targets\PC001",
+            PlannedLocalResultPath: @"C:\Dispatch\Tests\run-001\Targets\PC001\result.json",
+            PlannedRemoteScriptPath: null,
+            PlannedCommand: new DirectExecutionCommand("cmd.exe", ["/c", commandLine]));
+        var plan = new ExecutionPlan(
+            RunId: "run-001",
+            CreatedAt: DateTimeOffset.Parse("2026-06-17T20:00:00Z"),
+            Job: new DispatchJob(
+                RunId: "run-001",
+                Targets: [new TargetSpec("PC001")],
+                Payload: new CommandPayload(commandLine, shell, workingDirectory),
+                Transport: TransportKind.Psrp,
+                ExecutionContext: new ExecutionContextOptions(),
+                ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", false),
+                TimeoutPolicy: new TimeoutPolicy(),
+                RetryPolicy: new RetryPolicy(),
+                ExpectedExitCodes: [0],
+                ArtifactPolicy: new ArtifactPolicy([]),
+                ResultPolicy: new ResultPolicy(@"C:\Dispatch\Tests\run-001")),
+            Targets: [target],
+            DryRun: false);
+        var preparation = new TargetScriptPreparationResult(
+            Target: target.Target,
+            RemoteScriptPath: string.Empty,
+            AdminShareScriptPath: null,
+            Succeeded: true);
+
+        return new TransportScriptExecutionRequest(plan, target, preparation);
+    }
+
     private static TransportEndpointProbeRequest CreateProbeRequest(string targetName) =>
         new(
             CreatePlan(@"C:\Dispatch\Tests\Fix.ps1", TransportKind.Psrp),
@@ -134,5 +231,11 @@ public sealed class PsrpExecutionTests
     {
         public Task<PsrpProbeResult> CanConnectAsync(string target, int port, CancellationToken cancellationToken) =>
             Task.FromResult(port == 5985 ? httpResult : httpsResult);
+    }
+
+    private sealed class StubCommandClient(PsrpCommandResult result) : IPsrpCommandClient
+    {
+        public Task<PsrpCommandResult> ExecuteAsync(PsrpCommandRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
     }
 }

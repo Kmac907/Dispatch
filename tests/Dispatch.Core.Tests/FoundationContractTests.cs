@@ -100,10 +100,11 @@ public sealed class FoundationContractTests
         var descriptor = new PsrpTransportDescriptor();
 
         Assert.Equal(TransportKind.Psrp, descriptor.Kind);
-        Assert.True(descriptor.Capabilities.SupportsScriptExecution);
+        Assert.False(descriptor.Capabilities.SupportsScriptExecution);
         Assert.True(descriptor.Capabilities.SupportsCommandExecution);
         Assert.False(descriptor.Capabilities.RequiresEndpointLocalScriptPath);
-        Assert.True(descriptor.Capabilities.SupportsPowerShellStreams);
+        Assert.False(descriptor.Capabilities.SupportsPowerShellStreams);
+        Assert.False(descriptor.Capabilities.SupportsStreamedFileTransfer);
         Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
         Assert.False(descriptor.Capabilities.SupportsExplicitCredential);
     }
