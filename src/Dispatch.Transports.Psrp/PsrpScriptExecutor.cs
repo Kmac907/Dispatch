@@ -127,8 +127,9 @@ public sealed class PsrpScriptExecutor(
 
         if (!result.Succeeded)
         {
-            metadata["mode"] = "execution-failed";
-            metadata["executionStatus"] = "failed";
+            var timedOut = result.FailureCategory == FailureCategory.TimedOut;
+            metadata["mode"] = timedOut ? "execution-timed-out" : "execution-failed";
+            metadata["executionStatus"] = timedOut ? "timed-out" : "failed";
             metadata["failureCategory"] = result.FailureCategory.ToString();
             return new TransportScriptExecutionResult(
                 ExitCode: result.ExitCode,
@@ -146,6 +147,7 @@ public sealed class PsrpScriptExecutor(
         var succeeded = request.Plan.Job.ExpectedExitCodes.Contains(effectiveExitCode);
         metadata["mode"] = "executed";
         metadata["executionStatus"] = "completed";
+        metadata["failureCategory"] = (succeeded ? FailureCategory.None : FailureCategory.UnexpectedExitCode).ToString();
 
         return new TransportScriptExecutionResult(
             ExitCode: effectiveExitCode,

@@ -23,10 +23,17 @@ internal static class PsrpFailureClassifier
             return FailureCategory.AuthenticationFailed;
         }
 
+        if (message.Contains("timed out", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("OperationTimeout", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("OpenTimeout", StringComparison.OrdinalIgnoreCase))
+        {
+            return FailureCategory.TimedOut;
+        }
+
         if (message.Contains("Connecting to remote server", StringComparison.OrdinalIgnoreCase)
             || message.Contains("WinRM client cannot process the request", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("No such host is known", StringComparison.OrdinalIgnoreCase)
-            || message.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+            || message.Contains("No such host is known", StringComparison.OrdinalIgnoreCase))
         {
             return FailureCategory.TransportUnavailable;
         }

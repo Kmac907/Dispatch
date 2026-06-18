@@ -76,6 +76,7 @@ catch {
 
         var failures = new List<string>();
         FailureCategory? classifiedFailure = null;
+        EndpointAttempt? classifiedAttempt = null;
 
         foreach (var attempt in attempts)
         {
@@ -132,13 +133,22 @@ catch {
             {
                 var failureMessage = exception.Message;
                 failures.Add($"{attempt.Scheme}://{request.Target}:{attempt.Port}/wsman: {failureMessage}");
-                classifiedFailure ??= PsrpFailureClassifier.Classify(failureMessage);
+                if (classifiedFailure is null)
+                {
+                    classifiedFailure = PsrpFailureClassifier.Classify(failureMessage);
+                    classifiedAttempt = attempt;
+                }
             }
         }
 
         return PsrpCommandResult.Failed(
             classifiedFailure ?? FailureCategory.TransportUnavailable,
-            $"Could not execute a PSRP command on '{request.Target}'. {string.Join(" ", failures)}");
+            $"Could not execute a PSRP command on '{request.Target}'. {string.Join(" ", failures)}",
+            metadata: MergeConnectionMetadata(
+                classifiedAttempt is { } failedAttempt ? AttemptMetadata(failedAttempt) : null,
+                request.ConfigurationName,
+                request.ConnectionKind,
+                request.AuthenticationKind));
     }
 
     private static WSManConnectionInfo CreateConnectionInfo(PsrpCommandRequest request, EndpointAttempt attempt)

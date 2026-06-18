@@ -157,6 +157,7 @@ public sealed class PsrpExecutionTests
         Assert.Equal("cmd", result.Metadata["commandShell"]);
         Assert.Equal("cmd.exe /c whoami", result.Metadata["executionCommand"]);
         Assert.Equal("cmd.exe", result.Metadata["executable"]);
+        Assert.Equal(nameof(FailureCategory.None), result.Metadata["failureCategory"]);
         Assert.Equal("5985", result.Metadata["port"]);
         Assert.Equal("http", result.Metadata["scheme"]);
         Assert.Equal("negotiate", result.Metadata["authentication"]);
@@ -248,6 +249,10 @@ public sealed class PsrpExecutionTests
         Assert.Equal(FailureCategory.UnexpectedExitCode, result.FailureCategory);
         Assert.Contains("expected 0", result.FailureMessage);
         Assert.Equal(5, result.ExitCode);
+        Assert.NotNull(result.Metadata);
+        Assert.Equal("executed", result.Metadata["mode"]);
+        Assert.Equal("completed", result.Metadata["executionStatus"]);
+        Assert.Equal(nameof(FailureCategory.UnexpectedExitCode), result.Metadata["failureCategory"]);
     }
 
     [Fact]
@@ -257,6 +262,81 @@ public sealed class PsrpExecutionTests
             "Connecting to remote server 82H9704 failed with the following error message : Access is denied.");
 
         Assert.Equal(FailureCategory.AuthorizationFailed, category);
+    }
+
+    [Fact]
+    public void PsrpFailureClassifierMapsTimeoutMessagesToTimedOut()
+    {
+        var category = PsrpFailureClassifier.Classify(
+            "Connecting to remote server 82H9704 failed because the operation timed out.");
+
+        Assert.Equal(FailureCategory.TimedOut, category);
+    }
+
+    [Fact]
+    public async Task PsrpExecutorMarksTimedOutFailuresWithTimedOutMetadata()
+    {
+        var executor = new PsrpScriptExecutor(
+            new StubCommandClient(
+                PsrpCommandResult.Failed(
+                    FailureCategory.TimedOut,
+                    "The operation timed out.",
+                    metadata: new Dictionary<string, string>
+                    {
+                        ["scheme"] = "http",
+                        ["port"] = "5985"
+                    })),
+            new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
+        var request = CreateCommandExecutionRequest("whoami", "cmd");
+
+        var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
+
+        Assert.Equal(FailureCategory.TimedOut, result.FailureCategory);
+        Assert.NotNull(result.Metadata);
+        Assert.Equal("execution-timed-out", result.Metadata["mode"]);
+        Assert.Equal("timed-out", result.Metadata["executionStatus"]);
+        Assert.Equal(nameof(FailureCategory.TimedOut), result.Metadata["failureCategory"]);
+        Assert.Equal("http", result.Metadata["scheme"]);
+        Assert.Equal("5985", result.Metadata["port"]);
+        Assert.Equal("default", result.Metadata["authentication"]);
+        Assert.Equal("wsman", result.Metadata["connectionKind"]);
+        Assert.Equal("Microsoft.PowerShell", result.Metadata["configurationName"]);
+    }
+
+    [Fact]
+    public async Task DispatchExecutorMapsPsrpTimedOutFailureToTimedOutTargetState()
+    {
+        using var outputRoot = TemporaryDirectory.Create();
+        using var provider = BuildProvider(
+            outputRoot.Path,
+            commandClient: new StubCommandClient(
+                PsrpCommandResult.Failed(
+                    FailureCategory.TimedOut,
+                    "The operation timed out.",
+                    metadata: new Dictionary<string, string>
+                    {
+                        ["scheme"] = "http",
+                        ["port"] = "5985"
+                    })));
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new CommandPayload("whoami", "cmd", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal(TargetExecutionState.TimedOut, target.State);
+        Assert.Equal(FailureCategory.TimedOut, target.FailureCategory);
+        Assert.NotNull(target.TransportMetadata);
+        Assert.Equal("execution-timed-out", target.TransportMetadata["mode"]);
+        Assert.Equal("timed-out", target.TransportMetadata["executionStatus"]);
+        Assert.Equal(nameof(FailureCategory.TimedOut), target.TransportMetadata["failureCategory"]);
     }
 
     [Fact]
