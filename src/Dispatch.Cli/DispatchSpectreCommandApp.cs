@@ -161,6 +161,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new LogsExportCommand(application);
             }
 
+            if (type == typeof(LogsRetryCommand))
+            {
+                return new LogsRetryCommand(application);
+            }
+
             if (PlannedCommandTypes.Contains(type))
             {
                 return Activator.CreateInstance(type);
@@ -274,7 +279,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             application.RunLogsExportCommand(settings.Selector, settings.Destination, settings.Output);
     }
 
-    private sealed class LogsRetryCommand() : PlannedCommand("logs retry", "6.3 Structured Run Logs And Log Commands");
+    private sealed class LogsRetryCommand(DispatchCliApplication application) : Command<LogsRetrySettings>
+    {
+        protected override int Execute(CommandContext context, LogsRetrySettings settings, CancellationToken cancellationToken) =>
+            application.RunLogsRetryCommand(settings.Selector, settings.Output);
+    }
 
     private sealed class CredsAddCommand() : PlannedCommand("creds add", "6.4 Credential References");
 
@@ -338,6 +347,15 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--dest <path>")]
         public string? Destination { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
+    private sealed class LogsRetrySettings : CommandSettings
+    {
+        [CommandArgument(0, "[run-id|latest]")]
+        public string? Selector { get; init; }
 
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }
@@ -475,7 +493,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         typeof(HostsValidateCommand),
         typeof(HostsGraphCommand),
         typeof(HostsVarsCommand),
-        typeof(LogsRetryCommand),
         typeof(CredsAddCommand),
         typeof(CredsListCommand),
         typeof(CredsTestCommand),

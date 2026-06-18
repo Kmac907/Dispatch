@@ -2244,6 +2244,227 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task LogsRetryBuildsRetryPlanForFailedCommandTargets()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618100000-j",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T10:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T10:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami /all",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618100000-j",
+                    Target: "PC010",
+                    Transport: TransportKind.Psrp,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami /all",
+                    State: TargetExecutionState.Failed,
+                    ExitCode: 1,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T10:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T10:00:04Z"),
+                    FailureCategory: FailureCategory.ExecutionFailed,
+                    FailureMessage: "Command failed.",
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618100000-j\Targets\PC010\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618100000-j\Targets\PC010\stderr.txt",
+                    TransportMetadata: new Dictionary<string, string>
+                    {
+                        ["commandShell"] = "cmd"
+                    }),
+                new TargetExecutionResult(
+                    RunId: "20260618100000-j",
+                    Target: "PC011",
+                    Transport: TransportKind.Psrp,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami /all",
+                    State: TargetExecutionState.Succeeded,
+                    ExitCode: 0,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T10:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T10:00:04Z"),
+                    FailureCategory: FailureCategory.None,
+                    FailureMessage: null,
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618100000-j\Targets\PC011\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618100000-j\Targets\PC011\stderr.txt",
+                    TransportMetadata: new Dictionary<string, string>
+                    {
+                        ["commandShell"] = "cmd"
+                    })
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "retry", "latest", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            var root = document.RootElement;
+            Assert.Equal("20260618100000-j", root.GetProperty("runId").GetString());
+            Assert.Equal(1, root.GetProperty("retryTargetCount").GetInt32());
+            Assert.True(root.GetProperty("reexecutionSupported").GetBoolean());
+            Assert.Contains("dispatch run cmd", root.GetProperty("suggestedCommand").GetString());
+            Assert.Contains("PC010", root.GetProperty("suggestedCommand").GetString());
+            Assert.DoesNotContain("PC011", root.GetProperty("suggestedCommand").GetString());
+            var target = Assert.Single(root.GetProperty("targets").EnumerateArray());
+            Assert.Equal("PC010", target.GetProperty("target").GetString());
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsRetryDoesNotReconstructScriptPayloads()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618110000-k",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T11:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T11:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.WinRm,
+            PayloadType: PayloadKind.Script,
+            PayloadName: "Fix.ps1",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618110000-k",
+                    Target: "PC012",
+                    Transport: TransportKind.WinRm,
+                    PayloadType: PayloadKind.Script,
+                    PayloadName: "Fix.ps1",
+                    State: TargetExecutionState.TimedOut,
+                    ExitCode: null,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T11:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T11:00:04Z"),
+                    FailureCategory: FailureCategory.TimedOut,
+                    FailureMessage: "Timed out.",
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618110000-k\Targets\PC012\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618110000-k\Targets\PC012\stderr.txt")
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "retry", "latest", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            Assert.False(document.RootElement.GetProperty("reexecutionSupported").GetBoolean());
+            Assert.True(document.RootElement.GetProperty("suggestedCommand").ValueKind == JsonValueKind.Null);
+            Assert.Contains("script path", document.RootElement.GetProperty("message").GetString());
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsRetryReportsNoRetryableTargets()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618120000-l",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T12:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T12:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618120000-l",
+                    Target: "PC013",
+                    Transport: TransportKind.Psrp,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami",
+                    State: TargetExecutionState.Succeeded,
+                    ExitCode: 0,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T12:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T12:00:04Z"),
+                    FailureCategory: FailureCategory.None,
+                    FailureMessage: null,
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618120000-l\Targets\PC013\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618120000-l\Targets\PC013\stderr.txt")
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "retry", "latest", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            Assert.Equal(0, document.RootElement.GetProperty("retryTargetCount").GetInt32());
+            Assert.False(document.RootElement.GetProperty("reexecutionSupported").GetBoolean());
+            Assert.Empty(document.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.Contains("no failed", document.RootElement.GetProperty("message").GetString());
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsRetryReturnsNotFoundForMissingRun()
+    {
+        var runRoot = CreateRunHistoryRoot();
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "retry", "missing-run"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Dispatch Logs Not Found", error);
+            Assert.Contains("missing-run", error);
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunCommandRouteUsesSharedRequestAndCommandPayload()
     {
         var planner = new CapturingPlanner();

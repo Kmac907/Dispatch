@@ -127,6 +127,29 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderRunRetryPlan(TextWriter writer, DispatchRunRetryPlan retryPlan, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(retryPlan));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    retryPlan,
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, retryPlan);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                SpectreConsoleRenderer.RenderRunRetryPlan(writer, retryPlan);
+                break;
+        }
+    }
+
     private static void WriteYaml<T>(TextWriter writer, T value)
     {
         var node = JsonSerializer.SerializeToNode(value, DispatchJson.Options);

@@ -340,6 +340,48 @@ internal static class SpectreConsoleRenderer
         console.Write(table);
     }
 
+    public static void RenderRunRetryPlan(TextWriter writer, DispatchRunRetryPlan retryPlan)
+    {
+        var console = CreateConsole(writer);
+        console.MarkupLine("[bold]Dispatch retry plan[/]");
+        console.WriteLine($"Run ID: {retryPlan.RunId}");
+        console.WriteLine($"Transport: {retryPlan.Transport}");
+        console.WriteLine($"Payload: {retryPlan.PayloadType} {retryPlan.PayloadName}");
+        console.WriteLine($"Retry targets: {retryPlan.RetryTargetCount}");
+        console.WriteLine($"Automatic re-execution: {(retryPlan.ReexecutionSupported ? "manual command available" : "not available")}");
+        console.WriteLine(Markup.Escape(retryPlan.Message));
+        if (!string.IsNullOrWhiteSpace(retryPlan.SuggestedCommand))
+        {
+            console.WriteLine();
+            console.WriteLine("Suggested command:");
+            console.WriteLine(retryPlan.SuggestedCommand);
+        }
+
+        if (retryPlan.Targets.Count == 0)
+        {
+            return;
+        }
+
+        console.WriteLine();
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("Target");
+        table.AddColumn("State");
+        table.AddColumn("Failure");
+        table.AddColumn("Exit");
+        table.AddColumn("Message");
+        foreach (var target in retryPlan.Targets)
+        {
+            table.AddRow(
+                Markup.Escape(target.Target),
+                Markup.Escape(target.State.ToString()),
+                Markup.Escape(target.FailureCategory.ToString()),
+                Markup.Escape(target.ExitCode?.ToString() ?? "-"),
+                Markup.Escape(target.FailureMessage ?? "-"));
+        }
+
+        console.Write(table);
+    }
+
     public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report)
     {
         var console = CreateConsole(writer);

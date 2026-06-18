@@ -18,6 +18,7 @@ public sealed class DispatchCliApplication(
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
+    private readonly DispatchRunRetryPlanner runRetryPlanner = new();
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -421,6 +422,30 @@ public sealed class DispatchCliApplication(
         }
 
         DispatchStructuredOutputRenderer.RenderRunLogExport(Console.Out, exportResult, outputMode);
+        return 0;
+    }
+
+    internal int RunLogsRetryCommand(string? selector, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error!);
+            return 1;
+        }
+
+        var run = runHistoryReader.ReadRunEntry(options.Value.LocalRunRoot, selector);
+        if (run is null)
+        {
+            var missingSelector = string.IsNullOrWhiteSpace(selector) ? "latest" : selector;
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Not Found",
+                $"Run '{missingSelector}' was not found under '{options.Value.LocalRunRoot}'.");
+            return 1;
+        }
+
+        var retryPlan = runRetryPlanner.Create(run);
+        DispatchStructuredOutputRenderer.RenderRunRetryPlan(Console.Out, retryPlan, outputMode);
         return 0;
     }
 

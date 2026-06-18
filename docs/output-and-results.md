@@ -57,7 +57,7 @@ Use this file when you need:
 
 - durable replay of a run
 - machine ingestion
-- a stable event history for `dispatch logs tail` and `dispatch logs export` now, and later `logs retry`
+- a stable event history for `dispatch logs tail`, `dispatch logs export`, and `dispatch logs retry`
 
 ## Summary file
 
@@ -111,6 +111,9 @@ The current local log-inspection surface reads those same files:
 - `dispatch logs show latest` reads the latest local `Admin\results.json` and exposes the same final-summary/output-location view as the original run result
 - `dispatch logs tail [run-id|latest] --count <n>` reads the canonical `Admin\events.ndjson` stream for the selected run and returns the last `n` durable events, defaulting to `20`
 - `dispatch logs export [run-id|latest] --dest <path>` writes a per-run export folder under the destination with `results.json`, `events.ndjson` when present, and `results.csv`
+- `dispatch logs retry [run-id|latest]` reads `Admin\results.json` and emits a read-only retry plan for failed, timed-out, and cancelled targets; it includes a manual `dispatch run cmd ...` suggestion only when the original command payload can be reconstructed from the final summary
+
+`logs retry` does not automatically re-execute endpoints in v1. Script retries are reported as not reconstructible from `results.json` because the final summary intentionally does not persist the original script path or script arguments.
 
 ## Live dashboard progress contract
 
