@@ -3,7 +3,9 @@ using Dispatch.Core.Transports;
 
 namespace Dispatch.Transports.Psrp;
 
-public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITransportScriptExecutor
+public sealed class PsrpScriptExecutor(
+    IPsrpCommandClient commandClient,
+    IPsrpScriptClient scriptClient) : ITransportScriptExecutor
 {
     public TransportKind Kind => TransportKind.Psrp;
 
@@ -22,21 +24,40 @@ public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITran
             ["executionStatus"] = "pending"
         };
 
-        if (request.Plan.Job.Payload is not CommandPayload commandPayload)
+        if (request.Plan.Job.Payload is ScriptPayload scriptPayload)
         {
-            metadata["mode"] = "script-not-implemented";
-            metadata["executionStatus"] = "failed";
-            return new TransportScriptExecutionResult(
-                ExitCode: null,
-                Stdout: string.Empty,
-                Stderr: string.Empty,
-                StartedAt: startedAt,
-                EndedAt: DateTimeOffset.UtcNow,
-                FailureCategory: FailureCategory.TransportUnavailable,
-                FailureMessage: "PSRP script execution is not implemented in this slice.",
-                Metadata: metadata);
+            var remoteScriptPath = request.Target.PlannedRemoteScriptPath ?? request.Preparation.RemoteScriptPath;
+            if (string.IsNullOrWhiteSpace(remoteScriptPath))
+            {
+                metadata["mode"] = "execution-unavailable";
+                metadata["executionStatus"] = "failed";
+                return new TransportScriptExecutionResult(
+                    ExitCode: null,
+                    Stdout: string.Empty,
+                    Stderr: string.Empty,
+                    StartedAt: startedAt,
+                    EndedAt: DateTimeOffset.UtcNow,
+                    FailureCategory: FailureCategory.PayloadPreparationFailed,
+                    FailureMessage: $"PSRP script execution requires a planned remote script path for '{request.Target.Target.Name}'.",
+                    Metadata: metadata);
+            }
+
+            metadata["remoteScriptPath"] = remoteScriptPath;
+            metadata["executionCommand"] = $"powershell.exe -NoProfile -ExecutionPolicy Bypass -File {remoteScriptPath}";
+
+            var scriptResult = await scriptClient.ExecuteAsync(
+                new PsrpScriptRequest(
+                    request.Target.Target.Name,
+                    scriptPayload.ScriptPath,
+                    scriptPayload.ScriptArguments,
+                    request.Plan.Job.TimeoutPolicy.ExecutionTimeout,
+                    remoteScriptPath),
+                cancellationToken).ConfigureAwait(false);
+
+            return CreateResult(request, startedAt, metadata, scriptResult);
         }
 
+        var commandPayload = (CommandPayload)request.Plan.Job.Payload;
         if (request.Target.PlannedCommand is null)
         {
             metadata["mode"] = "execution-unavailable";
@@ -60,7 +81,7 @@ public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITran
 
         metadata["executionCommand"] = request.Target.PlannedCommand.RenderedCommand;
 
-        var result = await commandClient.ExecuteAsync(
+        var commandResult = await commandClient.ExecuteAsync(
             new PsrpCommandRequest(
                 request.Target.Target.Name,
                 request.Target.PlannedCommand.Executable,
@@ -69,6 +90,15 @@ public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITran
                 request.Plan.Job.TimeoutPolicy.ExecutionTimeout),
             cancellationToken).ConfigureAwait(false);
 
+        return CreateResult(request, startedAt, metadata, commandResult);
+    }
+
+    private static TransportScriptExecutionResult CreateResult(
+        TransportScriptExecutionRequest request,
+        DateTimeOffset startedAt,
+        Dictionary<string, string> metadata,
+        PsrpCommandResult result)
+    {
         if (result.Metadata is not null)
         {
             foreach (var pair in result.Metadata)
@@ -77,7 +107,7 @@ public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITran
             }
         }
 
-        metadata["executable"] = request.Target.PlannedCommand.Executable;
+        metadata["executable"] = request.Target.PlannedCommand?.Executable ?? "powershell.exe";
 
         if (!result.Succeeded)
         {
@@ -95,12 +125,13 @@ public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITran
                 Metadata: metadata);
         }
 
-        var succeeded = result.ExitCode is not null && request.Plan.Job.ExpectedExitCodes.Contains(result.ExitCode.Value);
+        var effectiveExitCode = result.ExitCode ?? 0;
+        var succeeded = request.Plan.Job.ExpectedExitCodes.Contains(effectiveExitCode);
         metadata["mode"] = "executed";
         metadata["executionStatus"] = "completed";
 
         return new TransportScriptExecutionResult(
-            ExitCode: result.ExitCode,
+            ExitCode: effectiveExitCode,
             Stdout: result.Stdout,
             Stderr: result.Stderr,
             StartedAt: startedAt,
@@ -108,7 +139,7 @@ public sealed class PsrpScriptExecutor(IPsrpCommandClient commandClient) : ITran
             FailureCategory: succeeded ? FailureCategory.None : FailureCategory.UnexpectedExitCode,
             FailureMessage: succeeded
                 ? null
-                : $"PSRP command exited with code {result.ExitCode}; expected {string.Join(", ", request.Plan.Job.ExpectedExitCodes)}.",
+                : $"PSRP execution exited with code {effectiveExitCode}; expected {string.Join(", ", request.Plan.Job.ExpectedExitCodes)}.",
             Metadata: metadata);
     }
 

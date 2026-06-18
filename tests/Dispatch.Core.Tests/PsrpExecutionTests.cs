@@ -61,10 +61,21 @@ public sealed class PsrpExecutionTests
     }
 
     [Fact]
-    public async Task PsrpExecutorReturnsStructuredNotImplementedFailure()
+    public async Task PsrpExecutorExecutesScriptPayloadThroughScriptClient()
     {
         using var script = TemporaryScript.Create();
-        var executor = new PsrpScriptExecutor(new StubCommandClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
+        var executor = new PsrpScriptExecutor(
+            new StubCommandClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)),
+            new StubScriptClient(
+                PsrpCommandResult.Success(
+                    exitCode: 0,
+                    stdout: "script-ok\r\n",
+                    stderr: string.Empty,
+                    metadata: new Dictionary<string, string>
+                    {
+                        ["scheme"] = "http",
+                        ["port"] = "5985"
+                    })));
         var request = new TransportScriptExecutionRequest(
             CreatePlan(script.Path, TransportKind.Psrp),
             CreateTargetExecution(),
@@ -76,11 +87,15 @@ public sealed class PsrpExecutionTests
 
         var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
 
-        Assert.Equal(FailureCategory.TransportUnavailable, result.FailureCategory);
-        Assert.Equal("PSRP script execution is not implemented in this slice.", result.FailureMessage);
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Null(result.FailureMessage);
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("script-ok\r\n", result.Stdout);
         Assert.NotNull(result.Metadata);
         Assert.Equal("psrp", result.Metadata["transport"]);
-        Assert.Equal("script-not-implemented", result.Metadata["mode"]);
+        Assert.Equal("executed", result.Metadata["mode"]);
+        Assert.Equal("powershell.exe", result.Metadata["executable"]);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", result.Metadata["remoteScriptPath"]);
     }
 
     [Fact]
@@ -95,7 +110,8 @@ public sealed class PsrpExecutionTests
                 {
                     ["scheme"] = "http",
                     ["port"] = "5985"
-                })));
+                })),
+            new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
         var request = CreateCommandExecutionRequest("whoami", "cmd");
 
         var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
@@ -122,7 +138,8 @@ public sealed class PsrpExecutionTests
             PsrpCommandResult.Success(
                 exitCode: 5,
                 stdout: string.Empty,
-                stderr: "nope")));
+                stderr: "nope")),
+            new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
         var request = CreateCommandExecutionRequest("whoami", "cmd");
 
         var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
@@ -236,6 +253,12 @@ public sealed class PsrpExecutionTests
     private sealed class StubCommandClient(PsrpCommandResult result) : IPsrpCommandClient
     {
         public Task<PsrpCommandResult> ExecuteAsync(PsrpCommandRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+    }
+
+    private sealed class StubScriptClient(PsrpCommandResult result) : IPsrpScriptClient
+    {
+        public Task<PsrpCommandResult> ExecuteAsync(PsrpScriptRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(result);
     }
 }

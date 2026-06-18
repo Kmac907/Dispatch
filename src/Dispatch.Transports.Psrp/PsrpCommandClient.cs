@@ -113,7 +113,7 @@ catch {
                         metadata: AttemptMetadata(attempt));
                 }
 
-                var parsed = ParseResult(payload, errorText, attempt);
+                var parsed = ParseResult(payload, errorText, attempt.Scheme, attempt.Port);
                 return parsed;
             }
             catch (OperationCanceledException)
@@ -154,12 +154,12 @@ catch {
         return connectionInfo;
     }
 
-    private static PsrpCommandResult ParseResult(string payload, string errorText, EndpointAttempt attempt)
+    internal static PsrpCommandResult ParseResult(string payload, string errorText, string scheme, int port)
     {
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
         var succeeded = root.TryGetProperty("succeeded", out var succeededProperty) && succeededProperty.ValueKind == JsonValueKind.True;
-        var metadata = AttemptMetadata(attempt);
+        var metadata = AttemptMetadata(scheme, port);
 
         if (!succeeded)
         {
@@ -196,14 +196,17 @@ catch {
     }
 
     private static Dictionary<string, string> AttemptMetadata(EndpointAttempt attempt) =>
+        AttemptMetadata(attempt.Scheme, attempt.Port);
+
+    internal static Dictionary<string, string> AttemptMetadata(string scheme, int port) =>
         new(StringComparer.OrdinalIgnoreCase)
         {
-            ["scheme"] = attempt.Scheme,
-            ["port"] = attempt.Port.ToString(),
+            ["scheme"] = scheme,
+            ["port"] = port.ToString(),
             ["protocol"] = "psrp-over-wsman"
         };
 
-    private static int ClampMilliseconds(TimeSpan timeout)
+    internal static int ClampMilliseconds(TimeSpan timeout)
     {
         var milliseconds = timeout.TotalMilliseconds;
         if (milliseconds <= 0)

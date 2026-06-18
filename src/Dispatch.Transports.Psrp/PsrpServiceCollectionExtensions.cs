@@ -13,6 +13,7 @@ public static class PsrpServiceCollectionExtensions
         services.AddSingleton<IPsrpDnsResolver, PsrpDnsResolver>();
         services.AddSingleton<IPsrpPortProbe, PsrpPortProbe>();
         services.AddSingleton<IPsrpCommandClient, PsrpCommandClient>();
+        services.AddSingleton<IPsrpScriptClient, PsrpScriptClient>();
         services.AddSingleton<ITransportEndpointProbe, PsrpEndpointProbe>();
         services.AddSingleton<ITransportScriptExecutor, PsrpScriptExecutor>();
         return services;

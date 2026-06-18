@@ -55,7 +55,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 ### Current transport priority
 
-As of 2026-06-18, raw WinRM is implemented and live-validated, and PSRP has initial shared-transport slices in place while the remaining PSRP runspace surface remains the next transport implementation priority. The current codebase has two completed transport paths: PsExec and raw WinRM. The current PSRP slices accept `psrp` requests for script and command payloads, register PSRP services in the host, perform DNS plus default WSMan port reachability probing, advertise the current capability surface, execute direct command payloads through a PowerShell remote runspace, successfully live-validate that command path through an elevated `run cmd whoami` against `82H9704` and `92H9704`, and return a structured not-yet-implemented execution failure for script payloads instead of failing as an unknown executor. Raw WinRM now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, and artifact collection over the WinRM channel. An elevated live raw WinRM `run cmd whoami` validation succeeds against `82H9704` and `92H9704`. Further PsExec-first roadmap work remains deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging.
+As of 2026-06-18, raw WinRM is implemented and live-validated, and PSRP has script and command execution slices in place while the remaining PSRP result/artifact surface remains the next transport implementation priority. The current codebase has two completed transport paths: PsExec and raw WinRM. The current PSRP slices accept `psrp` requests for script and command payloads, register PSRP services in the host, perform DNS plus default WSMan port reachability probing, advertise the current capability surface, execute direct command payloads through a PowerShell remote runspace, execute script payloads through a runspace-backed remote script path, successfully live-validate both current execution paths through elevated `run cmd whoami` and `run ps <temp-script>` runs against `82H9704` and `92H9704`, and still leave artifact collection plus richer PowerShell stream handling unfinished. Raw WinRM now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, and artifact collection over the WinRM channel. An elevated live raw WinRM `run cmd whoami` validation succeeds against `82H9704` and `92H9704`. Further PsExec-first roadmap work remains deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
 ## 3. Non-Goals
 
@@ -169,8 +169,8 @@ Dispatch has one request model, but each transport/payload combination must be e
 ```text
 psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
 psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
-psrp   + ScriptPayload   = validation/planning/DI/probe slices implemented; script execution over PSRP remains roadmap work
-psrp   + CommandPayload  = partial implementation; validation/planning/DI/probe plus remote-runspace command execution and at least one successful elevated live validation are implemented, while script execution, richer stream/configuration support, and artifact support remain
+psrp   + ScriptPayload   = partial implementation; validation/planning/DI/probe plus runspace-backed remote script execution and at least one successful elevated live validation are implemented, while artifact collection and richer stream/configuration support remain
+psrp   + CommandPayload  = partial implementation; validation/planning/DI/probe plus remote-runspace command execution and at least one successful elevated live validation are implemented, while artifact collection, richer stream/configuration support, and broader live-validation coverage remain
 winrm  + ScriptPayload   = implemented; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, timeout classification, artifact collection, and elevated live validation completed
 winrm  + CommandPayload  = implemented; planning, probe, raw-shell-backed direct command execution, timeout classification, artifact collection, and elevated live validation completed
 ```
@@ -421,7 +421,7 @@ PsExec SAS/secret handoff model:
 
 #### PSRP transport
 
-PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slices wire `psrp` into the shared request/validation/planning/DI surface, perform WSMan reachability probing, execute direct command payloads through a remote runspace, successfully live-validate that command path against the current approved hosts, and still return a structured not-yet-implemented execution failure for script payloads; the remaining runspace path described below is still roadmap work.
+PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slices wire `psrp` into the shared request/validation/planning/DI surface, perform WSMan reachability probing, execute direct command payloads through a remote runspace, execute script payloads through a runspace-backed remote script path, successfully live-validate both current execution paths against the approved hosts, and still leave artifact collection plus richer stream mapping for later roadmap work.
 
 Script example:
 
@@ -441,7 +441,7 @@ Invoke-Command -ComputerName PC001 -ScriptBlock {
 
 PSRP capabilities:
 
-- Supports script and command execution through a real PowerShell remoting session.
+- Supports script and command execution through the PSRP remoting session, with the current script slice using a runspace-backed remote script path and the later roadmap retaining richer native stream behavior.
 - Captures PowerShell output, error, warning, verbose, debug, and information streams where practical.
 - Supports current user / Negotiate by default.
 - Can later support explicit `PSCredential`, certificate authentication, configuration names, and SSH key-based PSRP.
@@ -459,7 +459,7 @@ PSRP credential model:
 
 PSRP SAS/secret handoff model:
 
-- Dispatch does not yet have PSRP script-payload execution or supported PSRP SAS token handoff.
+- Dispatch does not yet have supported PSRP SAS token handoff.
 - Post-MVP preferred handoff is still the protected secret-file model so scripts receive a file path instead of a raw token.
 - For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, transfers the protected secret file to the endpoint over the PSRP remoting channel, and invokes the script with only the protected secret-file path.
 - PSRP invocation must pass a secret reference, not the raw secret value, for the default model.
