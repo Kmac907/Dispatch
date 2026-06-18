@@ -1,8 +1,10 @@
 using Dispatch.Core.Models;
 using Dispatch.Core.Transports;
+using System.Runtime.Versioning;
 
 namespace Dispatch.Transports.Psrp;
 
+[SupportedOSPlatform("windows")]
 public sealed class PsrpScriptExecutor(
     IPsrpCommandClient commandClient,
     IPsrpScriptClient scriptClient) : ITransportScriptExecutor
@@ -21,7 +23,8 @@ public sealed class PsrpScriptExecutor(
             ["transport"] = "psrp",
             ["mode"] = "execution-pending",
             ["payloadType"] = request.Plan.Job.Payload.PayloadType.ToString().ToLowerInvariant(),
-            ["executionStatus"] = "pending"
+            ["executionStatus"] = "pending",
+            ["configurationName"] = PsrpCommandClient.NormalizeConfigurationName(request.Plan.Job.ExecutionContext.PsrpConfigurationName)
         };
 
         if (request.Plan.Job.Payload is ScriptPayload scriptPayload)
@@ -52,7 +55,8 @@ public sealed class PsrpScriptExecutor(
                     scriptPayload.ScriptPath,
                     scriptPayload.ScriptArguments,
                     request.Plan.Job.TimeoutPolicy.ExecutionTimeout,
-                    remoteScriptPath),
+                    remoteScriptPath,
+                    request.Plan.Job.ExecutionContext.PsrpConfigurationName),
                 cancellationToken).ConfigureAwait(false);
 
             return CreateResult(request, startedAt, metadata, scriptResult);
@@ -89,7 +93,8 @@ public sealed class PsrpScriptExecutor(
                 request.Target.PlannedCommand.Executable,
                 RenderArguments(request.Target.PlannedCommand.Arguments),
                 commandPayload.WorkingDirectory,
-                request.Plan.Job.TimeoutPolicy.ExecutionTimeout),
+                request.Plan.Job.TimeoutPolicy.ExecutionTimeout,
+                request.Plan.Job.ExecutionContext.PsrpConfigurationName),
             cancellationToken).ConfigureAwait(false);
 
         return CreateResult(request, startedAt, metadata, commandResult);

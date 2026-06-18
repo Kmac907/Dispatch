@@ -100,6 +100,24 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerPreservesPsrpConfigurationNameInExecutionContext()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: true,
+            executionContext: new ExecutionContextOptions(PsrpConfigurationName: "PowerShell.7"));
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+
+        Assert.Equal("PowerShell.7", plan.Job.ExecutionContext.PsrpConfigurationName);
+    }
+
+    [Fact]
     public async Task PlannerAllowsWinRmScriptPayloadAndRequiresEndpointLocalScriptPath()
     {
         using var script = TemporaryScript.Create("Fix.ps1");

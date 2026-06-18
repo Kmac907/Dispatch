@@ -10,7 +10,6 @@ namespace Dispatch.Transports.Psrp;
 public sealed class PsrpArtifactClient : IPsrpArtifactClient
 {
     private const string ApplicationName = "/wsman";
-    private const string ShellUri = "http://schemas.microsoft.com/powershell/Microsoft.PowerShell";
     private const int HttpPort = 5985;
     private const int HttpsPort = 5986;
     private const string RemoteArtifactWrapper = """
@@ -225,12 +224,13 @@ finally {
 
     private static WSManConnectionInfo CreateConnectionInfo(PsrpArtifactRequest request, EndpointAttempt attempt)
     {
+        var configurationName = PsrpCommandClient.NormalizeConfigurationName(request.ConfigurationName);
         var connectionInfo = new WSManConnectionInfo(
             attempt.UseSsl,
             request.Target,
             attempt.Port,
             ApplicationName,
-            ShellUri,
+            PsrpCommandClient.BuildShellUri(configurationName),
             credential: null);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)

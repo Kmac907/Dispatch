@@ -10,9 +10,9 @@ namespace Dispatch.Transports.Psrp;
 public sealed class PsrpCommandClient : IPsrpCommandClient
 {
     private const string ApplicationName = "/wsman";
-    private const string ShellUri = "http://schemas.microsoft.com/powershell/Microsoft.PowerShell";
     private const int HttpPort = 5985;
     private const int HttpsPort = 5986;
+    internal const string DefaultConfigurationName = "Microsoft.PowerShell";
     private const string RemoteProcessWrapper = """
 param(
   [string]$Executable,
@@ -114,6 +114,10 @@ catch {
                 }
 
                 var parsed = ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
+                parsed = parsed with
+                {
+                    Metadata = MergeConfigurationMetadata(parsed.Metadata, request.ConfigurationName)
+                };
                 return parsed;
             }
             catch (OperationCanceledException)
@@ -135,12 +139,13 @@ catch {
 
     private static WSManConnectionInfo CreateConnectionInfo(PsrpCommandRequest request, EndpointAttempt attempt)
     {
+        var configurationName = NormalizeConfigurationName(request.ConfigurationName);
         var connectionInfo = new WSManConnectionInfo(
             attempt.UseSsl,
             request.Target,
             attempt.Port,
             ApplicationName,
-            ShellUri,
+            BuildShellUri(configurationName),
             credential: null);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)
@@ -211,6 +216,26 @@ catch {
             ["port"] = port.ToString(),
             ["protocol"] = "psrp-over-wsman"
         };
+
+    internal static string NormalizeConfigurationName(string? configurationName) =>
+        string.IsNullOrWhiteSpace(configurationName)
+            ? DefaultConfigurationName
+            : configurationName.Trim();
+
+    internal static string BuildShellUri(string configurationName) =>
+        $"http://schemas.microsoft.com/powershell/{NormalizeConfigurationName(configurationName)}";
+
+    internal static Dictionary<string, string> MergeConfigurationMetadata(
+        IReadOnlyDictionary<string, string>? metadata,
+        string? configurationName)
+    {
+        var merged = metadata is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase);
+
+        merged["configurationName"] = NormalizeConfigurationName(configurationName);
+        return merged;
+    }
 
     internal static int ClampMilliseconds(TimeSpan timeout)
     {

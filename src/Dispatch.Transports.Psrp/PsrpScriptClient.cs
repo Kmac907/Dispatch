@@ -10,7 +10,6 @@ namespace Dispatch.Transports.Psrp;
 public sealed class PsrpScriptClient : IPsrpScriptClient
 {
     private const string ApplicationName = "/wsman";
-    private const string ShellUri = "http://schemas.microsoft.com/powershell/Microsoft.PowerShell";
     private const int HttpPort = 5985;
     private const int HttpsPort = 5986;
     private const string RemoteScriptWrapper = """
@@ -151,7 +150,12 @@ catch {
                         streamRecords: streamRecords);
                 }
 
-                return PsrpCommandClient.ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
+                var parsed = PsrpCommandClient.ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
+                parsed = parsed with
+                {
+                    Metadata = PsrpCommandClient.MergeConfigurationMetadata(parsed.Metadata, request.ConfigurationName)
+                };
+                return parsed;
             }
             catch (OperationCanceledException)
             {
@@ -172,12 +176,13 @@ catch {
 
     private static WSManConnectionInfo CreateConnectionInfo(PsrpScriptRequest request, EndpointAttempt attempt)
     {
+        var configurationName = PsrpCommandClient.NormalizeConfigurationName(request.ConfigurationName);
         var connectionInfo = new WSManConnectionInfo(
             attempt.UseSsl,
             request.Target,
             attempt.Port,
             ApplicationName,
-            ShellUri,
+            PsrpCommandClient.BuildShellUri(configurationName),
             credential: null);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)

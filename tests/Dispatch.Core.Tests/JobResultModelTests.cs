@@ -68,7 +68,7 @@ public sealed class JobResultModelTests
             Targets: [new TargetSpec("PC001", "computer-name")],
             Payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", ["-Verbose"]),
             Transport: TransportKind.PsExec,
-            ExecutionContext: new ExecutionContextOptions(RunAsSystem: true),
+            ExecutionContext: new ExecutionContextOptions(RunAsSystem: true, PsrpConfigurationName: "PowerShell.7"),
             ScriptTransferPolicy: new ScriptTransferPolicy(DispatchDefaults.RemoteRunRoot, RequiresEndpointLocalScriptPath: true),
             TimeoutPolicy: new TimeoutPolicy(ExecutionTimeout: TimeSpan.FromMinutes(30)),
             RetryPolicy: new RetryPolicy(),
@@ -99,6 +99,8 @@ public sealed class JobResultModelTests
         Assert.Equal("run-001", roundTripped.RunId);
         Assert.True(roundTripped.DryRun);
         Assert.Equal(TransportKind.PsExec, roundTripped.Job.Transport);
+        Assert.True(roundTripped.Job.ExecutionContext.RunAsSystem);
+        Assert.Equal("PowerShell.7", roundTripped.Job.ExecutionContext.PsrpConfigurationName);
         Assert.Equal(TargetExecutionState.Pending, roundTripped.Targets[0].State);
     }
 

@@ -83,11 +83,12 @@ public sealed class PsrpExecutionTests
                     stderr: string.Empty,
                     metadata: new Dictionary<string, string>
                     {
+                        ["configurationName"] = "PowerShell.7",
                         ["scheme"] = "http",
                         ["port"] = "5985"
                     })));
         var request = new TransportScriptExecutionRequest(
-            CreatePlan(script.Path, TransportKind.Psrp),
+            CreatePlan(script.Path, TransportKind.Psrp, new ExecutionContextOptions(PsrpConfigurationName: "PowerShell.7")),
             CreateTargetExecution(),
             new TargetScriptPreparationResult(
                 Target: new TargetSpec("PC001"),
@@ -105,24 +106,27 @@ public sealed class PsrpExecutionTests
         Assert.Equal("psrp", result.Metadata["transport"]);
         Assert.Equal("executed", result.Metadata["mode"]);
         Assert.Equal("powershell.exe", result.Metadata["executable"]);
+        Assert.Equal("PowerShell.7", result.Metadata["configurationName"]);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", result.Metadata["remoteScriptPath"]);
     }
 
     [Fact]
     public async Task PsrpExecutorExecutesCommandPayloadThroughCommandClient()
     {
-        var executor = new PsrpScriptExecutor(new StubCommandClient(
+        var commandClient = new StubCommandClient(
             PsrpCommandResult.Success(
                 exitCode: 0,
                 stdout: "scf\\kmaclachlan1125\r\n",
                 stderr: string.Empty,
                 metadata: new Dictionary<string, string>
                 {
+                    ["configurationName"] = "PowerShell.7",
                     ["scheme"] = "http",
                     ["port"] = "5985"
-                })),
+                }));
+        var executor = new PsrpScriptExecutor(commandClient,
             new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
-        var request = CreateCommandExecutionRequest("whoami", "cmd");
+        var request = CreateCommandExecutionRequest("whoami", "cmd", configurationName: "PowerShell.7");
 
         var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
 
@@ -139,6 +143,20 @@ public sealed class PsrpExecutionTests
         Assert.Equal("cmd.exe", result.Metadata["executable"]);
         Assert.Equal("5985", result.Metadata["port"]);
         Assert.Equal("http", result.Metadata["scheme"]);
+        Assert.Equal("PowerShell.7", result.Metadata["configurationName"]);
+        Assert.NotNull(commandClient.LastRequest);
+        Assert.Equal("PowerShell.7", commandClient.LastRequest!.ConfigurationName);
+    }
+
+    [Fact]
+    public void PsrpCommandClientBuildsShellUriFromConfigurationName()
+    {
+        Assert.Equal(
+            "http://schemas.microsoft.com/powershell/PowerShell.7",
+            PsrpCommandClient.BuildShellUri("PowerShell.7"));
+        Assert.Equal(
+            "http://schemas.microsoft.com/powershell/Microsoft.PowerShell",
+            PsrpCommandClient.BuildShellUri(PsrpCommandClient.DefaultConfigurationName));
     }
 
     [Fact]
@@ -277,6 +295,25 @@ public sealed class PsrpExecutionTests
     }
 
     [Fact]
+    public async Task PsrpArtifactCollectorPassesConfiguredConfigurationNameToArtifactClient()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        var client = new RecordingArtifactClient(_ => PsrpArtifactDownloadResult.Missing());
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path);
+        var plan = CreateArtifactPlan(
+            targetRoot.Path,
+            target,
+            new ArtifactPolicy(["logs"]),
+            new ExecutionContextOptions(PsrpConfigurationName: "PowerShell.7"));
+
+        await collector.CollectAsync(plan, target, CancellationToken.None);
+
+        var request = Assert.Single(client.Requests);
+        Assert.Equal("PowerShell.7", request.ConfigurationName);
+    }
+
+    [Fact]
     public async Task PsrpArtifactCollectorReportsMeasuredDownloadProgressWhenArchiveSizeIsKnown()
     {
         using var targetRoot = TemporaryDirectory.Create();
@@ -389,7 +426,10 @@ public sealed class PsrpExecutionTests
             });
     }
 
-    private static ExecutionPlan CreatePlan(string scriptPath, TransportKind transport) =>
+    private static ExecutionPlan CreatePlan(
+        string scriptPath,
+        TransportKind transport,
+        ExecutionContextOptions? executionContext = null) =>
         new(
             RunId: "run-001",
             CreatedAt: DateTimeOffset.Parse("2026-06-17T20:00:00Z"),
@@ -398,7 +438,7 @@ public sealed class PsrpExecutionTests
                 Targets: [new TargetSpec("PC001")],
                 Payload: new ScriptPayload(scriptPath, []),
                 Transport: transport,
-                ExecutionContext: new ExecutionContextOptions(),
+                ExecutionContext: executionContext ?? new ExecutionContextOptions(),
                 ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", false),
                 TimeoutPolicy: new TimeoutPolicy(),
                 RetryPolicy: new RetryPolicy(),
@@ -408,7 +448,11 @@ public sealed class PsrpExecutionTests
             Targets: [CreateTargetExecution()],
             DryRun: false);
 
-    private static ExecutionPlan CreateArtifactPlan(string targetRoot, TargetExecution target, ArtifactPolicy artifactPolicy) =>
+    private static ExecutionPlan CreateArtifactPlan(
+        string targetRoot,
+        TargetExecution target,
+        ArtifactPolicy artifactPolicy,
+        ExecutionContextOptions? executionContext = null) =>
         new(
             RunId: "run-001",
             CreatedAt: DateTimeOffset.Parse("2026-06-18T20:00:00Z"),
@@ -417,7 +461,7 @@ public sealed class PsrpExecutionTests
                 Targets: [target.Target],
                 Payload: new CommandPayload("whoami", "cmd", null),
                 Transport: TransportKind.Psrp,
-                ExecutionContext: new ExecutionContextOptions(),
+                ExecutionContext: executionContext ?? new ExecutionContextOptions(),
                 ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", false),
                 TimeoutPolicy: new TimeoutPolicy(),
                 RetryPolicy: new RetryPolicy(),
@@ -451,7 +495,8 @@ public sealed class PsrpExecutionTests
     private static TransportScriptExecutionRequest CreateCommandExecutionRequest(
         string commandLine,
         string shell,
-        string? workingDirectory = null)
+        string? workingDirectory = null,
+        string? configurationName = null)
     {
         var target = new TargetExecution(
             RunId: "run-001",
@@ -469,7 +514,7 @@ public sealed class PsrpExecutionTests
                 Targets: [new TargetSpec("PC001")],
                 Payload: new CommandPayload(commandLine, shell, workingDirectory),
                 Transport: TransportKind.Psrp,
-                ExecutionContext: new ExecutionContextOptions(),
+                ExecutionContext: new ExecutionContextOptions(PsrpConfigurationName: configurationName),
                 ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", false),
                 TimeoutPolicy: new TimeoutPolicy(),
                 RetryPolicy: new RetryPolicy(),
@@ -562,8 +607,13 @@ public sealed class PsrpExecutionTests
 
     private sealed class StubCommandClient(PsrpCommandResult result) : IPsrpCommandClient
     {
-        public Task<PsrpCommandResult> ExecuteAsync(PsrpCommandRequest request, CancellationToken cancellationToken) =>
-            Task.FromResult(result);
+        public PsrpCommandRequest? LastRequest { get; private set; }
+
+        public Task<PsrpCommandResult> ExecuteAsync(PsrpCommandRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class StubScriptClient(PsrpCommandResult result) : IPsrpScriptClient

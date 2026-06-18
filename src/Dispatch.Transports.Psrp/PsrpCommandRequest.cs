@@ -5,4 +5,5 @@ public sealed record PsrpCommandRequest(
     string Executable,
     string Arguments,
     string? WorkingDirectory,
-    TimeSpan? ExecutionTimeout);
+    TimeSpan? ExecutionTimeout,
+    string? ConfigurationName);

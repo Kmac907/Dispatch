@@ -2,7 +2,10 @@ namespace Dispatch.Core.Models;
 
 public sealed record TargetSpec(string Name, string? Source = null);
 
-public sealed record ExecutionContextOptions(bool RunAsSystem = false, string? WorkingDirectory = null);
+public sealed record ExecutionContextOptions(
+    bool RunAsSystem = false,
+    string? WorkingDirectory = null,
+    string? PsrpConfigurationName = null);
 
 public sealed record ScriptTransferPolicy(string RemoteRoot, bool RequiresEndpointLocalScriptPath);
 

@@ -5,4 +5,5 @@ public sealed record PsrpScriptRequest(
     string ScriptPath,
     IReadOnlyList<string> ScriptArguments,
     TimeSpan? ExecutionTimeout,
-    string RemoteScriptPath);
+    string RemoteScriptPath,
+    string? ConfigurationName);

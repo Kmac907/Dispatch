@@ -59,7 +59,8 @@ public sealed class PsrpArtifactCollector(IPsrpArtifactClient artifactClient) : 
                                 Location: remoteFolder,
                                 CompletedBytes: progress.CompletedBytes,
                                 TotalBytes: progress.TotalBytes)));
-                    }),
+                    },
+                    plan.Job.ExecutionContext.PsrpConfigurationName),
                 cancellationToken).ConfigureAwait(false);
 
             if (!download.Succeeded)
