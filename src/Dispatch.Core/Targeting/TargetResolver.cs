@@ -51,13 +51,23 @@ public static class TargetResolver
         var inventoryTransport = errors.Count == 0
             ? ResolveCommonInventoryTransport(inventoryTransportPolicies, errors)
             : null;
+        var inventoryCredentialReferences = errors.Count == 0
+            ? inventory.ResolveCredentialReferencesForTargets(targets, errors)
+            : new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        IReadOnlyList<TargetSpec> resolvedTargets = inventoryCredentialReferences.Count > 0
+            ? targets
+                .Select(target => inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference)
+                    ? target with { CredentialReference = credentialReference }
+                    : target)
+                .ToArray()
+            : targets;
 
         if (targets.Count == 0 && errors.Count == 0)
         {
             errors.Add(new("TargetsRequired", "At least one target is required from --target, --inventory, --computer-name, or --target-file."));
         }
 
-        return new TargetResolutionResult(targets, errors, inventoryTransport, inventoryTransportPolicies);
+        return new TargetResolutionResult(resolvedTargets, errors, inventoryTransport, inventoryTransportPolicies, inventoryCredentialReferences);
     }
 
     private static void AddComputerNameTargets(
@@ -427,20 +437,26 @@ public static class TargetResolver
         private readonly Dictionary<string, InventoryGroup> groups;
         private readonly Dictionary<string, List<string>> tags;
         private readonly Dictionary<string, TransportKind> groupTransports;
+        private readonly Dictionary<string, string> groupCredentialReferences;
         private readonly TransportKind? defaultTransport;
+        private readonly string? defaultCredentialReference;
 
         private InventoryTargets(
             Dictionary<string, InventoryHost> hosts,
             Dictionary<string, InventoryGroup> groups,
             Dictionary<string, List<string>> tags,
             Dictionary<string, TransportKind> groupTransports,
-            TransportKind? defaultTransport)
+            Dictionary<string, string> groupCredentialReferences,
+            TransportKind? defaultTransport,
+            string? defaultCredentialReference)
         {
             this.hosts = hosts;
             this.groups = groups;
             this.tags = tags;
             this.groupTransports = groupTransports;
+            this.groupCredentialReferences = groupCredentialReferences;
             this.defaultTransport = defaultTransport;
+            this.defaultCredentialReference = defaultCredentialReference;
         }
 
         public static InventoryTargets Empty { get; } = new(
@@ -448,6 +464,8 @@ public static class TargetResolver
             new(StringComparer.OrdinalIgnoreCase),
             new(StringComparer.OrdinalIgnoreCase),
             new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            null,
             null);
 
         public IEnumerable<InventoryHost> AllHosts => hosts.Values;
@@ -467,7 +485,7 @@ public static class TargetResolver
 
                 foreach (var target in SplitTargets(trimmed))
                 {
-                    hosts.TryAdd(target, new(target, $"inventory:{path}:{lineNumber}", null));
+                    hosts.TryAdd(target, new(target, $"inventory:{path}:{lineNumber}", null, null));
                 }
             }
 
@@ -476,6 +494,8 @@ public static class TargetResolver
                 new(StringComparer.OrdinalIgnoreCase),
                 new(StringComparer.OrdinalIgnoreCase),
                 new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                null,
                 null);
         }
 
@@ -485,7 +505,9 @@ public static class TargetResolver
             var groups = new Dictionary<string, InventoryGroup>(StringComparer.OrdinalIgnoreCase);
             var tags = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var groupTransports = new Dictionary<string, TransportKind>(StringComparer.OrdinalIgnoreCase);
+            var groupCredentialReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             TransportKind? defaultTransport = null;
+            string? defaultCredentialReference = null;
             string? section = null;
             string? currentGroup = null;
             string? currentHost = null;
@@ -516,19 +538,11 @@ public static class TargetResolver
                     inHostTags = false;
                     inHostVars = false;
 
-                    if (TryParseTransportAssignment(inlineDefaultsValue, out var inlineDefaultTransport))
-                    {
-                        if (inlineDefaultTransport is null)
-                        {
-                            errors.Add(new("InventoryTransportInvalid", $"Inventory default transport '{ReadAssignedValue(inlineDefaultsValue)}' is not supported."));
-                            continue;
-                        }
-
-                        defaultTransport = inlineDefaultTransport.Value;
-                        continue;
-                    }
-
-                    errors.Add(new("InventoryFieldUnsupported", $"Inventory defaults field '{ReadFieldName(inlineDefaultsValue)}' is not supported."));
+                    ApplyInlineDefaultsMap(
+                        inlineDefaultsValue,
+                        errors,
+                        transport => defaultTransport = transport,
+                        credential => defaultCredentialReference = credential);
                     continue;
                 }
 
@@ -596,6 +610,20 @@ public static class TargetResolver
                         }
 
                         defaultTransport = parsedTransport.Value;
+                        continue;
+                    }
+
+                    if (TryApplyCredentialReferenceAssignment(
+                        trimmed,
+                        errors,
+                        "Inventory defaults",
+                        credential => defaultCredentialReference = credential))
+                    {
+                        continue;
+                    }
+
+                    if (TryRejectPlaintextSecretField(trimmed, errors, "Inventory defaults"))
+                    {
                         continue;
                     }
 
@@ -669,19 +697,12 @@ public static class TargetResolver
                         inGroupHosts = false;
                         inGroupChildren = false;
 
-                        if (TryParseTransportAssignment(inlineGroupVars, out var inlineGroupTransport))
-                        {
-                            if (inlineGroupTransport is null)
-                            {
-                                errors.Add(new("InventoryTransportInvalid", $"Group '{currentGroup}' has unsupported transport '{ReadAssignedValue(inlineGroupVars)}'."));
-                                continue;
-                            }
-
-                            groupTransports[currentGroup] = inlineGroupTransport.Value;
-                            continue;
-                        }
-
-                        errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' var '{ReadFieldName(inlineGroupVars)}' is not supported."));
+                        ApplyInlineGroupVarsMap(
+                            inlineGroupVars,
+                            errors,
+                            currentGroup,
+                            transport => groupTransports[currentGroup] = transport,
+                            credential => groupCredentialReferences[currentGroup] = credential);
                         continue;
                     }
 
@@ -733,6 +754,17 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (currentGroup is not null
+                        && indent >= 4
+                        && TryApplyCredentialReferenceAssignment(
+                            trimmed,
+                            errors,
+                            $"Group '{currentGroup}'",
+                            credential => groupCredentialReferences[currentGroup] = credential))
+                    {
+                        continue;
+                    }
+
                     if (currentGroup is null)
                     {
                         errors.Add(new("InventorySchemaInvalid", $"Inventory groups entry '{trimmed}' appears before a group name."));
@@ -753,12 +785,23 @@ public static class TargetResolver
 
                     if (inGroupVars)
                     {
+                        if (TryRejectPlaintextSecretField(trimmed, errors, $"Group '{currentGroup}' var"))
+                        {
+                            continue;
+                        }
+
                         errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' var '{ReadFieldName(trimmed)}' is not supported."));
                         continue;
                     }
 
                     if (indent >= 4 && TryReadFieldName(trimmed, out var groupFieldName))
                     {
+                        if (IsPlaintextSecretFieldName(groupFieldName))
+                        {
+                            AddSecretFieldError(errors, $"Group '{currentGroup}'", groupFieldName);
+                            continue;
+                        }
+
                         errors.Add(new("InventoryFieldUnsupported", $"Group '{currentGroup}' field '{groupFieldName}' is not supported."));
                         continue;
                     }
@@ -820,19 +863,11 @@ public static class TargetResolver
                         inHostVars = false;
                         inHostTags = false;
 
-                        if (TryParseTransportAssignment(inlineHostVars, out var inlineHostTransport))
-                        {
-                            if (inlineHostTransport is null)
-                            {
-                                errors.Add(new("InventoryTransportInvalid", $"Host '{currentHost}' has unsupported transport '{ReadAssignedValue(inlineHostVars)}'."));
-                                continue;
-                            }
-
-                            hosts[currentHost] = hosts[currentHost] with { Transport = inlineHostTransport };
-                            continue;
-                        }
-
-                        errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' var '{ReadFieldName(inlineHostVars)}' is not supported."));
+                        ApplyInlineHostVarsMap(
+                            hosts,
+                            errors,
+                            currentHost,
+                            inlineHostVars);
                         continue;
                     }
 
@@ -859,6 +894,17 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (currentHost is not null
+                        && indent >= 4
+                        && TryApplyCredentialReferenceAssignment(
+                            trimmed,
+                            errors,
+                            $"Host '{currentHost}'",
+                            credential => hosts[currentHost] = hosts[currentHost] with { CredentialReference = credential }))
+                    {
+                        continue;
+                    }
+
                     if (currentHost is null)
                     {
                         errors.Add(new("InventorySchemaInvalid", $"Inventory host entry '{trimmed}' appears before a host name."));
@@ -873,12 +919,23 @@ public static class TargetResolver
 
                     if (inHostVars)
                     {
+                        if (TryRejectPlaintextSecretField(trimmed, errors, $"Host '{currentHost}' var"))
+                        {
+                            continue;
+                        }
+
                         errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' var '{ReadFieldName(trimmed)}' is not supported."));
                         continue;
                     }
 
                     if (indent >= 4 && TryReadFieldName(trimmed, out var hostFieldName))
                     {
+                        if (IsPlaintextSecretFieldName(hostFieldName))
+                        {
+                            AddSecretFieldError(errors, $"Host '{currentHost}'", hostFieldName);
+                            continue;
+                        }
+
                         errors.Add(new("InventoryFieldUnsupported", $"Host '{currentHost}' field '{hostFieldName}' is not supported."));
                         continue;
                     }
@@ -888,7 +945,7 @@ public static class TargetResolver
             }
 
             ValidateGroupGraph(groups, errors);
-            return new(hosts, groups, tags, groupTransports, defaultTransport);
+            return new(hosts, groups, tags, groupTransports, groupCredentialReferences, defaultTransport, defaultCredentialReference);
         }
 
         public bool ContainsGroupOrHost(string selector) =>
@@ -947,6 +1004,26 @@ public static class TargetResolver
             return resolvedPolicies;
         }
 
+        public IReadOnlyDictionary<string, string?> ResolveCredentialReferencesForTargets(
+            IEnumerable<TargetSpec> targets,
+            ICollection<DispatchValidationError> errors)
+        {
+            var resolvedReferences = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var target in targets)
+            {
+                if (!TryResolveCredentialReferenceForHost(target.Name, errors, out var credentialReference)
+                    || string.IsNullOrWhiteSpace(credentialReference))
+                {
+                    continue;
+                }
+
+                resolvedReferences[target.Name] = credentialReference;
+            }
+
+            return resolvedReferences;
+        }
+
         private bool TryResolveTransportForHost(
             string hostName,
             ICollection<DispatchValidationError> errors,
@@ -1003,6 +1080,62 @@ public static class TargetResolver
             return false;
         }
 
+        private bool TryResolveCredentialReferenceForHost(
+            string hostName,
+            ICollection<DispatchValidationError> errors,
+            out string? credentialReference)
+        {
+            credentialReference = null;
+
+            if (!hosts.TryGetValue(hostName, out var host))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(host.CredentialReference))
+            {
+                credentialReference = host.CredentialReference;
+                return true;
+            }
+
+            string? groupCredentialReference = null;
+            foreach (var groupName in ResolveGroupsForHost(hostName))
+            {
+                if (!groupCredentialReferences.TryGetValue(groupName, out var candidateReference))
+                {
+                    continue;
+                }
+
+                if (groupCredentialReference is null)
+                {
+                    groupCredentialReference = candidateReference;
+                    continue;
+                }
+
+                if (!groupCredentialReference.Equals(candidateReference, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add(new(
+                        "InventoryCredentialConflict",
+                        $"Host '{hostName}' inherits conflicting group credential references '{groupCredentialReference}' and '{candidateReference}'."));
+                    return false;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(groupCredentialReference))
+            {
+                credentialReference = groupCredentialReference;
+                return true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(defaultCredentialReference))
+            {
+                credentialReference = defaultCredentialReference;
+                return true;
+            }
+
+            return false;
+        }
+
         private static void AddInventoryGroupHost(
             string path,
             IDictionary<string, InventoryHost> hosts,
@@ -1036,7 +1169,7 @@ public static class TargetResolver
         {
             if (!string.IsNullOrWhiteSpace(host))
             {
-                hosts.TryAdd(host, new(host, $"inventory:{path}", null));
+                hosts.TryAdd(host, new(host, $"inventory:{path}", null, null));
             }
         }
 
@@ -1080,25 +1213,134 @@ public static class TargetResolver
                     continue;
                 }
 
+                if (TryApplyCredentialReferenceAssignment(
+                    field,
+                    errors,
+                    $"Host '{hostName}'",
+                    credential => hosts[hostName] = hosts[hostName] with { CredentialReference = credential }))
+                {
+                    continue;
+                }
+
                 if (TryParseInlineMap(field, "vars", out var inlineHostVars))
                 {
-                    if (TryParseTransportAssignment(inlineHostVars, out var inlineHostTransport))
-                    {
-                        if (inlineHostTransport is null)
-                        {
-                            errors.Add(new("InventoryTransportInvalid", $"Host '{hostName}' has unsupported transport '{ReadAssignedValue(inlineHostVars)}'."));
-                            continue;
-                        }
+                    ApplyInlineHostVarsMap(hosts, errors, hostName, inlineHostVars);
+                    continue;
+                }
 
-                        hosts[hostName] = hosts[hostName] with { Transport = inlineHostTransport };
-                        continue;
-                    }
-
-                    errors.Add(new("InventoryFieldUnsupported", $"Host '{hostName}' var '{ReadFieldName(inlineHostVars)}' is not supported."));
+                if (TryRejectPlaintextSecretField(field, errors, $"Host '{hostName}'"))
+                {
                     continue;
                 }
 
                 errors.Add(new("InventoryFieldUnsupported", $"Host '{hostName}' field '{ReadFieldName(field)}' is not supported."));
+            }
+        }
+
+        private static void ApplyInlineDefaultsMap(
+            string inlineDefaultsMap,
+            ICollection<DispatchValidationError> errors,
+            Action<TransportKind> applyTransport,
+            Action<string> applyCredentialReference)
+        {
+            foreach (var field in SplitInlineMapFields(inlineDefaultsMap))
+            {
+                if (TryParseTransportAssignment(field, out var parsedTransport))
+                {
+                    if (parsedTransport is null)
+                    {
+                        errors.Add(new("InventoryTransportInvalid", $"Inventory default transport '{ReadAssignedValue(field)}' is not supported."));
+                        continue;
+                    }
+
+                    applyTransport(parsedTransport.Value);
+                    continue;
+                }
+
+                if (TryApplyCredentialReferenceAssignment(field, errors, "Inventory defaults", applyCredentialReference))
+                {
+                    continue;
+                }
+
+                if (TryRejectPlaintextSecretField(field, errors, "Inventory defaults"))
+                {
+                    continue;
+                }
+
+                errors.Add(new("InventoryFieldUnsupported", $"Inventory defaults field '{ReadFieldName(field)}' is not supported."));
+            }
+        }
+
+        private static void ApplyInlineGroupVarsMap(
+            string inlineGroupVars,
+            ICollection<DispatchValidationError> errors,
+            string groupName,
+            Action<TransportKind> applyTransport,
+            Action<string> applyCredentialReference)
+        {
+            foreach (var field in SplitInlineMapFields(inlineGroupVars))
+            {
+                if (TryParseTransportAssignment(field, out var parsedTransport))
+                {
+                    if (parsedTransport is null)
+                    {
+                        errors.Add(new("InventoryTransportInvalid", $"Group '{groupName}' has unsupported transport '{ReadAssignedValue(field)}'."));
+                        continue;
+                    }
+
+                    applyTransport(parsedTransport.Value);
+                    continue;
+                }
+
+                if (TryApplyCredentialReferenceAssignment(field, errors, $"Group '{groupName}' var", applyCredentialReference))
+                {
+                    continue;
+                }
+
+                if (TryRejectPlaintextSecretField(field, errors, $"Group '{groupName}' var"))
+                {
+                    continue;
+                }
+
+                errors.Add(new("InventoryFieldUnsupported", $"Group '{groupName}' var '{ReadFieldName(field)}' is not supported."));
+            }
+        }
+
+        private static void ApplyInlineHostVarsMap(
+            IDictionary<string, InventoryHost> hosts,
+            ICollection<DispatchValidationError> errors,
+            string hostName,
+            string inlineHostVars)
+        {
+            foreach (var field in SplitInlineMapFields(inlineHostVars))
+            {
+                if (TryParseTransportAssignment(field, out var parsedTransport))
+                {
+                    if (parsedTransport is null)
+                    {
+                        errors.Add(new("InventoryTransportInvalid", $"Host '{hostName}' has unsupported transport '{ReadAssignedValue(field)}'."));
+                        continue;
+                    }
+
+                    hosts[hostName] = hosts[hostName] with { Transport = parsedTransport.Value };
+                    continue;
+                }
+
+                if (TryApplyCredentialReferenceAssignment(
+                    field,
+                    errors,
+                    $"Host '{hostName}' var",
+                    credential => hosts[hostName] = hosts[hostName] with { CredentialReference = credential }))
+                {
+                    continue;
+                }
+
+                if (TryRejectPlaintextSecretField(field, errors, $"Host '{hostName}' var"))
+                {
+                    continue;
+                }
+
+                errors.Add(new("InventoryFieldUnsupported", $"Host '{hostName}' var '{ReadFieldName(field)}' is not supported."));
             }
         }
 
@@ -1229,6 +1471,77 @@ public static class TargetResolver
             return true;
         }
 
+        private static bool TryParseCredentialReferenceAssignment(string value, out string? credentialReference)
+        {
+            credentialReference = null;
+            if (!value.StartsWith("credential:", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            credentialReference = ReadAssignedValue(value);
+            return true;
+        }
+
+        private static bool TryApplyCredentialReferenceAssignment(
+            string value,
+            ICollection<DispatchValidationError> errors,
+            string context,
+            Action<string> applyCredentialReference)
+        {
+            if (!TryParseCredentialReferenceAssignment(value, out var credentialReference))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(credentialReference))
+            {
+                errors.Add(new("InventoryCredentialInvalid", $"{context} credential reference must not be empty."));
+                return true;
+            }
+
+            applyCredentialReference(credentialReference.Trim());
+            return true;
+        }
+
+        private static bool TryRejectPlaintextSecretField(
+            string value,
+            ICollection<DispatchValidationError> errors,
+            string context)
+        {
+            if (!TryReadFieldName(value, out var fieldName) || !IsPlaintextSecretFieldName(fieldName))
+            {
+                return false;
+            }
+
+            AddSecretFieldError(errors, context, fieldName);
+            return true;
+        }
+
+        private static bool IsPlaintextSecretFieldName(string fieldName)
+        {
+            var normalized = fieldName.Replace("-", string.Empty, StringComparison.Ordinal)
+                .Replace("_", string.Empty, StringComparison.Ordinal);
+
+            return normalized.Equals("password", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("pass", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("secret", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("token", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("sas", StringComparison.OrdinalIgnoreCase)
+                || normalized.Equals("sastoken", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("password", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("secret", StringComparison.OrdinalIgnoreCase)
+                || normalized.EndsWith("token", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void AddSecretFieldError(
+            ICollection<DispatchValidationError> errors,
+            string context,
+            string fieldName) =>
+            errors.Add(new(
+                "InventorySecretFieldUnsupported",
+                $"{context} field '{fieldName}' looks like a plaintext secret. Use 'credential: <name>' to reference a credential instead."));
+
         private static bool TryReadFieldName(string value, out string fieldName)
         {
             fieldName = string.Empty;
@@ -1247,8 +1560,13 @@ public static class TargetResolver
                 ? fieldName
                 : value.Trim();
 
-        private static string ReadAssignedValue(string value) =>
-            value["transport:".Length..].Trim();
+        private static string ReadAssignedValue(string value)
+        {
+            var separatorIndex = value.IndexOf(':', StringComparison.Ordinal);
+            return separatorIndex >= 0
+                ? value[(separatorIndex + 1)..].Trim()
+                : string.Empty;
+        }
 
         private IEnumerable<InventoryHost> ResolveGroupHosts(string groupName)
         {
@@ -1389,6 +1707,6 @@ public static class TargetResolver
         }
     }
 
-    private sealed record InventoryHost(string Name, string Source, TransportKind? Transport);
+    private sealed record InventoryHost(string Name, string Source, TransportKind? Transport, string? CredentialReference);
     private sealed record InventoryGroup(List<string> Hosts, List<string> Children);
 }

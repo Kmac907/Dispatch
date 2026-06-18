@@ -1476,7 +1476,7 @@ public sealed class DispatchCliApplicationTests
         await File.WriteAllTextAsync(inventoryPath, """
             hosts:
               WEB01:
-                credential: prod-admin
+                owner: ops
             """);
         var planner = new CapturingPlanner();
         var application = CreateApplication(planner);

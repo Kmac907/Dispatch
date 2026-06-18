@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, functional `dispatch logs list`, `dispatch logs show latest`, `dispatch logs tail`, `dispatch logs export [run-id|latest] --dest <path>`, and read-only `dispatch logs retry [run-id|latest]` readers/exports over the local run-history layout, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, a credential command surface that reports configured provider availability without plaintext secret storage, a completed PSRP transport for the current roadmap scope, and a completed raw WinRM transport. YAML jobs, credential resolution/storage, and push/hosts/init behavior remain roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, functional `dispatch logs list`, `dispatch logs show latest`, `dispatch logs tail`, `dispatch logs export [run-id|latest] --dest <path>`, and read-only `dispatch logs retry [run-id|latest]` readers/exports over the local run-history layout, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, YAML inventory credential-reference validation for `credential: <name>` with plaintext secret-field rejection, a credential command surface that reports configured provider availability without plaintext secret storage, a completed PSRP transport for the current roadmap scope, and a completed raw WinRM transport. YAML jobs, provider-backed credential storage/resolution, and push/hosts/init behavior remain roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -102,7 +102,7 @@ Inventory vars are not a general runtime-variable source. They are target metada
 - ambient bound `Dispatch` config defaults
 - application defaults
 
-Credential-reference precedence belongs to roadmap item `6.4`. The current `6.4` command-surface slice wires `dispatch creds add|list|test|remove` to a credential provider abstraction and reports provider availability. The default provider is intentionally unavailable and does not store plaintext secrets. Later `6.4` slices own real reference storage, YAML `credential: <name>` resolution, and plaintext secret-field validation in inventory/job files.
+Credential-reference precedence belongs to roadmap item `6.4`. The current `6.4` implementation wires `dispatch creds add|list|test|remove` to a credential provider abstraction, reports provider availability, and accepts `credential: <name>` reference names in the supported YAML inventory subset. Inventory credential references resolve in this order: host `credential` or host `vars.credential`, then inherited group `vars.credential`, then `defaults.credential`. Conflicting inherited group references fail validation. The default provider is intentionally unavailable and does not store plaintext secrets. Current inventory validation rejects plaintext secret-like fields such as `password`, `secret`, `token`, `sas`, `sasToken`, and fields ending in `Password`, `Secret`, or `Token`. Later `6.4` slices own real provider-backed reference storage/resolution and job-file credential validation after roadmap item `6.5` introduces job YAML.
 
 Credential commands do not accept plaintext password flags. `creds add` accepts a reference name and optional username metadata only; unsupported extra arguments are rejected instead of being ignored.
 
@@ -184,7 +184,7 @@ Targets\<target>\result.json
 
 ## Inventory And Jobs
 
-YAML inventory is the documented default because it supports groups, transport policy, host metadata, and later credential references. Simple text host files remain supported for quick ad-hoc work.
+YAML inventory is the documented default because it supports groups, transport policy, host metadata, and credential references. Simple text host files remain supported for quick ad-hoc work.
 
 Dispatch YAML is intended to be structured and validated, not free-form. The project contract is to define explicit schema versions, accepted top-level fields, accepted task types, selector rules, and validation errors before endpoint work starts. This is similar in spirit to Ansible inventory and playbook parsing, but narrower in scope and versioned around Dispatch's own model.
 
@@ -229,22 +229,26 @@ Initial inventory direction is also explicit rather than arbitrary YAML. The `6.
 - top-level sections: `defaults`, `groups`, `hosts`
 - supported fields only:
   - `defaults.transport`
+  - `defaults.credential`
   - `groups.<group>.hosts`
   - `groups.<group>.children`
   - `groups.<group>.vars.transport`
+  - `groups.<group>.vars.credential`
+  - `hosts.<host>.credential`
   - `hosts.<host>.tags`
   - `hosts.<host>.vars.transport`
+  - `hosts.<host>.vars.credential`
 - supported syntax today:
   - top-level `hosts:` block-list, inline-list, mapping-form, and inline-map host entries
   - `groups.<group>.hosts` / `children` block-list, inline-list, and mapping-form entries
-  - block-map or inline-map syntax for the supported `transport` fields, including `defaults: { transport: winrm }`, `groups.<group>.vars: { transport: psrp }`, and `hosts.<host>.vars: { transport: psexec }`
+  - block-map or inline-map syntax for the supported `transport` and `credential` fields, including `defaults: { transport: winrm, credential: prod-admin }`, `groups.<group>.vars: { transport: psrp, credential: web-admin }`, and `hosts.<host>.vars: { transport: psexec, credential: host-admin }`
   - block-list or inline-list tags
 
-Explicit `--config` overrides ambient config values where it supplies them, and inventory transport still overrides config/default transport when CLI transport is omitted. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly.
+Explicit `--config` overrides ambient config values where it supplies them, and inventory transport still overrides config/default transport when CLI transport is omitted. Defaults-only inventories are treated as YAML and fail clearly when no real hosts are selected, rather than being parsed as text host files. Unsupported inventory sections and unsupported fields inside the current subset fail validation clearly. Plaintext secret-like inventory fields fail with a credential policy validation error.
 
-Inventory vars are host/group metadata only. In the current `6.2` subset they are limited to `vars.transport`, which controls transport policy and nothing else. They do not flow into task/runtime variables.
+Inventory vars are host/group metadata only. In the current implemented subset they are limited to `vars.transport`, which controls transport policy, and `vars.credential`, which names a credential reference. They do not flow into task/runtime variables.
 
-This item does not own generic host/group variable bags, credential references, job runtime vars, or job YAML merge behavior. Those belong to later roadmap items. `6.2` is now complete unless the roadmap is explicitly amended.
+This item does not own generic host/group variable bags, provider-backed credential storage, job runtime vars, or job YAML merge behavior. Those belong to later roadmap items. `6.2` is now complete unless the roadmap is explicitly amended.
 
 Initial YAML job task vocabulary:
 

@@ -240,7 +240,7 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
-    public void UnsupportedTopLevelInlineMapHostFieldFailsClearly()
+    public void ResolvesTopLevelInlineMapHostCredentialReference()
     {
         using var inventory = TemporaryTargetFile.Create("""
             hosts:
@@ -253,8 +253,9 @@ public sealed class TargetResolutionTests
             TargetSelectors: ["WEB01"],
             InventoryPath: inventory.Path));
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+        Assert.True(result.IsValid);
+        Assert.Equal("prod-admin", result.InventoryCredentialReferences?["WEB01"]);
+        Assert.Equal("prod-admin", result.Targets.Single().CredentialReference);
     }
 
     [Fact]
@@ -411,7 +412,7 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
-    public void UnsupportedInventoryDefaultsFieldFailsClearly()
+    public void ResolvesInventoryDefaultCredentialReference()
     {
         using var inventory = TemporaryTargetFile.Create("""
             defaults:
@@ -427,8 +428,9 @@ public sealed class TargetResolutionTests
             TargetSelectors: ["WEB01"],
             InventoryPath: inventory.Path));
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+        Assert.True(result.IsValid);
+        Assert.Equal("prod-admin", result.InventoryCredentialReferences?["WEB01"]);
+        Assert.Equal("prod-admin", result.Targets.Single().CredentialReference);
     }
 
     [Fact]
@@ -540,7 +542,7 @@ public sealed class TargetResolutionTests
     }
 
     [Fact]
-    public void UnsupportedInventoryHostFieldFailsClearly()
+    public void ResolvesInventoryHostCredentialReference()
     {
         using var inventory = TemporaryTargetFile.Create("""
             hosts:
@@ -554,12 +556,13 @@ public sealed class TargetResolutionTests
             TargetSelectors: ["WEB01"],
             InventoryPath: inventory.Path));
 
-        Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+        Assert.True(result.IsValid);
+        Assert.Equal("prod-admin", result.InventoryCredentialReferences?["WEB01"]);
+        Assert.Equal("prod-admin", result.Targets.Single().CredentialReference);
     }
 
     [Fact]
-    public void UnsupportedInlineInventoryVarFieldFailsClearly()
+    public void ResolvesInventoryGroupCredentialReferenceFromInlineVars()
     {
         using var inventory = TemporaryTargetFile.Create("""
             groups:
@@ -574,8 +577,91 @@ public sealed class TargetResolutionTests
             TargetSelectors: ["web"],
             InventoryPath: inventory.Path));
 
+        Assert.True(result.IsValid);
+        Assert.Equal("prod-admin", result.InventoryCredentialReferences?["WEB01"]);
+        Assert.Equal("prod-admin", result.Targets.Single().CredentialReference);
+    }
+
+    [Fact]
+    public void HostCredentialReferenceOverridesInheritedReferences()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults: { credential: default-admin }
+            groups:
+              web:
+                vars:
+                  credential: web-admin
+                hosts: [WEB01, WEB02]
+            hosts:
+              WEB01:
+                vars: { credential: host-admin }
+            """);
+
+        var hostOverride = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+        var groupOverride = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB02"],
+            InventoryPath: inventory.Path));
+
+        Assert.True(hostOverride.IsValid);
+        Assert.Equal("host-admin", hostOverride.InventoryCredentialReferences?["WEB01"]);
+        Assert.Equal("host-admin", hostOverride.Targets.Single().CredentialReference);
+        Assert.True(groupOverride.IsValid);
+        Assert.Equal("web-admin", groupOverride.InventoryCredentialReferences?["WEB02"]);
+        Assert.Equal("web-admin", groupOverride.Targets.Single().CredentialReference);
+    }
+
+    [Fact]
+    public void PlaintextInventorySecretFieldsFailWithPolicyError()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            defaults: { password: secret }
+            groups:
+              web:
+                vars: { token: abc123 }
+                hosts: [WEB01]
+            hosts:
+              WEB01:
+                credentialPassword: secret
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
         Assert.False(result.IsValid);
-        Assert.Contains(result.Errors, static error => error.Code == "InventoryFieldUnsupported");
+        Assert.All(result.Errors, static error => Assert.Equal("InventorySecretFieldUnsupported", error.Code));
+        Assert.Equal(3, result.Errors.Count);
+    }
+
+    [Fact]
+    public void ConflictingInheritedCredentialReferencesFailClearly()
+    {
+        using var inventory = TemporaryTargetFile.Create("""
+            groups:
+              prod:
+                vars: { credential: prod-admin }
+                hosts: [WEB01]
+              web:
+                vars: { credential: web-admin }
+                hosts: [WEB01]
+            """);
+
+        var result = TargetResolver.Resolve(new TargetResolutionInput(
+            [],
+            null,
+            TargetSelectors: ["WEB01"],
+            InventoryPath: inventory.Path));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, static error => error.Code == "InventoryCredentialConflict");
     }
 
     [Fact]

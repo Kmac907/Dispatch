@@ -8,7 +8,9 @@ Current implementation status:
 - The default provider is `none` and reports unavailable.
 - No plaintext password command-line flags are supported.
 - No credential secret is stored by the default provider.
-- YAML `credential: <name>` resolution and real provider storage are later `6.4` slices.
+- YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts.
+- YAML inventory validation rejects plaintext secret-like fields such as `password`, `secret`, `token`, `sas`, `sasToken`, and fields ending in `Password`, `Secret`, or `Token`.
+- YAML job credential validation and real provider-backed storage/resolution are later slices.
 
 Examples:
 
@@ -26,6 +28,23 @@ dispatch creds list --output json
 ```
 
 When no provider is configured, the command exits nonzero and reports provider availability. Structured output still includes the provider name, availability state, success state, message, and any references returned by the provider.
+
+Inventory reference behavior:
+
+```yaml
+defaults:
+  credential: prod-default
+groups:
+  web:
+    vars:
+      credential: web-admin
+    hosts: [WEB01]
+hosts:
+  WEB01:
+    credential: host-admin
+```
+
+Reference names are metadata only in the current slice. They are validated and carried through target resolution, but no password is retrieved or handed to transports yet.
 
 Security boundary:
 

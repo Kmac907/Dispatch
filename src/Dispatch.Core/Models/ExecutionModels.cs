@@ -16,7 +16,7 @@ public enum PsrpAuthenticationKind
     CredSsp
 }
 
-public sealed record TargetSpec(string Name, string? Source = null);
+public sealed record TargetSpec(string Name, string? Source = null, string? CredentialReference = null);
 
 public sealed record ExecutionContextOptions(
     bool RunAsSystem = false,
