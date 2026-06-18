@@ -20,7 +20,7 @@ dispatch run ps .\Install-App.ps1 `
   -- -SourcePath \\fileserver\packages\app.msi
 ```
 
-The legacy compatibility shape `dispatch run --script <path> --computer-name <names>` remains supported while module and install callers migrate, but new examples should use the `dispatch run ps <script.ps1>` command documented in `docs/cli-design.md`.
+The legacy compatibility shape `dispatch run --script <path> --computer-name <names>` remains supported while module and install callers migrate, but new examples should use either `dispatch run ps <script.ps1>` or the planned `Invoke-DispatchPowerShell` wrapper documented in `docs/cli-design.md`.
 
 v1 guardrails:
 

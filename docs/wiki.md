@@ -379,7 +379,7 @@ Purpose:
 ### 30. `docs/powershell-module.md`
 
 Purpose:
-- PowerShell module usage and automation guidance.
+- PowerShell module usage and automation guidance, including the command-aligned wrapper surface over `dispatch.exe` (`Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`) and the rule that the module does not introduce a separate interactive shell launcher.
 
 ### 31. `docs/distribution.md`
 

@@ -55,7 +55,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 
 ### Current transport priority
 
-As of 2026-06-17, raw WinRM is implemented and live-validated, and PSRP has initial shared-transport slices in place while the remaining PSRP runspace surface remains the next transport implementation priority. The current codebase has two completed transport paths: PsExec and raw WinRM. The current PSRP slices accept `psrp` requests for script and command payloads, register PSRP services in the host, perform DNS plus default WSMan port reachability probing, advertise the current capability surface, execute direct command payloads through a PowerShell remote runspace, and return a structured not-yet-implemented execution failure for script payloads instead of failing as an unknown executor. Raw WinRM now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, and artifact collection over the WinRM channel. An elevated live raw WinRM `run cmd whoami` validation succeeds against `82H9704` and `92H9704`. Further PsExec-first roadmap work remains deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging.
+As of 2026-06-18, raw WinRM is implemented and live-validated, and PSRP has initial shared-transport slices in place while the remaining PSRP runspace surface remains the next transport implementation priority. The current codebase has two completed transport paths: PsExec and raw WinRM. The current PSRP slices accept `psrp` requests for script and command payloads, register PSRP services in the host, perform DNS plus default WSMan port reachability probing, advertise the current capability surface, execute direct command payloads through a PowerShell remote runspace, successfully live-validate that command path through an elevated `run cmd whoami` against `82H9704` and `92H9704`, and return a structured not-yet-implemented execution failure for script payloads instead of failing as an unknown executor. Raw WinRM now covers request validation, planning, DI registration, endpoint reachability probes, chunked script-transfer preparation planning, remote script upload without SMB/admin shares, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, and artifact collection over the WinRM channel. An elevated live raw WinRM `run cmd whoami` validation succeeds against `82H9704` and `92H9704`. Further PsExec-first roadmap work remains deferred because the active validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
 ## 3. Non-Goals
 
@@ -79,7 +79,7 @@ As of 2026-06-17, raw WinRM is implemented and live-validated, and PSRP has init
 - `Dispatch.Transports.Psrp` is a planned transport using PowerShell SDK remote runspaces and the PowerShell Remoting Protocol.
 - `Dispatch.Transports.WinRm` is an implemented raw WinRM transport with request-validation, planning, DI, endpoint-probe coverage, chunked script-transfer preparation planning, remote script upload, raw-shell-backed PowerShell script execution, direct command execution, shell-open authentication/authorization/transport classification, timeout classification in the shared result model, artifact collection, and successful elevated live validation against the current WinRM validation hosts.
 - `Dispatch.Cli` owns `dispatch.exe`, Spectre.Console.Cli command routing, automation commands, operator output, live rendering, and structured output modes.
-- `Dispatch.PowerShell` owns wrapper functions such as `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
+- `Dispatch.PowerShell` owns thin wrapper functions over the command tree, such as `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`.
 
 ### Technology choices
 
@@ -170,7 +170,7 @@ Dispatch has one request model, but each transport/payload combination must be e
 psexec + ScriptPayload   = implemented; deferred behind WinRM-based roadmap work
 psexec + CommandPayload  = modeled; deferred unless explicitly enabled later
 psrp   + ScriptPayload   = validation/planning/DI/probe slices implemented; script execution over PSRP remains roadmap work
-psrp   + CommandPayload  = partial implementation; validation/planning/DI/probe plus remote-runspace command execution are implemented, while broader stream/configuration/live-validation work remains
+psrp   + CommandPayload  = partial implementation; validation/planning/DI/probe plus remote-runspace command execution and at least one successful elevated live validation are implemented, while script execution, richer stream/configuration support, and artifact support remain
 winrm  + ScriptPayload   = implemented; planning, probe, chunked script-transfer preparation planning, remote upload, raw-shell-backed PowerShell script execution, timeout classification, artifact collection, and elevated live validation completed
 winrm  + CommandPayload  = implemented; planning, probe, raw-shell-backed direct command execution, timeout classification, artifact collection, and elevated live validation completed
 ```
@@ -421,7 +421,7 @@ PsExec SAS/secret handoff model:
 
 #### PSRP transport
 
-PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slices wire `psrp` into the shared request/validation/planning/DI surface, perform WSMan reachability probing, execute direct command payloads through a remote runspace, and still return a structured not-yet-implemented execution failure for script payloads; the remaining runspace path described below is still roadmap work.
+PSRP is the planned PowerShell-native remoting transport after raw WinRM. It uses PowerShell SDK remote runspaces through `WSManConnectionInfo` for PSRP-over-WSMan, with an optional future `SSHConnectionInfo` mode for PSRP-over-SSH. The current partial slices wire `psrp` into the shared request/validation/planning/DI surface, perform WSMan reachability probing, execute direct command payloads through a remote runspace, successfully live-validate that command path against the current approved hosts, and still return a structured not-yet-implemented execution failure for script payloads; the remaining runspace path described below is still roadmap work.
 
 Script example:
 
@@ -585,10 +585,10 @@ This keeps Dispatch focused on script orchestration, execution, logging, and res
 Example:
 
 ```powershell
-Invoke-DispatchScript `
-  -ComputerName PC001 `
+Invoke-DispatchPowerShell `
+  -Target PC001 `
   -ScriptPath .\Install-App.ps1 `
-  -RunAsSystem
+  -Transport WinRm
 ```
 
 The script owns payload retrieval:
@@ -608,34 +608,44 @@ Future versions may add a narrow Key Vault secret retrieval and runtime secret h
 
 ## 9. CLI And PowerShell UX
 
-Interactive CLI:
+CLI entrypoint:
 
 ```powershell
-dispatch
+dispatch --help
 ```
 
 Automation CLI:
 
 ```powershell
-dispatch run --computer-name PC001,PC002 --script .\Fix.ps1 --transport psexec
-dispatch run --computer-name PC001,PC002 --script .\Fix.ps1 --transport psrp
-dispatch run --computer-name PC001,PC002 --command "whoami" --transport winrm
+dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psexec
+dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
+dispatch run cmd whoami --target PC001,PC002 --transport winrm
+dispatch apply .\Patch.yml
+dispatch doctor
 ```
 
 PowerShell module:
 
 ```powershell
-Invoke-DispatchScript `
-  -ComputerName PC001,PC002 `
+Invoke-DispatchPowerShell `
+  -Target PC001,PC002 `
   -ScriptPath .\Fix.ps1 `
-  -Transport PsExec `
-  -ThrottleLimit 10
+  -Transport WinRm `
+  -Concurrency 10
+
+Invoke-DispatchCommand `
+  -Target PC001,PC002 `
+  -CommandLine whoami `
+  -Transport Psrp
+
+Invoke-DispatchJob -JobPath .\Patch.yml
+Test-Dispatch
 ```
 
-The interactive CLI must be a frontend only. It creates the same request model as automation mode and calls the same `Dispatch.Core` planner/executor.
+The CLI and the PowerShell wrapper must be frontends only. They create the same request model as automation mode and call the same `Dispatch.Core` planner/executor.
 
 ```text
-Interactive wizard
+CLI command or PowerShell wrapper
   -> DispatchRequest
   -> Dispatch.Core
 
@@ -655,7 +665,7 @@ git clone https://dev.azure.com/<org>/<project>/_git/Dispatch
 cd Dispatch
 .\packaging\bootstrap-install.ps1
 Import-Module Dispatch
-Start-Dispatch
+dispatch --help
 ```
 
 The v1 source installer is designed for a private Azure DevOps repository. It relies on the operator's normal Git authentication, such as Git Credential Manager or an Azure DevOps browser sign-in, rather than passing a PAT on the command line.
@@ -686,7 +696,7 @@ git clone https://dev.azure.com/<org>/<project>/_git/Dispatch
 cd Dispatch
 .\packaging\install-from-source.ps1
 Import-Module Dispatch
-Start-Dispatch
+Test-Dispatch
 ```
 
 `install-from-source.ps1` is the reusable build/install helper for developers and CI jobs that intentionally keep the source checkout. After a successful bootstrap install, only the installed PowerShell module and bundled executable should remain.
@@ -714,13 +724,15 @@ Dispatch\
 Functions:
 
 ```text
-Start-Dispatch        # runs dispatch.exe with no args, active CLI
-Invoke-DispatchScript # calls dispatch.exe run ...
-Invoke-DispatchJob    # calls dispatch.exe run --job ...
-Test-Dispatch         # calls dispatch.exe doctor
+Invoke-DispatchPowerShell  # calls dispatch.exe run ps ...
+Invoke-DispatchCommand     # calls dispatch.exe run cmd ...
+Invoke-DispatchExecutable  # calls dispatch.exe run exe ...
+Invoke-DispatchJob         # calls dispatch.exe apply ...
+Test-Dispatch              # calls dispatch.exe doctor
+Get-DispatchVersion        # calls dispatch.exe version
 ```
 
-`Start-Dispatch` must pass no arguments so the active CLI starts. Automation functions intentionally pass arguments because the user supplied function parameters.
+The wrapper should stay command-aligned. It should not invent a separate persistent shell launcher. Operators who want root help or direct CLI use should call `dispatch --help` or the documented `dispatch` subcommands directly, while automation-oriented PowerShell functions pass explicit arguments and return machine-readable results.
 
 Later deployment options:
 
@@ -1381,8 +1393,7 @@ Reference:
 Scope:
 - Add `Dispatch.psd1` and `Dispatch.psm1`.
 - Bundle `dispatch.exe` under `bin\win-x64`.
-- Implement `Start-Dispatch`, `Invoke-DispatchScript`, `Invoke-DispatchJob`, and `Test-Dispatch`.
-- Ensure `Start-Dispatch` passes no arguments.
+- Implement command-aligned wrappers such as `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`.
 - Prefer explicit JSON result path for automation functions rather than parsing rich operator output.
 
 Non-goals:
@@ -1395,8 +1406,8 @@ Dependencies:
 
 Definition of done:
 - Importing the module exposes the documented commands.
-- `Start-Dispatch` launches the active CLI.
-- `Invoke-DispatchScript` invokes `dispatch run` and returns machine-readable results.
+- `dispatch.exe` remains the canonical CLI entrypoint after module installation.
+- `Invoke-DispatchPowerShell` invokes `dispatch run ps` and returns machine-readable results.
 
 #### 8. Source Install And Local Packaging
 
@@ -1423,7 +1434,7 @@ Dependencies:
 - 7.
 
 Definition of done:
-- A clean machine with Azure Repos access, Git, PowerShell, and the .NET SDK can clone the repo, run `bootstrap-install.ps1`, and run `Start-Dispatch`.
+- A clean machine with Azure Repos access, Git, PowerShell, and the .NET SDK can clone the repo, run `bootstrap-install.ps1`, import the module, and run `dispatch --help` plus `Test-Dispatch`.
 - Bootstrap installation builds the project and module, validates the installation, changes out of the source directory, invokes an external cleanup helper, and cleans up the cloned source tree including the bootstrap script itself.
 - Cleanup failure is reported without uninstalling an already validated module.
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.
@@ -1625,7 +1636,7 @@ Definition of done:
 - Request validation rejects unsupported transport/payload combinations before endpoint work starts.
 - Result JSON includes the minimum stable run and per-target schema fields.
 - Failures map to the common failure category enum with transport-specific details isolated in metadata.
-- `dispatch` starts the active CLI.
+- `dispatch --help` shows the documented root command tree, and direct `dispatch` subcommands remain the canonical CLI surface.
 - `dispatch run ps <script.ps1> --plan` or the compatibility dry-run path produces a complete execution plan.
 - `dispatch run` can run a prepared script through PsExec against a test target or shim.
 - WinRM-based endpoint execution validation must include at least one successful live raw WinRM or PSRP verification against a user-approved reachable Windows endpoint before those transports are claimed.
@@ -1635,7 +1646,7 @@ Definition of done:
 - Multi-target execution respects throttle limit.
 - Dispatch does not own installer/media payload staging or Blob/SAS payload retrieval.
 - Results are written as JSON by default; CSV remains an optional export.
-- PowerShell module wrapper can launch interactive and automation flows.
+- PowerShell module wrapper can invoke command-aligned automation and diagnostic flows while the bundled `dispatch.exe` remains the canonical CLI entrypoint.
 - Source installer can build, install, validate, and clean up the module and bundled EXE.
 - Optional ZIP installer can install the module and bundled EXE.
 - No v1 core flow requires a remote launcher/harness file.
