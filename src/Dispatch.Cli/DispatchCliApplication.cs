@@ -1,5 +1,6 @@
 using Dispatch.Core;
 using Dispatch.Core.Configuration;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
@@ -14,11 +15,14 @@ public sealed class DispatchCliApplication(
     IDispatchExecutor executor,
     IDispatchDoctor doctor,
     DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
-    TextWriter? statusWriter = null)
+    TextWriter? statusWriter = null,
+    ICredentialProvider? credentialProvider = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
     private readonly DispatchRunRetryPlanner runRetryPlanner = new();
+    private readonly ICredentialProvider credentialProvider =
+        credentialProvider ?? new UnavailableCredentialProvider(options);
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -57,6 +61,12 @@ public sealed class DispatchCliApplication(
         if (commandName == "run" && IsLegacyRunCompatibilityRequest(args))
         {
             return await RunCommandAsync(args[1..], cancellationToken).ConfigureAwait(false);
+        }
+
+        if (commandName == "creds" && TryFindPlaintextCredentialOption(args.Skip(1), out var plaintextOption))
+        {
+            return RenderInvalidCommand(
+                $"Plaintext credential option '{plaintextOption}' is not supported. Use a configured credential provider; Dispatch will not accept passwords on the command line.");
         }
 
         if (IsSpectreRegisteredCommand(commandName))
@@ -232,6 +242,14 @@ public sealed class DispatchCliApplication(
         args.Count > 1 && !args[1].Equals("ps", StringComparison.OrdinalIgnoreCase)
                        && !args[1].Equals("cmd", StringComparison.OrdinalIgnoreCase)
                        && !args[1].Equals("exe", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryFindPlaintextCredentialOption(IEnumerable<string> args, out string? option)
+    {
+        option = args.FirstOrDefault(static arg =>
+            arg.Equals("--password", StringComparison.OrdinalIgnoreCase)
+            || arg.StartsWith("--password=", StringComparison.OrdinalIgnoreCase));
+        return option is not null;
+    }
 
     private static int RenderRootHelp()
     {
@@ -449,11 +467,140 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
+    internal async Task<int> RunCredsAddCommandAsync(
+        string name,
+        string? userName,
+        string? outputValue,
+        CancellationToken cancellationToken)
+    {
+        if (!TryValidateCredentialName(name, out var nameError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", nameError!);
+            return 1;
+        }
+
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        var result = await credentialProvider
+            .AddAsync(new CredentialAddRequest(name.Trim(), NormalizeOptionalValue(userName)), cancellationToken)
+            .ConfigureAwait(false);
+        return RenderCredentialOperationResult(result, outputMode);
+    }
+
+    internal async Task<int> RunCredsListCommandAsync(string? outputValue, CancellationToken cancellationToken)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error!);
+            return 1;
+        }
+
+        var result = await credentialProvider.ListAsync(cancellationToken).ConfigureAwait(false);
+        return RenderCredentialOperationResult(result, outputMode);
+    }
+
+    internal async Task<int> RunCredsTestCommandAsync(
+        string name,
+        string? outputValue,
+        CancellationToken cancellationToken)
+    {
+        if (!TryValidateCredentialName(name, out var nameError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", nameError!);
+            return 1;
+        }
+
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        var result = await credentialProvider
+            .TestAsync(new CredentialReferenceRequest(name.Trim()), cancellationToken)
+            .ConfigureAwait(false);
+        return RenderCredentialOperationResult(result, outputMode);
+    }
+
+    internal async Task<int> RunCredsRemoveCommandAsync(
+        string name,
+        string? outputValue,
+        CancellationToken cancellationToken)
+    {
+        if (!TryValidateCredentialName(name, out var nameError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", nameError!);
+            return 1;
+        }
+
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        var result = await credentialProvider
+            .RemoveAsync(new CredentialReferenceRequest(name.Trim()), cancellationToken)
+            .ConfigureAwait(false);
+        return RenderCredentialOperationResult(result, outputMode);
+    }
+
     internal static int RenderPlannedCommand(string command, string roadmapItem)
     {
         SpectreConsoleRenderer.RenderPlannedFeature(Console.Error, command, roadmapItem);
         return 1;
     }
+
+    internal static int RenderInvalidCommand(string message)
+    {
+        SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", message);
+        return 1;
+    }
+
+    private static int RenderCredentialOperationResult(
+        CredentialProviderOperationResult result,
+        DispatchOutputMode outputMode)
+    {
+        if (outputMode is DispatchOutputMode.Json or DispatchOutputMode.Ndjson or DispatchOutputMode.Yaml)
+        {
+            DispatchStructuredOutputRenderer.RenderCredentialOperation(Console.Out, result, outputMode);
+            return result.ProviderAvailable && result.Succeeded ? 0 : 1;
+        }
+
+        if (!result.ProviderAvailable)
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Dispatch Credentials Unavailable", result.Message);
+            return 1;
+        }
+
+        if (!result.Succeeded)
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Dispatch Credentials Failed", result.Message);
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderCredentialOperation(Console.Out, result, outputMode);
+        return 0;
+    }
+
+    private static bool TryValidateCredentialName(string? name, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            error = "Credential name is required.";
+            return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static string? NormalizeOptionalValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static int RenderUnknownCommand(string command)
     {

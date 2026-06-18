@@ -1,4 +1,5 @@
 using Dispatch.Core.Hosting;
+using Dispatch.Core.Credentials;
 using Dispatch.Transports.PsExec;
 using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
@@ -28,7 +29,12 @@ public static class DispatchCliHost
         builder.Services.AddDispatchPsrpTransport();
         builder.Services.AddDispatchWinRmTransport();
         builder.Services.AddSingleton<IDispatchDoctor, DispatchDoctor>();
-        builder.Services.AddSingleton<DispatchCliApplication>();
+        builder.Services.AddSingleton(static services => new DispatchCliApplication(
+            services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Dispatch.Core.Configuration.DispatchOptions>>(),
+            services.GetRequiredService<Dispatch.Core.Execution.IDispatchPlanner>(),
+            services.GetRequiredService<Dispatch.Core.Execution.IDispatchExecutor>(),
+            services.GetRequiredService<IDispatchDoctor>(),
+            credentialProvider: services.GetRequiredService<ICredentialProvider>()));
 
         return builder.Build();
     }

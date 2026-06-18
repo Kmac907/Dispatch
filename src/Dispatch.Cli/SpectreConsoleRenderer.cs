@@ -1,4 +1,5 @@
 using Dispatch.Core;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -377,6 +378,32 @@ internal static class SpectreConsoleRenderer
                 Markup.Escape(target.FailureCategory.ToString()),
                 Markup.Escape(target.ExitCode?.ToString() ?? "-"),
                 Markup.Escape(target.FailureMessage ?? "-"));
+        }
+
+        console.Write(table);
+    }
+
+    public static void RenderCredentialOperation(TextWriter writer, CredentialProviderOperationResult result)
+    {
+        var console = CreateConsole(writer);
+        console.MarkupLine("[bold]Dispatch credentials[/]");
+        console.WriteLine($"Provider: {result.ProviderName}");
+        console.WriteLine(result.Message);
+
+        if (result.References.Count == 0)
+        {
+            return;
+        }
+
+        console.WriteLine();
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("Name");
+        table.AddColumn("User");
+        foreach (var reference in result.References)
+        {
+            table.AddRow(
+                Markup.Escape(reference.Name),
+                Markup.Escape(reference.UserName ?? "-"));
         }
 
         console.Write(table);

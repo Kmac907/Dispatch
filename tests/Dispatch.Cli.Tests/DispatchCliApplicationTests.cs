@@ -1,6 +1,7 @@
 using Dispatch.Cli;
 using Dispatch.Core;
 using Dispatch.Core.Configuration;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Options;
@@ -1776,7 +1777,6 @@ public sealed class DispatchCliApplicationTests
 
     [Theory]
     [InlineData("hosts", "list")]
-    [InlineData("creds", "list")]
     [InlineData("init", "job")]
     public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
     {
@@ -1787,6 +1787,80 @@ public sealed class DispatchCliApplicationTests
         Assert.Equal(1, exitCode);
         Assert.Contains("Planned Dispatch command", error);
         Assert.Contains($"{command} {subcommand}", error);
+    }
+
+    [Fact]
+    public async Task CredsListReportsUnavailableProvider()
+    {
+        var provider = new CapturingCredentialProvider(available: false);
+        var application = CreateApplication(new CapturingPlanner(), credentialProvider: provider);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "list"],
+            CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output);
+        Assert.Equal("list", provider.LastOperation);
+        Assert.Contains("Dispatch Credentials Unavailable", error);
+        Assert.Contains("test-provider is unavailable", error);
+        Assert.DoesNotContain("Planned Dispatch command", error);
+    }
+
+    [Fact]
+    public async Task CredsCommandsCallAvailableProviderWithoutPlaintextSecretOptions()
+    {
+        var provider = new CapturingCredentialProvider(available: true);
+        var application = CreateApplication(new CapturingPlanner(), credentialProvider: provider);
+
+        var (addExit, addOutput, addError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "add", "prod-admin", "--username", @"CONTOSO\Admin"],
+            CancellationToken.None));
+        Assert.True(addExit == 0, $"Exit {addExit}. Stdout: {addOutput}. Stderr: {addError}");
+        Assert.Equal("add", provider.LastOperation);
+        Assert.Equal(new CredentialAddRequest("prod-admin", @"CONTOSO\Admin"), provider.LastAddRequest);
+        Assert.Contains("Provider: test-provider", addOutput);
+        Assert.DoesNotContain("password", addOutput, StringComparison.OrdinalIgnoreCase);
+
+        var (listExit, listOutput, listError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "list", "--output", "json"],
+            CancellationToken.None));
+        Assert.True(listExit == 0, $"Exit {listExit}. Stdout: {listOutput}. Stderr: {listError}");
+        using var listJson = JsonDocument.Parse(listOutput);
+        Assert.Equal("test-provider", listJson.RootElement.GetProperty("providerName").GetString());
+        Assert.True(listJson.RootElement.GetProperty("providerAvailable").GetBoolean());
+        Assert.Equal("prod-admin", listJson.RootElement.GetProperty("references")[0].GetProperty("name").GetString());
+        Assert.False(listOutput.Contains("password", StringComparison.OrdinalIgnoreCase));
+
+        var (testExit, _, testError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "test", "prod-admin"],
+            CancellationToken.None));
+        Assert.True(testExit == 0, $"Stderr: {testError}");
+        Assert.Equal("test", provider.LastOperation);
+        Assert.Equal(new CredentialReferenceRequest("prod-admin"), provider.LastReferenceRequest);
+
+        var (removeExit, _, removeError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "remove", "prod-admin"],
+            CancellationToken.None));
+        Assert.True(removeExit == 0, $"Stderr: {removeError}");
+        Assert.Equal("remove", provider.LastOperation);
+        Assert.Equal(new CredentialReferenceRequest("prod-admin"), provider.LastReferenceRequest);
+    }
+
+    [Fact]
+    public async Task CredsAddRejectsPlaintextPasswordOption()
+    {
+        var provider = new CapturingCredentialProvider(available: true);
+        var application = CreateApplication(new CapturingPlanner(), credentialProvider: provider);
+
+        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "add", "prod-admin", "--password", "secret"],
+            CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Null(provider.LastOperation);
+        Assert.Contains("Plaintext credential option", error);
+        Assert.Contains("password", error);
     }
 
     [Fact]
@@ -2688,14 +2762,16 @@ public sealed class DispatchCliApplicationTests
         IDispatchExecutor? executor = null,
         DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
         TextWriter? statusWriter = null,
-        DispatchOptions? options = null) =>
+        DispatchOptions? options = null,
+        ICredentialProvider? credentialProvider = null) =>
         new(
             Options.Create(options ?? new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
             executor ?? new ThrowingExecutor(),
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
             displayMode,
-            statusWriter);
+            statusWriter,
+            credentialProvider);
 
     private static IReadOnlyList<JsonDocument> ParseNdjson(string output) =>
         output
@@ -2863,6 +2939,88 @@ public sealed class DispatchCliApplicationTests
                 ],
                 ResultPath: plan.LocalResultsJsonPath);
         }
+    }
+
+    private sealed class CapturingCredentialProvider(bool available) : ICredentialProvider
+    {
+        private const string ProviderName = "test-provider";
+        private readonly List<CredentialReference> references = [];
+
+        public string? LastOperation { get; private set; }
+
+        public CredentialAddRequest? LastAddRequest { get; private set; }
+
+        public CredentialReferenceRequest? LastReferenceRequest { get; private set; }
+
+        public Task<CredentialProviderStatus> GetStatusAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new CredentialProviderStatus(
+                ProviderName,
+                available,
+                available ? "test-provider is available." : "test-provider is unavailable."));
+
+        public Task<CredentialProviderOperationResult> AddAsync(
+            CredentialAddRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastOperation = "add";
+            LastAddRequest = request;
+            if (!available)
+            {
+                return Task.FromResult(Unavailable());
+            }
+
+            references.RemoveAll(reference => reference.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase));
+            references.Add(new CredentialReference(request.Name, request.UserName));
+            return Task.FromResult(Success("Credential reference added.", references));
+        }
+
+        public Task<CredentialProviderOperationResult> ListAsync(CancellationToken cancellationToken)
+        {
+            LastOperation = "list";
+            return Task.FromResult(available ? Success("Credential references listed.", references) : Unavailable());
+        }
+
+        public Task<CredentialProviderOperationResult> TestAsync(
+            CredentialReferenceRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastOperation = "test";
+            LastReferenceRequest = request;
+            return Task.FromResult(available ? Success("Credential reference is available.", []) : Unavailable());
+        }
+
+        public Task<CredentialProviderOperationResult> RemoveAsync(
+            CredentialReferenceRequest request,
+            CancellationToken cancellationToken)
+        {
+            LastOperation = "remove";
+            LastReferenceRequest = request;
+            if (!available)
+            {
+                return Task.FromResult(Unavailable());
+            }
+
+            references.RemoveAll(reference => reference.Name.Equals(request.Name, StringComparison.OrdinalIgnoreCase));
+            return Task.FromResult(Success("Credential reference removed.", []));
+        }
+
+        private static CredentialProviderOperationResult Success(
+            string message,
+            IReadOnlyList<CredentialReference> credentialReferences) =>
+            new(
+                ProviderName,
+                ProviderAvailable: true,
+                Succeeded: true,
+                message,
+                credentialReferences);
+
+        private static CredentialProviderOperationResult Unavailable() =>
+            new(
+                ProviderName,
+                ProviderAvailable: false,
+                Succeeded: false,
+                "test-provider is unavailable.",
+                []);
     }
 
     private sealed class StaticDoctor(DispatchDoctorReport report) : IDispatchDoctor

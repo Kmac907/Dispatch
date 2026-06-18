@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Dispatch.Core;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 
 namespace Dispatch.Cli;
@@ -146,6 +147,32 @@ internal static class DispatchStructuredOutputRenderer
             case DispatchOutputMode.Table:
             default:
                 SpectreConsoleRenderer.RenderRunRetryPlan(writer, retryPlan);
+                break;
+        }
+    }
+
+    public static void RenderCredentialOperation(
+        TextWriter writer,
+        CredentialProviderOperationResult result,
+        DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(result));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    result,
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, result);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                SpectreConsoleRenderer.RenderCredentialOperation(writer, result);
                 break;
         }
     }

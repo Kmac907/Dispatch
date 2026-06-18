@@ -1,4 +1,5 @@
 using Dispatch.Core.Configuration;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -33,6 +34,7 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IDispatchResultWriter, DispatchResultWriter>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
+        services.AddSingleton<ICredentialProvider, UnavailableCredentialProvider>();
 
         return services;
     }

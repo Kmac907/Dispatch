@@ -1,6 +1,6 @@
 # Dispatch CLI Design
 
-Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, functional `dispatch logs list`, `dispatch logs show latest`, `dispatch logs tail`, `dispatch logs export [run-id|latest] --dest <path>`, and read-only `dispatch logs retry [run-id|latest]` readers/exports over the local run-history layout, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, a completed PSRP transport for the current roadmap scope, and a completed raw WinRM transport. YAML jobs, credentials, and push/hosts/init behavior remain roadmap work.
+Status: draft, partially implemented. Current implementation registers the documented command tree through Spectre.Console.Cli, preserves `dispatch run --script ...` through a compatibility parser, renders real execution through a Spectre `LiveDisplay`, supports initial structured output modes, current-path output-control flags, current-path NDJSON stdout event streaming, a durable `Admin\events.ndjson` event stream plus reduced `Admin\results.json` summary for real runs, functional `dispatch logs list`, `dispatch logs show latest`, `dispatch logs tail`, `dispatch logs export [run-id|latest] --dest <path>`, and read-only `dispatch logs retry [run-id|latest]` readers/exports over the local run-history layout, initial inventory/target selectors for `run ps`, initial inventory transport precedence from YAML defaults/group vars/host vars including inline transport maps in the current supported subset, a credential command surface that reports configured provider availability without plaintext secret storage, a completed PSRP transport for the current roadmap scope, and a completed raw WinRM transport. YAML jobs, credential resolution/storage, and push/hosts/init behavior remain roadmap work.
 
 This document records the active CLI design that supersedes the earlier Terminal.Gui command-center direction. `docs/plan.md` remains the roadmap source of truth; this file gives the command and output contract in one place.
 
@@ -102,7 +102,9 @@ Inventory vars are not a general runtime-variable source. They are target metada
 - ambient bound `Dispatch` config defaults
 - application defaults
 
-Credential-reference precedence belongs to roadmap item `6.4`.
+Credential-reference precedence belongs to roadmap item `6.4`. The current `6.4` command-surface slice wires `dispatch creds add|list|test|remove` to a credential provider abstraction and reports provider availability. The default provider is intentionally unavailable and does not store plaintext secrets. Later `6.4` slices own real reference storage, YAML `credential: <name>` resolution, and plaintext secret-field validation in inventory/job files.
+
+Credential commands do not accept plaintext password flags. `creds add` accepts a reference name and optional username metadata only; unsupported extra arguments are rejected instead of being ignored.
 
 ## Output Model
 

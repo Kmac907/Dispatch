@@ -166,6 +166,26 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new LogsRetryCommand(application);
             }
 
+            if (type == typeof(CredsAddCommand))
+            {
+                return new CredsAddCommand(application);
+            }
+
+            if (type == typeof(CredsListCommand))
+            {
+                return new CredsListCommand(application);
+            }
+
+            if (type == typeof(CredsTestCommand))
+            {
+                return new CredsTestCommand(application);
+            }
+
+            if (type == typeof(CredsRemoveCommand))
+            {
+                return new CredsRemoveCommand(application);
+            }
+
             if (PlannedCommandTypes.Contains(type))
             {
                 return Activator.CreateInstance(type);
@@ -285,13 +305,74 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             application.RunLogsRetryCommand(settings.Selector, settings.Output);
     }
 
-    private sealed class CredsAddCommand() : PlannedCommand("creds add", "6.4 Credential References");
+    private sealed class CredsAddCommand(DispatchCliApplication application) : AsyncCommand<CredsAddSettings>
+    {
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            CredsAddSettings settings,
+            CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
 
-    private sealed class CredsListCommand() : PlannedCommand("creds list", "6.4 Credential References");
+            return await application
+                .RunCredsAddCommandAsync(settings.Name, settings.UserName, settings.Output, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
 
-    private sealed class CredsTestCommand() : PlannedCommand("creds test", "6.4 Credential References");
+    private sealed class CredsListCommand(DispatchCliApplication application) : AsyncCommand<CredsListSettings>
+    {
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            CredsListSettings settings,
+            CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
 
-    private sealed class CredsRemoveCommand() : PlannedCommand("creds remove", "6.4 Credential References");
+            return await application.RunCredsListCommandAsync(settings.Output, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private sealed class CredsTestCommand(DispatchCliApplication application) : AsyncCommand<CredsReferenceSettings>
+    {
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            CredsReferenceSettings settings,
+            CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return await application.RunCredsTestCommandAsync(settings.Name, settings.Output, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private sealed class CredsRemoveCommand(DispatchCliApplication application) : AsyncCommand<CredsReferenceSettings>
+    {
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            CredsReferenceSettings settings,
+            CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return await application.RunCredsRemoveCommandAsync(settings.Name, settings.Output, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
 
     private sealed class InitJobCommand() : PlannedCommand("init job", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
 
@@ -356,6 +437,33 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         [CommandArgument(0, "[run-id|latest]")]
         public string? Selector { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
+    private sealed class CredsAddSettings : CommandSettings
+    {
+        [CommandArgument(0, "<name>")]
+        public string Name { get; init; } = string.Empty;
+
+        [CommandOption("--username <name>")]
+        public string? UserName { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
+    private sealed class CredsListSettings : CommandSettings
+    {
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
+    private sealed class CredsReferenceSettings : CommandSettings
+    {
+        [CommandArgument(0, "<name>")]
+        public string Name { get; init; } = string.Empty;
 
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }
@@ -493,10 +601,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         typeof(HostsValidateCommand),
         typeof(HostsGraphCommand),
         typeof(HostsVarsCommand),
-        typeof(CredsAddCommand),
-        typeof(CredsListCommand),
-        typeof(CredsTestCommand),
-        typeof(CredsRemoveCommand),
         typeof(InitJobCommand),
         typeof(InitHostsCommand),
         typeof(InitConfigCommand),
@@ -626,4 +730,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         args.Add("--");
         args.AddRange(remaining);
     }
+
+    private static string CreateUnexpectedArgumentsMessage(IReadOnlyList<string> remaining) =>
+        $"Unexpected argument or option for credential command: {string.Join(" ", remaining)}.";
 }

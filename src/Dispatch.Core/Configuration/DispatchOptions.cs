@@ -24,4 +24,6 @@ public sealed class DispatchOptions
     public int[] ExpectedExitCodes { get; set; } = [];
 
     public string PsExecPath { get; set; } = "psexec.exe";
+
+    public string CredentialProvider { get; set; } = "none";
 }
