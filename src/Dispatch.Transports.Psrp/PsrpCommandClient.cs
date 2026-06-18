@@ -116,7 +116,11 @@ catch {
                 var parsed = ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
                 parsed = parsed with
                 {
-                    Metadata = MergeConfigurationMetadata(parsed.Metadata, request.ConfigurationName)
+                    Metadata = MergeConnectionMetadata(
+                        parsed.Metadata,
+                        request.ConfigurationName,
+                        request.ConnectionKind,
+                        request.AuthenticationKind)
                 };
                 return parsed;
             }
@@ -140,6 +144,7 @@ catch {
     private static WSManConnectionInfo CreateConnectionInfo(PsrpCommandRequest request, EndpointAttempt attempt)
     {
         var configurationName = NormalizeConfigurationName(request.ConfigurationName);
+        var authenticationKind = NormalizeAuthenticationKind(request.AuthenticationKind);
         var connectionInfo = new WSManConnectionInfo(
             attempt.UseSsl,
             request.Target,
@@ -147,6 +152,7 @@ catch {
             ApplicationName,
             BuildShellUri(configurationName),
             credential: null);
+        connectionInfo.AuthenticationMechanism = MapAuthenticationMechanism(authenticationKind);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)
         {
@@ -222,20 +228,38 @@ catch {
             ? DefaultConfigurationName
             : configurationName.Trim();
 
+    internal static PsrpConnectionKind NormalizeConnectionKind(PsrpConnectionKind connectionKind) =>
+        connectionKind;
+
+    internal static PsrpAuthenticationKind NormalizeAuthenticationKind(PsrpAuthenticationKind authenticationKind) =>
+        authenticationKind;
+
     internal static string BuildShellUri(string configurationName) =>
         $"http://schemas.microsoft.com/powershell/{NormalizeConfigurationName(configurationName)}";
 
-    internal static Dictionary<string, string> MergeConfigurationMetadata(
+    internal static Dictionary<string, string> MergeConnectionMetadata(
         IReadOnlyDictionary<string, string>? metadata,
-        string? configurationName)
+        string? configurationName,
+        PsrpConnectionKind connectionKind,
+        PsrpAuthenticationKind authenticationKind)
     {
         var merged = metadata is null
             ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase);
 
         merged["configurationName"] = NormalizeConfigurationName(configurationName);
+        merged["connectionKind"] = NormalizeConnectionKind(connectionKind).ToString().ToLowerInvariant();
+        merged["authentication"] = NormalizeAuthenticationKind(authenticationKind).ToString().ToLowerInvariant();
         return merged;
     }
+
+    internal static AuthenticationMechanism MapAuthenticationMechanism(PsrpAuthenticationKind authenticationKind) =>
+        NormalizeAuthenticationKind(authenticationKind) switch
+        {
+            PsrpAuthenticationKind.Default => AuthenticationMechanism.Default,
+            PsrpAuthenticationKind.Negotiate => AuthenticationMechanism.Negotiate,
+            _ => throw new NotSupportedException($"PSRP authentication kind '{authenticationKind}' is not supported in this release.")
+        };
 
     internal static int ClampMilliseconds(TimeSpan timeout)
     {

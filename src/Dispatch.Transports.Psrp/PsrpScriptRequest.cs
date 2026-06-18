@@ -1,3 +1,5 @@
+using Dispatch.Core.Models;
+
 namespace Dispatch.Transports.Psrp;
 
 public sealed record PsrpScriptRequest(
@@ -6,4 +8,7 @@ public sealed record PsrpScriptRequest(
     IReadOnlyList<string> ScriptArguments,
     TimeSpan? ExecutionTimeout,
     string RemoteScriptPath,
-    string? ConfigurationName);
+    string? ConfigurationName,
+    PsrpConnectionKind ConnectionKind,
+    PsrpAuthenticationKind AuthenticationKind,
+    string? CertificateThumbprint);

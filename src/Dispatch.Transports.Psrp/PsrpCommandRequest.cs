@@ -1,3 +1,5 @@
+using Dispatch.Core.Models;
+
 namespace Dispatch.Transports.Psrp;
 
 public sealed record PsrpCommandRequest(
@@ -6,4 +8,7 @@ public sealed record PsrpCommandRequest(
     string Arguments,
     string? WorkingDirectory,
     TimeSpan? ExecutionTimeout,
-    string? ConfigurationName);
+    string? ConfigurationName,
+    PsrpConnectionKind ConnectionKind,
+    PsrpAuthenticationKind AuthenticationKind,
+    string? CertificateThumbprint);

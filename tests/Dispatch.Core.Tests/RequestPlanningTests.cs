@@ -118,6 +118,27 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerPreservesPsrpConnectionAndAuthenticationSettingsInExecutionContext()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: true,
+            executionContext: new ExecutionContextOptions(
+                PsrpConnectionKind: PsrpConnectionKind.WsMan,
+                PsrpAuthentication: PsrpAuthenticationKind.Negotiate));
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+
+        Assert.Equal(PsrpConnectionKind.WsMan, plan.Job.ExecutionContext.PsrpConnectionKind);
+        Assert.Equal(PsrpAuthenticationKind.Negotiate, plan.Job.ExecutionContext.PsrpAuthentication);
+    }
+
+    [Fact]
     public async Task PlannerAllowsWinRmScriptPayloadAndRequiresEndpointLocalScriptPath()
     {
         using var script = TemporaryScript.Create("Fix.ps1");

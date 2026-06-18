@@ -28,6 +28,7 @@ public sealed class PsrpArtifactCollector(IPsrpArtifactClient artifactClient) : 
             return new ArtifactCollectionResult("skipped", [], "No remote run path was planned.");
         }
 
+        var executionContext = plan.Job.ExecutionContext;
         var copiedArtifacts = new List<string>();
         var artifactFolders = GetArtifactFolders(plan.Job.ArtifactPolicy);
 
@@ -60,7 +61,10 @@ public sealed class PsrpArtifactCollector(IPsrpArtifactClient artifactClient) : 
                                 CompletedBytes: progress.CompletedBytes,
                                 TotalBytes: progress.TotalBytes)));
                     },
-                    plan.Job.ExecutionContext.PsrpConfigurationName),
+                    executionContext.PsrpConfigurationName,
+                    executionContext.PsrpConnectionKind,
+                    executionContext.PsrpAuthentication,
+                    executionContext.PsrpCertificateThumbprint),
                 cancellationToken).ConfigureAwait(false);
 
             if (!download.Succeeded)

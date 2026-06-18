@@ -18,13 +18,16 @@ public sealed class PsrpScriptExecutor(
         cancellationToken.ThrowIfCancellationRequested();
 
         var startedAt = DateTimeOffset.UtcNow;
+        var executionContext = request.Plan.Job.ExecutionContext;
         var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             ["transport"] = "psrp",
             ["mode"] = "execution-pending",
             ["payloadType"] = request.Plan.Job.Payload.PayloadType.ToString().ToLowerInvariant(),
             ["executionStatus"] = "pending",
-            ["configurationName"] = PsrpCommandClient.NormalizeConfigurationName(request.Plan.Job.ExecutionContext.PsrpConfigurationName)
+            ["configurationName"] = PsrpCommandClient.NormalizeConfigurationName(executionContext.PsrpConfigurationName),
+            ["connectionKind"] = PsrpCommandClient.NormalizeConnectionKind(executionContext.PsrpConnectionKind).ToString().ToLowerInvariant(),
+            ["authentication"] = PsrpCommandClient.NormalizeAuthenticationKind(executionContext.PsrpAuthentication).ToString().ToLowerInvariant()
         };
 
         if (request.Plan.Job.Payload is ScriptPayload scriptPayload)
@@ -56,7 +59,10 @@ public sealed class PsrpScriptExecutor(
                     scriptPayload.ScriptArguments,
                     request.Plan.Job.TimeoutPolicy.ExecutionTimeout,
                     remoteScriptPath,
-                    request.Plan.Job.ExecutionContext.PsrpConfigurationName),
+                    executionContext.PsrpConfigurationName,
+                    executionContext.PsrpConnectionKind,
+                    executionContext.PsrpAuthentication,
+                    executionContext.PsrpCertificateThumbprint),
                 cancellationToken).ConfigureAwait(false);
 
             return CreateResult(request, startedAt, metadata, scriptResult);
@@ -94,7 +100,10 @@ public sealed class PsrpScriptExecutor(
                 RenderArguments(request.Target.PlannedCommand.Arguments),
                 commandPayload.WorkingDirectory,
                 request.Plan.Job.TimeoutPolicy.ExecutionTimeout,
-                request.Plan.Job.ExecutionContext.PsrpConfigurationName),
+                executionContext.PsrpConfigurationName,
+                executionContext.PsrpConnectionKind,
+                executionContext.PsrpAuthentication,
+                executionContext.PsrpCertificateThumbprint),
             cancellationToken).ConfigureAwait(false);
 
         return CreateResult(request, startedAt, metadata, commandResult);

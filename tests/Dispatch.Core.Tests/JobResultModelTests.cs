@@ -68,7 +68,11 @@ public sealed class JobResultModelTests
             Targets: [new TargetSpec("PC001", "computer-name")],
             Payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", ["-Verbose"]),
             Transport: TransportKind.PsExec,
-            ExecutionContext: new ExecutionContextOptions(RunAsSystem: true, PsrpConfigurationName: "PowerShell.7"),
+            ExecutionContext: new ExecutionContextOptions(
+                RunAsSystem: true,
+                PsrpConfigurationName: "PowerShell.7",
+                PsrpConnectionKind: PsrpConnectionKind.WsMan,
+                PsrpAuthentication: PsrpAuthenticationKind.Negotiate),
             ScriptTransferPolicy: new ScriptTransferPolicy(DispatchDefaults.RemoteRunRoot, RequiresEndpointLocalScriptPath: true),
             TimeoutPolicy: new TimeoutPolicy(ExecutionTimeout: TimeSpan.FromMinutes(30)),
             RetryPolicy: new RetryPolicy(),
@@ -101,6 +105,8 @@ public sealed class JobResultModelTests
         Assert.Equal(TransportKind.PsExec, roundTripped.Job.Transport);
         Assert.True(roundTripped.Job.ExecutionContext.RunAsSystem);
         Assert.Equal("PowerShell.7", roundTripped.Job.ExecutionContext.PsrpConfigurationName);
+        Assert.Equal(PsrpConnectionKind.WsMan, roundTripped.Job.ExecutionContext.PsrpConnectionKind);
+        Assert.Equal(PsrpAuthenticationKind.Negotiate, roundTripped.Job.ExecutionContext.PsrpAuthentication);
         Assert.Equal(TargetExecutionState.Pending, roundTripped.Targets[0].State);
     }
 
@@ -143,6 +149,34 @@ public sealed class JobResultModelTests
         Assert.True(psrpScript.IsValid);
         Assert.True(psrpCommand.IsValid);
         Assert.Contains(psexecCommand.Errors, error => error.Code == "UnsupportedTransportPayload");
+    }
+
+    [Fact]
+    public void RequestValidationRejectsUnsupportedPsrpConnectionAndAuthenticationModes()
+    {
+        var sshRequest = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            executionContext: new ExecutionContextOptions(PsrpConnectionKind: PsrpConnectionKind.Ssh)));
+
+        var basicRequest = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            executionContext: new ExecutionContextOptions(PsrpAuthentication: PsrpAuthenticationKind.Basic)));
+
+        var certificateRequest = DispatchRequestValidator.Validate(new DispatchRequest(
+            payload: new ScriptPayload("C:\\Scripts\\Fix.ps1", []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            executionContext: new ExecutionContextOptions(
+                PsrpAuthentication: PsrpAuthenticationKind.Certificate,
+                PsrpCertificateThumbprint: "ABC123")));
+
+        Assert.Contains(sshRequest.Errors, error => error.Code == "UnsupportedPsrpConnectionKind");
+        Assert.Contains(basicRequest.Errors, error => error.Code == "UnsupportedPsrpAuthentication");
+        Assert.Contains(certificateRequest.Errors, error => error.Code == "UnsupportedPsrpAuthentication");
     }
 
     [Fact]

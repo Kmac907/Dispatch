@@ -153,7 +153,11 @@ catch {
                 var parsed = PsrpCommandClient.ParseResult(payload, errorText, attempt.Scheme, attempt.Port, streamRecords);
                 parsed = parsed with
                 {
-                    Metadata = PsrpCommandClient.MergeConfigurationMetadata(parsed.Metadata, request.ConfigurationName)
+                    Metadata = PsrpCommandClient.MergeConnectionMetadata(
+                        parsed.Metadata,
+                        request.ConfigurationName,
+                        request.ConnectionKind,
+                        request.AuthenticationKind)
                 };
                 return parsed;
             }
@@ -177,6 +181,7 @@ catch {
     private static WSManConnectionInfo CreateConnectionInfo(PsrpScriptRequest request, EndpointAttempt attempt)
     {
         var configurationName = PsrpCommandClient.NormalizeConfigurationName(request.ConfigurationName);
+        var authenticationKind = PsrpCommandClient.NormalizeAuthenticationKind(request.AuthenticationKind);
         var connectionInfo = new WSManConnectionInfo(
             attempt.UseSsl,
             request.Target,
@@ -184,6 +189,7 @@ catch {
             ApplicationName,
             PsrpCommandClient.BuildShellUri(configurationName),
             credential: null);
+        connectionInfo.AuthenticationMechanism = PsrpCommandClient.MapAuthenticationMechanism(authenticationKind);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)
         {

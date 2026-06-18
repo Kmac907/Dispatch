@@ -1,11 +1,28 @@
 namespace Dispatch.Core.Models;
 
+public enum PsrpConnectionKind
+{
+    WsMan,
+    Ssh
+}
+
+public enum PsrpAuthenticationKind
+{
+    Default,
+    Negotiate,
+    Basic,
+    Certificate
+}
+
 public sealed record TargetSpec(string Name, string? Source = null);
 
 public sealed record ExecutionContextOptions(
     bool RunAsSystem = false,
     string? WorkingDirectory = null,
-    string? PsrpConfigurationName = null);
+    string? PsrpConfigurationName = null,
+    PsrpConnectionKind PsrpConnectionKind = PsrpConnectionKind.WsMan,
+    PsrpAuthenticationKind PsrpAuthentication = PsrpAuthenticationKind.Default,
+    string? PsrpCertificateThumbprint = null);
 
 public sealed record ScriptTransferPolicy(string RemoteRoot, bool RequiresEndpointLocalScriptPath);
 

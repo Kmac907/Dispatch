@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Management.Automation;
+using System.Management.Automation.Runspaces;
 using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Security.Cryptography;
@@ -83,12 +84,19 @@ public sealed class PsrpExecutionTests
                     stderr: string.Empty,
                     metadata: new Dictionary<string, string>
                     {
+                        ["authentication"] = "negotiate",
+                        ["connectionKind"] = "wsman",
                         ["configurationName"] = "PowerShell.7",
                         ["scheme"] = "http",
                         ["port"] = "5985"
                     })));
         var request = new TransportScriptExecutionRequest(
-            CreatePlan(script.Path, TransportKind.Psrp, new ExecutionContextOptions(PsrpConfigurationName: "PowerShell.7")),
+            CreatePlan(
+                script.Path,
+                TransportKind.Psrp,
+                new ExecutionContextOptions(
+                    PsrpConfigurationName: "PowerShell.7",
+                    PsrpAuthentication: PsrpAuthenticationKind.Negotiate)),
             CreateTargetExecution(),
             new TargetScriptPreparationResult(
                 Target: new TargetSpec("PC001"),
@@ -106,6 +114,8 @@ public sealed class PsrpExecutionTests
         Assert.Equal("psrp", result.Metadata["transport"]);
         Assert.Equal("executed", result.Metadata["mode"]);
         Assert.Equal("powershell.exe", result.Metadata["executable"]);
+        Assert.Equal("negotiate", result.Metadata["authentication"]);
+        Assert.Equal("wsman", result.Metadata["connectionKind"]);
         Assert.Equal("PowerShell.7", result.Metadata["configurationName"]);
         Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", result.Metadata["remoteScriptPath"]);
     }
@@ -120,13 +130,19 @@ public sealed class PsrpExecutionTests
                 stderr: string.Empty,
                 metadata: new Dictionary<string, string>
                 {
+                    ["authentication"] = "negotiate",
+                    ["connectionKind"] = "wsman",
                     ["configurationName"] = "PowerShell.7",
                     ["scheme"] = "http",
                     ["port"] = "5985"
                 }));
         var executor = new PsrpScriptExecutor(commandClient,
             new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
-        var request = CreateCommandExecutionRequest("whoami", "cmd", configurationName: "PowerShell.7");
+        var request = CreateCommandExecutionRequest(
+            "whoami",
+            "cmd",
+            configurationName: "PowerShell.7",
+            authenticationKind: PsrpAuthenticationKind.Negotiate);
 
         var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
 
@@ -143,9 +159,13 @@ public sealed class PsrpExecutionTests
         Assert.Equal("cmd.exe", result.Metadata["executable"]);
         Assert.Equal("5985", result.Metadata["port"]);
         Assert.Equal("http", result.Metadata["scheme"]);
+        Assert.Equal("negotiate", result.Metadata["authentication"]);
+        Assert.Equal("wsman", result.Metadata["connectionKind"]);
         Assert.Equal("PowerShell.7", result.Metadata["configurationName"]);
         Assert.NotNull(commandClient.LastRequest);
         Assert.Equal("PowerShell.7", commandClient.LastRequest!.ConfigurationName);
+        Assert.Equal(PsrpConnectionKind.WsMan, commandClient.LastRequest.ConnectionKind);
+        Assert.Equal(PsrpAuthenticationKind.Negotiate, commandClient.LastRequest.AuthenticationKind);
     }
 
     [Fact]
@@ -157,6 +177,13 @@ public sealed class PsrpExecutionTests
         Assert.Equal(
             "http://schemas.microsoft.com/powershell/Microsoft.PowerShell",
             PsrpCommandClient.BuildShellUri(PsrpCommandClient.DefaultConfigurationName));
+    }
+
+    [Fact]
+    public void PsrpCommandClientMapsSupportedAuthenticationKinds()
+    {
+        Assert.Equal(AuthenticationMechanism.Default, PsrpCommandClient.MapAuthenticationMechanism(PsrpAuthenticationKind.Default));
+        Assert.Equal(AuthenticationMechanism.Negotiate, PsrpCommandClient.MapAuthenticationMechanism(PsrpAuthenticationKind.Negotiate));
     }
 
     [Fact]
@@ -305,12 +332,16 @@ public sealed class PsrpExecutionTests
             targetRoot.Path,
             target,
             new ArtifactPolicy(["logs"]),
-            new ExecutionContextOptions(PsrpConfigurationName: "PowerShell.7"));
+            new ExecutionContextOptions(
+                PsrpConfigurationName: "PowerShell.7",
+                PsrpAuthentication: PsrpAuthenticationKind.Negotiate));
 
         await collector.CollectAsync(plan, target, CancellationToken.None);
 
         var request = Assert.Single(client.Requests);
         Assert.Equal("PowerShell.7", request.ConfigurationName);
+        Assert.Equal(PsrpConnectionKind.WsMan, request.ConnectionKind);
+        Assert.Equal(PsrpAuthenticationKind.Negotiate, request.AuthenticationKind);
     }
 
     [Fact]
@@ -496,7 +527,9 @@ public sealed class PsrpExecutionTests
         string commandLine,
         string shell,
         string? workingDirectory = null,
-        string? configurationName = null)
+        string? configurationName = null,
+        PsrpConnectionKind connectionKind = PsrpConnectionKind.WsMan,
+        PsrpAuthenticationKind authenticationKind = PsrpAuthenticationKind.Default)
     {
         var target = new TargetExecution(
             RunId: "run-001",
@@ -514,7 +547,10 @@ public sealed class PsrpExecutionTests
                 Targets: [new TargetSpec("PC001")],
                 Payload: new CommandPayload(commandLine, shell, workingDirectory),
                 Transport: TransportKind.Psrp,
-                ExecutionContext: new ExecutionContextOptions(PsrpConfigurationName: configurationName),
+                ExecutionContext: new ExecutionContextOptions(
+                    PsrpConfigurationName: configurationName,
+                    PsrpConnectionKind: connectionKind,
+                    PsrpAuthentication: authenticationKind),
                 ScriptTransferPolicy: new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", false),
                 TimeoutPolicy: new TimeoutPolicy(),
                 RetryPolicy: new RetryPolicy(),

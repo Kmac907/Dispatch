@@ -40,6 +40,7 @@ public static class DispatchRequestValidator
         }
 
         AddArtifactPathErrors(request.ArtifactPaths, errors);
+        AddPsrpExecutionContextErrors(request, errors);
 
         return errors.Count == 0
             ? DispatchRequestValidationResult.Success
@@ -131,6 +132,38 @@ public static class DispatchRequestValidator
             {
                 errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must not contain current-directory or parent-directory segments."));
             }
+        }
+    }
+
+    private static void AddPsrpExecutionContextErrors(
+        DispatchRequest request,
+        ICollection<DispatchValidationError> errors)
+    {
+        if (request.Transport != TransportKind.Psrp)
+        {
+            return;
+        }
+
+        if (request.ExecutionContext.PsrpConnectionKind != PsrpConnectionKind.WsMan)
+        {
+            errors.Add(new(
+                "UnsupportedPsrpConnectionKind",
+                "Dispatch PSRP currently supports WSMan only. PSRP-over-SSH remains a later roadmap slice."));
+        }
+
+        if (request.ExecutionContext.PsrpAuthentication is not (PsrpAuthenticationKind.Default or PsrpAuthenticationKind.Negotiate))
+        {
+            errors.Add(new(
+                "UnsupportedPsrpAuthentication",
+                "Dispatch PSRP currently supports current-user Default or Negotiate authentication only. Explicit Basic and Certificate authentication remain later roadmap slices."));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ExecutionContext.PsrpCertificateThumbprint)
+            && request.ExecutionContext.PsrpAuthentication != PsrpAuthenticationKind.Certificate)
+        {
+            errors.Add(new(
+                "InvalidPsrpCertificateThumbprint",
+                "A PSRP certificate thumbprint may only be supplied when certificate authentication is selected."));
         }
     }
 }

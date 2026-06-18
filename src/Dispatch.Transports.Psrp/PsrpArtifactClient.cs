@@ -225,6 +225,7 @@ finally {
     private static WSManConnectionInfo CreateConnectionInfo(PsrpArtifactRequest request, EndpointAttempt attempt)
     {
         var configurationName = PsrpCommandClient.NormalizeConfigurationName(request.ConfigurationName);
+        var authenticationKind = PsrpCommandClient.NormalizeAuthenticationKind(request.AuthenticationKind);
         var connectionInfo = new WSManConnectionInfo(
             attempt.UseSsl,
             request.Target,
@@ -232,6 +233,7 @@ finally {
             ApplicationName,
             PsrpCommandClient.BuildShellUri(configurationName),
             credential: null);
+        connectionInfo.AuthenticationMechanism = PsrpCommandClient.MapAuthenticationMechanism(authenticationKind);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)
         {
