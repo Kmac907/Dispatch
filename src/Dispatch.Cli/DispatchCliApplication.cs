@@ -4,6 +4,7 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace Dispatch.Cli;
 
@@ -303,6 +304,68 @@ public sealed class DispatchCliApplication(
         }
 
         DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, outputMode);
+        return 0;
+    }
+
+    internal int RunLogsTailCommand(string? selector, int? count, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", error!);
+            return 1;
+        }
+
+        var tailCount = count ?? 20;
+        if (tailCount <= 0)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Command",
+                "Tail count must be greater than zero.");
+            return 1;
+        }
+
+        DispatchRunEventTail? tail;
+        try
+        {
+            tail = runHistoryReader.ReadRunEvents(options.Value.LocalRunRoot, selector, tailCount);
+        }
+        catch (JsonException exception)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Invalid",
+                $"The durable event stream could not be parsed. {exception.Message}");
+            return 1;
+        }
+        catch (IOException exception)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Unavailable",
+                $"The durable event stream could not be read. {exception.Message}");
+            return 1;
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Unavailable",
+                $"The durable event stream could not be read. {exception.Message}");
+            return 1;
+        }
+
+        if (tail is null)
+        {
+            var missingSelector = string.IsNullOrWhiteSpace(selector) ? "latest" : selector;
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Logs Not Found",
+                $"Run '{missingSelector}' was not found under '{options.Value.LocalRunRoot}'.");
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderRunEventTail(Console.Out, tail, outputMode);
         return 0;
     }
 

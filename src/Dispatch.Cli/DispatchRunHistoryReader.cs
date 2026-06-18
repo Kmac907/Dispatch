@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Dispatch.Core;
 using Dispatch.Core.Models;
 
@@ -23,6 +24,11 @@ internal sealed class DispatchRunHistoryReader
 
     public DispatchRunResult? ReadRun(string localRunRoot, string? selector)
     {
+        return ReadRunEntry(localRunRoot, selector)?.Result;
+    }
+
+    public DispatchRunHistoryEntry? ReadRunEntry(string localRunRoot, string? selector)
+    {
         var entries = ListRuns(localRunRoot);
         if (entries.Count == 0)
         {
@@ -31,12 +37,38 @@ internal sealed class DispatchRunHistoryReader
 
         if (string.IsNullOrWhiteSpace(selector) || selector.Equals("latest", StringComparison.OrdinalIgnoreCase))
         {
-            return entries[0].Result;
+            return entries[0];
         }
 
         return entries.FirstOrDefault(
-                entry => entry.RunId.Equals(selector, StringComparison.OrdinalIgnoreCase))
-            ?.Result;
+            entry => entry.RunId.Equals(selector, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public DispatchRunEventTail? ReadRunEvents(string localRunRoot, string? selector, int count)
+    {
+        var run = ReadRunEntry(localRunRoot, selector);
+        if (run is null)
+        {
+            return null;
+        }
+
+        if (!File.Exists(run.EventPath))
+        {
+            return new DispatchRunEventTail(run.RunId, run.EventPath, []);
+        }
+
+        var events = new Queue<DispatchRunEventEntry>();
+        foreach (var line in File.ReadLines(run.EventPath).Where(static line => !string.IsNullOrWhiteSpace(line)))
+        {
+            if (events.Count == count)
+            {
+                events.Dequeue();
+            }
+
+            events.Enqueue(ParseEvent(run.RunId, line));
+        }
+
+        return new DispatchRunEventTail(run.RunId, run.EventPath, events.ToArray());
     }
 
     private static DispatchRunHistoryEntry? TryReadEntry(string runRoot)
@@ -89,6 +121,37 @@ internal sealed class DispatchRunHistoryReader
             return null;
         }
     }
+
+    private static DispatchRunEventEntry ParseEvent(string runId, string line)
+    {
+        var parsed = JsonNode.Parse(line) as JsonObject
+            ?? throw new JsonException("Dispatch event lines must be JSON objects.");
+        var type = parsed["type"]?.GetValue<string>() ?? "unknown";
+        var timestamp = TryReadTimestamp(parsed["timestamp"]);
+        var target = parsed["target"]?.GetValue<string>();
+        var state = parsed["state"]?.GetValue<string>();
+        var message = parsed["message"]?.GetValue<string>();
+
+        return new DispatchRunEventEntry(
+            runId,
+            type,
+            timestamp,
+            target,
+            state,
+            message,
+            parsed);
+    }
+
+    private static DateTimeOffset? TryReadTimestamp(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return null;
+        }
+
+        var text = node.GetValue<string?>();
+        return DateTimeOffset.TryParse(text, out var timestamp) ? timestamp : null;
+    }
 }
 
 internal sealed record DispatchRunHistoryEntry(
@@ -109,3 +172,17 @@ internal sealed record DispatchRunHistoryEntry(
 {
     public long DurationMs => Result.DurationMs;
 }
+
+internal sealed record DispatchRunEventTail(
+    string RunId,
+    string EventPath,
+    IReadOnlyList<DispatchRunEventEntry> Events);
+
+internal sealed record DispatchRunEventEntry(
+    string RunId,
+    string Type,
+    DateTimeOffset? Timestamp,
+    string? Target,
+    string? State,
+    string? Message,
+    JsonObject Event);

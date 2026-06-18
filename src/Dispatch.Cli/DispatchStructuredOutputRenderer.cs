@@ -79,6 +79,31 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderRunEventTail(TextWriter writer, DispatchRunEventTail tail, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(tail));
+                break;
+            case DispatchOutputMode.Ndjson:
+                foreach (var entry in tail.Events)
+                {
+                    writer.WriteLine(entry.Event.ToJsonString(new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                }
+
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, tail);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                SpectreConsoleRenderer.RenderRunEventTail(writer, tail);
+                break;
+        }
+    }
+
     private static void WriteYaml<T>(TextWriter writer, T value)
     {
         var node = JsonSerializer.SerializeToNode(value, DispatchJson.Options);

@@ -288,6 +288,41 @@ internal static class SpectreConsoleRenderer
         console.Write(table);
     }
 
+    public static void RenderRunEventTail(TextWriter writer, DispatchRunEventTail tail)
+    {
+        var console = CreateConsole(writer);
+        console.MarkupLine("[bold]Dispatch log tail[/]");
+        console.WriteLine($"Run ID: {tail.RunId}");
+        console.WriteLine($"Event file: {tail.EventPath}");
+        console.WriteLine($"Events: {tail.Events.Count}");
+        console.WriteLine();
+
+        if (tail.Events.Count == 0)
+        {
+            console.WriteLine("No events were found in the durable event stream.");
+            return;
+        }
+
+        var table = new Table().Border(TableBorder.Rounded);
+        table.AddColumn("Time");
+        table.AddColumn("Type");
+        table.AddColumn("Target");
+        table.AddColumn("State");
+        table.AddColumn("Message");
+
+        foreach (var entry in tail.Events)
+        {
+            table.AddRow(
+                Markup.Escape(entry.Timestamp?.ToString("u") ?? "-"),
+                Markup.Escape(entry.Type),
+                Markup.Escape(entry.Target ?? "-"),
+                Markup.Escape(entry.State ?? "-"),
+                Markup.Escape(entry.Message ?? "-"));
+        }
+
+        console.Write(table);
+    }
+
     public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report)
     {
         var console = CreateConsole(writer);

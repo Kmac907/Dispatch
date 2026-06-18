@@ -1925,6 +1925,209 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task LogsTailReadsLatestRunEventsAsNdjson()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618040000-d",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T04:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T04:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618040000-d",
+                    Target: "PC004",
+                    Transport: TransportKind.Psrp,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami",
+                    State: TargetExecutionState.Succeeded,
+                    ExitCode: 0,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T04:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T04:00:04Z"),
+                    FailureCategory: FailureCategory.None,
+                    FailureMessage: null,
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618040000-d\Targets\PC004\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618040000-d\Targets\PC004\stderr.txt")
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var eventPath = Path.Combine(runRoot, result.RunId, "Admin", "events.ndjson");
+        File.WriteAllText(
+            eventPath,
+            string.Join(
+                Environment.NewLine,
+                [
+                    "{\"type\":\"run.started\",\"runId\":\"20260618040000-d\",\"timestamp\":\"2026-06-18T04:00:00Z\"}",
+                    "{\"type\":\"progress\",\"runId\":\"20260618040000-d\",\"timestamp\":\"2026-06-18T04:00:02Z\",\"target\":\"PC004\",\"state\":\"Executing\",\"message\":\"Running whoami.\"}",
+                    "{\"type\":\"result\",\"runId\":\"20260618040000-d\",\"timestamp\":\"2026-06-18T04:00:05Z\",\"result\":{\"runId\":\"20260618040000-d\"}}"
+                ]));
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "tail", "--count", "2", "--output", "ndjson"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var first = JsonDocument.Parse(output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)[0]);
+            using var second = JsonDocument.Parse(output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries)[1]);
+            Assert.Equal("progress", first.RootElement.GetProperty("type").GetString());
+            Assert.Equal("result", second.RootElement.GetProperty("type").GetString());
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsTailRendersLatestRunEventsInRichMode()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618050000-e",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T05:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T05:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.WinRm,
+            PayloadType: PayloadKind.Script,
+            PayloadName: "Fix.ps1",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "20260618050000-e",
+                    Target: "PC005",
+                    Transport: TransportKind.WinRm,
+                    PayloadType: PayloadKind.Script,
+                    PayloadName: "Fix.ps1",
+                    State: TargetExecutionState.Failed,
+                    ExitCode: 1603,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.Parse("2026-06-18T05:00:00Z"),
+                    EndedAt: DateTimeOffset.Parse("2026-06-18T05:00:04Z"),
+                    FailureCategory: FailureCategory.UnexpectedExitCode,
+                    FailureMessage: "Installer failed.",
+                    StdoutPath: @"C:\Dispatch\Tests\Runs\20260618050000-e\Targets\PC005\stdout.txt",
+                    StderrPath: @"C:\Dispatch\Tests\Runs\20260618050000-e\Targets\PC005\stderr.txt")
+            ],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var eventPath = Path.Combine(runRoot, result.RunId, "Admin", "events.ndjson");
+        File.WriteAllText(
+            eventPath,
+            string.Join(
+                Environment.NewLine,
+                [
+                    "{\"type\":\"execution.started\",\"runId\":\"20260618050000-e\",\"timestamp\":\"2026-06-18T05:00:01Z\",\"targetCount\":1}",
+                    "{\"type\":\"progress\",\"runId\":\"20260618050000-e\",\"timestamp\":\"2026-06-18T05:00:03Z\",\"target\":\"PC005\",\"state\":\"Failed\",\"message\":\"Installer failed.\"}"
+                ]));
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "tail", "latest", "--count", "5"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Contains("Dispatch log tail", output);
+            Assert.Contains("20260618050000-e", output);
+            Assert.Contains("execution.started", output);
+            Assert.Contains("Installer failed.", output);
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsTailRejectsNonPositiveCount()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618060000-f",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T06:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T06:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets: [],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "tail", "--count", "0"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Invalid Dispatch Command", error);
+            Assert.Contains("Tail count must be greater than zero.", error);
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task LogsTailReturnsZeroEventsWhenEventFileIsMissing()
+    {
+        var result = new DispatchRunResult(
+            RunId: "20260618070000-g",
+            StartedAt: DateTimeOffset.Parse("2026-06-18T07:00:00Z"),
+            EndedAt: DateTimeOffset.Parse("2026-06-18T07:00:05Z"),
+            RequestedBy: "tester",
+            Transport: TransportKind.Psrp,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets: [],
+            ResultPath: string.Empty);
+        var runRoot = CreateRunHistoryRoot(result);
+        File.Delete(Path.Combine(runRoot, result.RunId, "Admin", "events.ndjson"));
+        var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            LocalRunRoot = runRoot
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["logs", "tail", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            Assert.Equal("20260618070000-g", document.RootElement.GetProperty("runId").GetString());
+            Assert.Empty(document.RootElement.GetProperty("events").EnumerateArray());
+        }
+        finally
+        {
+            Directory.Delete(runRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunCommandRouteUsesSharedRequestAndCommandPayload()
     {
         var planner = new CapturingPlanner();
