@@ -45,8 +45,9 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - PsExec-first live validation in environments where `\\<device>\C$` admin-share staging is unavailable.
 - Installer/media payload staging.
 - Azure Blob payload download, SAS generation, or SAS management.
-- Azure Key Vault secret retrieval or runtime secret handoff.
-- Dispatch-managed credential, SAS, Key Vault, or runtime secret handoff for any transport.
+- Azure Key Vault secret retrieval or runtime script secret handoff.
+- Dispatch-managed SAS, Key Vault, or general runtime script secret handoff for any transport.
+- Endpoint credential handoff outside the `6.4` credential-reference model and the explicitly selected transport/provider slices.
 - Managed/harness execution mode.
 - Retry policy beyond basic failure reporting.
 - MSI installer.
@@ -454,7 +455,7 @@ PSRP credential model:
 
 - See `docs/credential-store-plan.md` for the canonical credential reference catalog, `pscredential` PowerShell-wrapper provider behavior, prompt provider behavior, local protected providers, and Azure Key Vault provider behavior.
 - Default runtime modes use current-user `Default` or `Negotiate` over WSMan.
-- Post-MVP explicit credentials may be accepted as `PSCredential` from the PowerShell wrapper or through a secure CLI prompt; plaintext password command-line flags are not allowed.
+- Explicit endpoint credentials may be accepted only through the `6.4` credential-reference model, starting with secure prompt resolution and PSRP handoff in a dedicated slice; plaintext password command-line flags are not allowed.
 - The modeled auth/connection surface now explicitly includes future `Kerberos` and optional future `CredSSP` placeholders alongside the previously modeled future modes, but the implemented runtime still accepts only WSMan plus current-user `Default` or `Negotiate`; unsupported future auth/connection selections must fail request validation until their slices are implemented.
 - The transport must support a configurable session configuration name, such as `Microsoft.PowerShell` or `PowerShell.7`.
 - PSRP-over-SSH may be added later with key-based authentication through `SSHConnectionInfo`, and it must continue to fail request validation until that slice is implemented.
@@ -519,7 +520,7 @@ Raw WinRM credential model:
 
 - See `docs/credential-store-plan.md` for the canonical credential reference catalog, prompt provider behavior, local protected providers, and Azure Key Vault provider behavior.
 - Default mode uses current user / Negotiate.
-- Post-MVP explicit credentials may be accepted through a secure prompt or protected credential object; plaintext password command-line flags are not allowed.
+- Explicit endpoint credentials for raw WinRM may be added only through a later selected raw-WinRM/provider slice using the `6.4` credential-reference model; plaintext password command-line flags are not allowed.
 - Supported authentication options should be modeled explicitly: `Default`, `Negotiate`, `Kerberos`, `NTLM`, `BasicOverHttps`, certificate authentication, and optional `CredSSP` only when the operator explicitly enables it.
 - Basic authentication is allowed only over HTTPS.
 - Dispatch must not automatically enable WinRM, CredSSP, delegation, trusted hosts, listeners, firewall rules, or WinRM policy.

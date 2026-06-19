@@ -19,7 +19,7 @@ Current implementation status:
 - Direct CLI `--credential <name>` overrides inventory credential references for the current ad-hoc run path.
 - YAML inventory validation rejects plaintext secret-like fields such as `password`, `secret`, `token`, `sas`, `sasToken`, and fields ending in `Password`, `Secret`, or `Token`.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
-- YAML job credential validation, runtime secret resolution, and transport credential handoff are later slices.
+- YAML job credential validation, runtime endpoint credential resolution, and transport credential handoff are later slices. This is distinct from runtime script secret handoff for SAS, Blob, or Key Vault payload secrets.
 
 Examples:
 

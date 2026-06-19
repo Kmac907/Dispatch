@@ -2,6 +2,12 @@
 
 This document is the canonical credential store and credential resolution design for Dispatch. It applies to the direct `dispatch.exe` command surface and to the planned PowerShell module wrapper.
 
+## Scope Distinction
+
+This plan covers endpoint credentials selected by credential references such as `credential: prod-admin` or CLI `--credential prod-admin`.
+
+It does not make Dispatch responsible for general runtime script secret handoff, SAS token delivery, Blob payload retrieval, or Azure Key Vault payload-secret retrieval. Those remain separate roadmap concerns unless an explicit later slice adds them.
+
 ## Core Principle
 
 There is one global Dispatch config file. It is not credential-specific.
