@@ -4,6 +4,7 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -2011,6 +2012,50 @@ public sealed class DispatchCliApplicationTests
                 Directory.Delete(root, recursive: true);
             }
         }
+    }
+
+    [Fact]
+    public async Task CredsCommandsUseConfigCredentialCatalogForPromptReferences()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Dispatch:CredentialProvider"] = "prompt",
+                ["Credentials:prod-admin:Provider"] = "prompt",
+                ["Credentials:prod-admin:Username"] = @"CONTOSO\prod.admin"
+            })
+            .Build();
+        var options = new DispatchOptions
+        {
+            CredentialProvider = "prompt",
+            ExpectedExitCodes = [0]
+        };
+        var provider = new ConfigurationCredentialProvider(configuration, Options.Create(options));
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            options: options,
+            credentialProvider: provider);
+
+        var (listExit, listOutput, listError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "list", "--output", "json"],
+            CancellationToken.None));
+        Assert.True(listExit == 0, $"Exit {listExit}. Stdout: {listOutput}. Stderr: {listError}");
+        using var listJson = JsonDocument.Parse(listOutput);
+        Assert.Equal("config", listJson.RootElement.GetProperty("providerName").GetString());
+        Assert.Equal("prod-admin", listJson.RootElement.GetProperty("references")[0].GetProperty("name").GetString());
+        Assert.Equal(@"CONTOSO\prod.admin", listJson.RootElement.GetProperty("references")[0].GetProperty("userName").GetString());
+        Assert.False(listOutput.Contains("password", StringComparison.OrdinalIgnoreCase));
+
+        var (testExit, _, testError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "test", "prod-admin"],
+            CancellationToken.None));
+        Assert.True(testExit == 0, $"Stderr: {testError}");
+
+        var (addExit, addOutput, addError) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["creds", "add", "prod-admin"],
+            CancellationToken.None));
+        Assert.True(addExit == 0, $"Exit {addExit}. Stdout: {addOutput}. Stderr: {addError}");
+        Assert.Contains("No enrollment required", addOutput);
     }
 
     [Fact]

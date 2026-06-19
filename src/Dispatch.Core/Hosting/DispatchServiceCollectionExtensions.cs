@@ -35,9 +35,14 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IDispatchResultWriter, DispatchResultWriter>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
-        services.AddSingleton<ICredentialProvider>(static services =>
+        services.AddSingleton<ICredentialProvider>(services =>
         {
             var options = services.GetRequiredService<IOptions<DispatchOptions>>();
+            if (configuration.GetSection("Credentials").GetChildren().Any())
+            {
+                return new ConfigurationCredentialProvider(configuration, options);
+            }
+
             var providerName = options.Value.CredentialProvider;
             return string.Equals(providerName, "file", StringComparison.OrdinalIgnoreCase)
                    || string.Equals(providerName, "local", StringComparison.OrdinalIgnoreCase)

@@ -70,6 +70,34 @@ public sealed class ApplicationHostConfigurationTests
     }
 
     [Fact]
+    public async Task CoreServicesUseConfigCredentialCatalogWhenCredentialsAreDefined()
+    {
+        using var provider = BuildProvider(new Dictionary<string, string?>
+        {
+            ["Dispatch:CredentialProvider"] = "prompt",
+            ["Credentials:prod-admin:Provider"] = "prompt",
+            ["Credentials:prod-admin:Username"] = @"CONTOSO\prod.admin"
+        });
+
+        var credentialProvider = Assert.IsType<ConfigurationCredentialProvider>(
+            provider.GetRequiredService<ICredentialProvider>());
+
+        var list = await credentialProvider.ListAsync(CancellationToken.None);
+        var test = await credentialProvider.TestAsync(new CredentialReferenceRequest("prod-admin"), CancellationToken.None);
+        var add = await credentialProvider.AddAsync(new CredentialAddRequest("prod-admin", null), CancellationToken.None);
+
+        Assert.Equal("config", list.ProviderName);
+        Assert.True(list.ProviderAvailable);
+        Assert.True(list.Succeeded);
+        var reference = Assert.Single(list.References);
+        Assert.Equal("prod-admin", reference.Name);
+        Assert.Equal(@"CONTOSO\prod.admin", reference.UserName);
+        Assert.True(test.Succeeded);
+        Assert.True(add.Succeeded);
+        Assert.Contains("No enrollment required", add.Message);
+    }
+
+    [Fact]
     public async Task PlannerAndExecutorAreRegistered()
     {
         using var provider = BuildProvider(new Dictionary<string, string?>());

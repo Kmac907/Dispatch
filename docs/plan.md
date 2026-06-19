@@ -1270,11 +1270,12 @@ Definition of done:
 Current implementation boundary:
 - `dispatch creds add|list|test|remove` are wired to the credential provider abstraction and reject plaintext password options.
 - Dispatch loads the global YAML config from `C:\ProgramData\Dispatch\config.yml` when it exists and accepts explicit YAML `--config <path>` files on the current `run ps|cmd|exe` paths for the currently implemented Dispatch option fields.
+- Config-defined `credentials:<name>` entries are exposed to credential commands as a metadata-only catalog, including `provider: prompt` no-enrollment behavior for `creds add`.
 - `Dispatch:CredentialProvider` values `file` and `local` enable a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`. This catalog stores reference names and optional username metadata only.
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
 - The target model is the global YAML `C:\ProgramData\Dispatch\config.yml` credential catalog described in `docs/credential-store-plan.md`; the current `references.json` catalog is not the long-term canonical credential catalog.
-- Runtime credential catalog lookup, runtime credential resolution/transport handoff, broader global config-file credential validation, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
+- CLI credential override selection, runtime credential resolution/transport handoff, broader global config-file credential validation, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
 
 #### 6.5 YAML Apply And Job Model
 
