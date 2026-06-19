@@ -92,7 +92,7 @@ As of 2026-06-18, raw WinRM and PSRP are both implemented and live-validated. Th
 - Live output model: parse/validate output uses stable text/tables; preflight uses `Status` for indeterminate work and `Progress` for measurable work; execution uses one `LiveDisplay` renderer consuming a run-event stream plus a heartbeat refresh for elapsed-time updates; final summaries are printed after live rendering ends.
 - Console concurrency rule: prompts and confirmations must complete before live rendering starts, and only the renderer writes to `AnsiConsole` while a live display is active.
 - Application host: `Microsoft.Extensions.Hosting`.
-- Configuration: `Microsoft.Extensions.Configuration.Json`.
+- Configuration: `Microsoft.Extensions.Configuration` with JSON appsettings plus the Dispatch YAML config reader for `C:\ProgramData\Dispatch\config.yml` and explicit `--config <path>` files.
 - Logging: `Microsoft.Extensions.Logging.Console` in the CLI and `Microsoft.Extensions.Logging.Abstractions` in core libraries.
 - Serialization: `System.Text.Json`.
 - Tests: `xUnit`, with `FluentAssertions` optional.
