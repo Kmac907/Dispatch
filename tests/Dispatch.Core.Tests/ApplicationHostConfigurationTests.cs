@@ -97,6 +97,63 @@ public sealed class ApplicationHostConfigurationTests
         Assert.Contains("No enrollment required", add.Message);
     }
 
+    [Theory]
+    [InlineData("unsupported", @"CONTOSO\prod.admin", null, null, null, null, "unsupported provider")]
+    [InlineData("prompt", null, null, null, null, null, "missing required field(s)")]
+    [InlineData("pscredential", null, null, null, null, null, "missing required field(s)")]
+    [InlineData("dpapi_file", @"CONTOSO\prod.admin", null, null, null, null, "path")]
+    [InlineData("windows_credential_manager", @"CONTOSO\prod.admin", null, null, null, null, "target")]
+    [InlineData("azure_keyvault", @"CONTOSO\prod.admin", null, null, "prod-admin-password", "default_azure_credential", "vault_uri")]
+    [InlineData("azure_keyvault", @"CONTOSO\prod.admin", null, "https://scf-dispatch-kv.vault.azure.net/", "prod-admin-password", "bad_auth", "unsupported azure_keyvault auth")]
+    public async Task ConfigCredentialCatalogValidatesProviderMetadata(
+        string providerName,
+        string? username,
+        string? path,
+        string? vaultUri,
+        string? secretName,
+        string? auth,
+        string expectedMessage)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Dispatch:CredentialProvider"] = "prompt",
+            ["Credentials:prod-admin:Provider"] = providerName
+        };
+
+        AddOptional(values, "Credentials:prod-admin:Username", username);
+        AddOptional(values, "Credentials:prod-admin:Path", path);
+        AddOptional(values, "Credentials:prod-admin:VaultUri", vaultUri);
+        AddOptional(values, "Credentials:prod-admin:SecretName", secretName);
+        AddOptional(values, "Credentials:prod-admin:Auth", auth);
+
+        using var serviceProvider = BuildProvider(values);
+        var credentialProvider = Assert.IsType<ConfigurationCredentialProvider>(
+            serviceProvider.GetRequiredService<ICredentialProvider>());
+
+        var result = await credentialProvider.TestAsync(new CredentialReferenceRequest("prod-admin"), CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(expectedMessage, result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData("prompt")]
+    [InlineData("pscredential")]
+    [InlineData("dpapi_file")]
+    [InlineData("windows_credential_manager")]
+    [InlineData("azure_keyvault")]
+    public async Task ConfigCredentialCatalogAcceptsSupportedProviderMetadata(string providerName)
+    {
+        using var provider = BuildProvider(CreateValidCredentialValues(providerName));
+        var credentialProvider = Assert.IsType<ConfigurationCredentialProvider>(
+            provider.GetRequiredService<ICredentialProvider>());
+
+        var result = await credentialProvider.TestAsync(new CredentialReferenceRequest("prod-admin"), CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Contains(providerName, result.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task PlannerAndExecutorAreRegistered()
     {
@@ -132,5 +189,40 @@ public sealed class ApplicationHostConfigurationTests
             .AddLogging()
             .AddDispatchCore(configuration)
             .BuildServiceProvider(validateScopes: true);
+    }
+
+    private static void AddOptional(IDictionary<string, string?> values, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+        {
+            values[key] = value;
+        }
+    }
+
+    private static Dictionary<string, string?> CreateValidCredentialValues(string providerName)
+    {
+        var values = new Dictionary<string, string?>
+        {
+            ["Dispatch:CredentialProvider"] = "prompt",
+            ["Credentials:prod-admin:Provider"] = providerName,
+            ["Credentials:prod-admin:Username"] = @"CONTOSO\prod.admin"
+        };
+
+        switch (providerName)
+        {
+            case "dpapi_file":
+                values["Credentials:prod-admin:Path"] = @"C:\ProgramData\Dispatch\Credentials\prod-admin.cred";
+                break;
+            case "windows_credential_manager":
+                values["Credentials:prod-admin:Target"] = "Dispatch/prod-admin";
+                break;
+            case "azure_keyvault":
+                values["Credentials:prod-admin:VaultUri"] = "https://scf-dispatch-kv.vault.azure.net/";
+                values["Credentials:prod-admin:SecretName"] = "prod-admin-password";
+                values["Credentials:prod-admin:Auth"] = "default_azure_credential";
+                break;
+        }
+
+        return values;
     }
 }

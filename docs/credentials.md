@@ -10,6 +10,7 @@ Current implementation status:
 - The default provider is `none` and reports unavailable.
 - Dispatch loads the global YAML config from `C:\ProgramData\Dispatch\config.yml` by default when it exists. `dispatch run ps|cmd|exe --config <path>` also accepts YAML config for the current run defaults.
 - Config-defined `credentials:<name>` entries are available to `dispatch creds list|test|add|remove` as a metadata-only catalog.
+- Config-defined credential references are validated against the selected provider's required metadata before `creds test`, `creds add`, or `run ps|cmd|exe --credential <name>` accepts them.
 - `dispatch run ps|cmd|exe --credential <name>` accepts a credential reference override, validates it against the configured credential provider before planning endpoint work, and applies that reference to all selected targets.
 - Configuring `Dispatch:CredentialProvider` as `file` or `local` enables a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`.
 - No plaintext password command-line flags are supported.
@@ -59,6 +60,18 @@ credentials:
 ```
 
 For `provider: prompt`, `dispatch creds add prod-admin` performs no secret enrollment and reports that the credential will prompt at runtime once runtime prompting is implemented.
+
+Provider metadata validation currently requires:
+
+| Provider | Required metadata |
+| --- | --- |
+| `prompt` | `username` |
+| `pscredential` | `username` |
+| `dpapi_file` | `username`, `path` |
+| `windows_credential_manager` | `username`, `target` |
+| `azure_keyvault` | `username`, `vault_uri`, `secret_name`, `auth` |
+
+`azure_keyvault.auth` must be one of `default_azure_credential`, `managed_identity`, or `azure_cli`, and `vault_uri` must be an absolute `https://` URI. This validation does not retrieve a Key Vault secret or store a local secret yet.
 
 The file-backed provider writes a JSON catalog containing reference names and optional usernames. It does not prompt for, store, encrypt, decrypt, or hand off passwords.
 

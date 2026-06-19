@@ -1985,6 +1985,61 @@ credentials:
         }
     }
 
+    [Fact]
+    public async Task RunRouteRejectsInvalidCredentialOverrideMetadataFromExplicitYamlConfigBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(configPath, """
+dispatch:
+  default_credential_provider: prompt
+credentials:
+  kv-prod-admin:
+    provider: azure_keyvault
+    username: CONTOSO\prod.admin
+    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    secret_name: prod-admin-password
+    auth: bad_auth
+""");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "kv-prod-admin",
+                    "--config",
+                    configPath,
+                    "--dry-run",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Dispatch Credential Reference Invalid", error);
+            Assert.Contains("unsupported azure_keyvault auth", error, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("password", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(configPath);
+        }
+    }
+
     [Theory]
     [InlineData("apply")]
     [InlineData("push")]
