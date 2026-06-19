@@ -2,6 +2,8 @@
 
 Dispatch uses credential references so jobs and inventories can name a credential without embedding plaintext secrets.
 
+The canonical credential store and resolution design is [Credential Store Plan](credential-store-plan.md). That file defines the global `C:\ProgramData\Dispatch\config.yml` credential catalog, provider settings, enrollment behavior, Azure Key Vault auth modes, and precedence rules.
+
 Current implementation status:
 
 - `dispatch creds add|list|test|remove` is wired to a credential provider abstraction.

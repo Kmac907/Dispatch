@@ -406,6 +406,7 @@ PsExec capabilities:
 
 PsExec credential model:
 
+- See `docs/credential-store-plan.md` for the canonical credential reference catalog, provider configuration, provider enrollment behavior, and no-plaintext-secret rules.
 - v1 supports current admin context only.
 - v1 does not accept plaintext password arguments.
 - v1 does not invoke `psexec -u/-p` because those values are difficult to protect from command-line exposure, logs, dry-run rendering, and process inspection.
@@ -451,6 +452,7 @@ PSRP capabilities:
 
 PSRP credential model:
 
+- See `docs/credential-store-plan.md` for the canonical credential reference catalog, `pscredential` PowerShell-wrapper provider behavior, prompt provider behavior, local protected providers, and Azure Key Vault provider behavior.
 - Default runtime modes use current-user `Default` or `Negotiate` over WSMan.
 - Post-MVP explicit credentials may be accepted as `PSCredential` from the PowerShell wrapper or through a secure CLI prompt; plaintext password command-line flags are not allowed.
 - The modeled auth/connection surface now explicitly includes future `Kerberos` and optional future `CredSSP` placeholders alongside the previously modeled future modes, but the implemented runtime still accepts only WSMan plus current-user `Default` or `Negotiate`; unsupported future auth/connection selections must fail request validation until their slices are implemented.
@@ -515,6 +517,7 @@ Raw WinRM capabilities:
 
 Raw WinRM credential model:
 
+- See `docs/credential-store-plan.md` for the canonical credential reference catalog, prompt provider behavior, local protected providers, and Azure Key Vault provider behavior.
 - Default mode uses current user / Negotiate.
 - Post-MVP explicit credentials may be accepted through a secure prompt or protected credential object; plaintext password command-line flags are not allowed.
 - Supported authentication options should be modeled explicitly: `Default`, `Negotiate`, `Kerberos`, `NTLM`, `BasicOverHttps`, certificate authentication, and optional `CredSSP` only when the operator explicitly enables it.
@@ -1243,6 +1246,7 @@ Add the credential-reference surface without storing plaintext credentials in jo
 
 Reference:
 - `docs/cli-design.md` defines the `creds` command group, credential option, and CLI safety rules for this roadmap item.
+- `docs/credential-store-plan.md` defines the global Dispatch `config.yml` credential catalog, provider settings, provider enrollment behavior, Azure Key Vault auth modes, and reference precedence rules.
 
 Scope:
 - Implement `dispatch creds add|list|test|remove` command surface.
@@ -1267,7 +1271,8 @@ Current implementation boundary:
 - `dispatch creds add|list|test|remove` are wired to the credential provider abstraction and reject plaintext password options.
 - `Dispatch:CredentialProvider` values `file` and `local` enable a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`. This catalog stores reference names and optional username metadata only.
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
-- Runtime credential resolution/transport handoff, config-file secret policy validation, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
+- The target model is the global YAML `C:\ProgramData\Dispatch\config.yml` credential catalog described in `docs/credential-store-plan.md`; the current `references.json` catalog is not the long-term canonical credential catalog.
+- Runtime credential resolution/transport handoff, global config-file secret policy validation, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
 
 #### 6.5 YAML Apply And Job Model
 
@@ -1276,6 +1281,7 @@ Support declared YAML jobs while keeping the first implementation script-first a
 
 Reference:
 - `docs/cli-design.md` defines `dispatch apply`, global option precedence, inventory/job expectations, and initial task vocabulary for this roadmap item.
+- `docs/credential-store-plan.md` defines how `job.yml` credential references resolve through the global Dispatch config credential catalog.
 
 Scope:
 - Implement `dispatch apply <job.yml>`.
@@ -1457,6 +1463,7 @@ Add PowerShell Remoting Protocol execution as a first-class WinRM-based transpor
 
 Scope:
 - Implement `Dispatch.Transports.Psrp` using `Microsoft.PowerShell.SDK`.
+- Resolve explicit credentials according to `docs/credential-store-plan.md` when credential handoff is implemented for PSRP.
 - Use `WSManConnectionInfo` and remote runspaces for PSRP-over-WSMan.
 - Support `--transport psrp`.
 - Support direct PowerShell command execution.
@@ -1495,6 +1502,7 @@ Add Ansible-style raw WinRM shell/command execution as the next transport implem
 
 Scope:
 - Implement `Dispatch.Transports.WinRm` as a raw WS-Management shell/command transport.
+- Resolve explicit credentials according to `docs/credential-store-plan.md` when credential handoff is implemented for raw WinRM.
 - Prefer a .NET wrapper around WinRM Client Shell API / WS-Management shell-command semantics.
 - Support `--transport winrm`.
 - Create remote shells and commands through WinRM shell/command semantics.
@@ -1534,6 +1542,7 @@ Document and enforce the boundary that external payload retrieval belongs to the
 Scope:
 - Document recommended patterns for scripts that download payloads from Blob storage with SAS access.
 - Add a post-MVP Key Vault secret source that Dispatch can use on the admin workstation or jump box to retrieve a SAS once per job.
+- Keep runtime secret-source configuration aligned with `docs/credential-store-plan.md`, including Azure Key Vault auth mode terminology and no-plaintext YAML rules.
 - Pass retrieved secrets to scripts as runtime inputs through a redacted mechanism, preferring an encrypted protected temporary secret file.
 - Support a certificate/CMS-style encrypted secret file model where Dispatch encrypts the SAS before writing it over SMB and the endpoint script decrypts it locally.
 - Document DPAPI machine-scope encryption as an endpoint-side option when the secret must be protected after arrival rather than before SMB transit.
