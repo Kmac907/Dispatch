@@ -382,7 +382,7 @@ Raw WinRM:
 
 #### PsExec transport
 
-PsExec is the only implemented end-to-end execution transport today. It uses SMB/admin-share file preparation and PsExec process execution from the admin workstation, but further PsExec-first roadmap work is deferred behind WinRM-based transports because the current validation environment does not provide reliable `\\<device>\C$` admin-share staging.
+PsExec is one of the current transport paths alongside raw WinRM and PSRP. It uses SMB/admin-share file preparation and PsExec process execution from the admin workstation, but further PsExec-first roadmap work is deferred because the current validation environment does not provide reliable `\\<device>\C$` admin-share staging.
 
 PsExec example:
 
@@ -484,7 +484,7 @@ Invoke-Command -ComputerName PC001 -ScriptBlock {
 
 #### Raw WinRM transport
 
-Raw WinRM is the next transport implementation priority for environments that want Ansible-style WinRM behavior without depending on PowerShell runspace semantics. It uses WS-Management shell/command operations and maps process stdout, stderr, and exit code into the common Dispatch result model.
+Raw WinRM is implemented for environments that want Ansible-style WinRM behavior without depending on PowerShell runspace semantics. It uses WS-Management shell/command operations and maps process stdout, stderr, and exit code into the common Dispatch result model.
 
 Raw WinRM implementation choice:
 
@@ -526,7 +526,7 @@ Raw WinRM credential model:
 
 Raw WinRM SAS/secret handoff model:
 
-- Dispatch does not yet have a raw WinRM transport or supported raw WinRM SAS token handoff.
+- Dispatch has a raw WinRM transport, but does not yet have supported raw WinRM SAS token handoff.
 - Post-MVP preferred handoff is the protected secret-file model transferred over the WinRM channel through streamed/chunked content.
 - For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, uploads the protected secret file through chunked WinRM content transfer, and invokes the remote process with only the protected secret-file path.
 - Raw SAS tokens must not be rendered into remote command lines, local logs, dry-run output, result JSON, CSV summaries, or terminal output.
@@ -1500,7 +1500,7 @@ Definition of done:
 #### 9.1 Raw WinRM Transport
 
 Objective:
-Add Ansible-style raw WinRM shell/command execution as the next transport implementation priority while preserving the same job, script execution, command execution, result, and artifact model.
+Track the implemented Ansible-style raw WinRM shell/command execution transport while preserving the same job, script execution, command execution, result, and artifact model.
 
 Scope:
 - Implement `Dispatch.Transports.WinRm` as a raw WS-Management shell/command transport.
