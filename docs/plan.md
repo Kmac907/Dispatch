@@ -1265,8 +1265,9 @@ Definition of done:
 
 Current implementation boundary:
 - `dispatch creds add|list|test|remove` are wired to the credential provider abstraction and reject plaintext password options.
+- `Dispatch:CredentialProvider` values `file` and `local` enable a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`. This catalog stores reference names and optional username metadata only.
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
-- Provider-backed reference storage/resolution, config-file secret policy validation, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
+- Runtime credential resolution/transport handoff, config-file secret policy validation, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
 
 #### 6.5 YAML Apply And Job Model
 

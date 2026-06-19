@@ -26,4 +26,6 @@ public sealed class DispatchOptions
     public string PsExecPath { get; set; } = "psexec.exe";
 
     public string CredentialProvider { get; set; } = "none";
+
+    public string CredentialStorePath { get; set; } = DispatchDefaults.CredentialStorePath;
 }

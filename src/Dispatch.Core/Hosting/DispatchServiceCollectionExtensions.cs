@@ -3,6 +3,7 @@ using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Dispatch.Core.Hosting;
 
@@ -34,7 +35,15 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IDispatchResultWriter, DispatchResultWriter>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
-        services.AddSingleton<ICredentialProvider, UnavailableCredentialProvider>();
+        services.AddSingleton<ICredentialProvider>(static services =>
+        {
+            var options = services.GetRequiredService<IOptions<DispatchOptions>>();
+            var providerName = options.Value.CredentialProvider;
+            return string.Equals(providerName, "file", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(providerName, "local", StringComparison.OrdinalIgnoreCase)
+                ? new FileCredentialProvider(options)
+                : new UnavailableCredentialProvider(options);
+        });
 
         return services;
     }

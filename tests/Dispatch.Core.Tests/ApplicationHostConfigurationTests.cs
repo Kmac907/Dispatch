@@ -1,4 +1,5 @@
 using Dispatch.Core.Configuration;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Hosting;
 using Dispatch.Core.Models;
@@ -26,8 +27,11 @@ public sealed class ApplicationHostConfigurationTests
         Assert.Equal(8, options.Throttle);
         Assert.Equal([0], options.ExpectedExitCodes);
         Assert.Equal("psexec.exe", options.PsExecPath);
+        Assert.Equal("none", options.CredentialProvider);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Credentials\references.json", options.CredentialStorePath);
         Assert.NotNull(provider.GetRequiredService<IDispatchPlanner>());
         Assert.NotNull(provider.GetRequiredService<IDispatchExecutor>());
+        Assert.IsType<UnavailableCredentialProvider>(provider.GetRequiredService<ICredentialProvider>());
     }
 
     [Fact]
@@ -43,6 +47,8 @@ public sealed class ApplicationHostConfigurationTests
             ["Dispatch:DefaultTransport"] = "PsExec",
             ["Dispatch:Throttle"] = "16",
             ["Dispatch:PsExecPath"] = "C:\\Tools\\PsExec.exe",
+            ["Dispatch:CredentialProvider"] = "file",
+            ["Dispatch:CredentialStorePath"] = "D:\\Dispatch\\Credentials\\references.json",
             ["Dispatch:ExpectedExitCodes:0"] = "0",
             ["Dispatch:ExpectedExitCodes:1"] = "3010"
         });
@@ -57,7 +63,10 @@ public sealed class ApplicationHostConfigurationTests
         Assert.Equal(TransportKind.PsExec, options.DefaultTransport);
         Assert.Equal(16, options.Throttle);
         Assert.Equal("C:\\Tools\\PsExec.exe", options.PsExecPath);
+        Assert.Equal("file", options.CredentialProvider);
+        Assert.Equal("D:\\Dispatch\\Credentials\\references.json", options.CredentialStorePath);
         Assert.Equal([0, 3010], options.ExpectedExitCodes);
+        Assert.IsType<FileCredentialProvider>(provider.GetRequiredService<ICredentialProvider>());
     }
 
     [Fact]

@@ -1864,6 +1864,67 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task CredsCommandsCanUseFileBackedReferenceProvider()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-cli-creds-{Guid.NewGuid():N}");
+        var storePath = Path.Combine(root, "references.json");
+        var options = new DispatchOptions
+        {
+            CredentialProvider = "file",
+            CredentialStorePath = storePath,
+            ExpectedExitCodes = [0]
+        };
+        var provider = new FileCredentialProvider(Options.Create(options));
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            options: options,
+            credentialProvider: provider);
+
+        try
+        {
+            var (addExit, addOutput, addError) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["creds", "add", "prod-admin", "--username", @"CONTOSO\Admin"],
+                CancellationToken.None));
+            Assert.True(addExit == 0, $"Exit {addExit}. Stdout: {addOutput}. Stderr: {addError}");
+            Assert.Contains("Provider: file", addOutput);
+
+            var (listExit, listOutput, listError) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["creds", "list", "--output", "json"],
+                CancellationToken.None));
+            Assert.True(listExit == 0, $"Exit {listExit}. Stdout: {listOutput}. Stderr: {listError}");
+            using var listJson = JsonDocument.Parse(listOutput);
+            Assert.Equal("file", listJson.RootElement.GetProperty("providerName").GetString());
+            Assert.True(listJson.RootElement.GetProperty("providerAvailable").GetBoolean());
+            Assert.True(listJson.RootElement.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("prod-admin", listJson.RootElement.GetProperty("references")[0].GetProperty("name").GetString());
+            Assert.False(listOutput.Contains("password", StringComparison.OrdinalIgnoreCase));
+            Assert.False(listOutput.Contains("secret", StringComparison.OrdinalIgnoreCase));
+
+            var (testExit, _, testError) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["creds", "test", "prod-admin"],
+                CancellationToken.None));
+            Assert.True(testExit == 0, $"Stderr: {testError}");
+
+            var persisted = await File.ReadAllTextAsync(storePath);
+            Assert.Contains("prod-admin", persisted);
+            Assert.DoesNotContain("password", persisted, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("secret", persisted, StringComparison.OrdinalIgnoreCase);
+
+            var (removeExit, _, removeError) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["creds", "remove", "prod-admin"],
+                CancellationToken.None));
+            Assert.True(removeExit == 0, $"Stderr: {removeError}");
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
     public async Task LogsListReadsLocalRunHistory()
     {
         var runRoot = CreateRunHistoryRoot(
