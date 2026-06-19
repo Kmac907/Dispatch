@@ -80,6 +80,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("      -i, --inventory <path> Host inventory");
         console.WriteLine("      -t, --target <selector> Target host/group/selector");
         console.WriteLine("      --config <path>        Dispatch config file");
+        console.WriteLine("      --credential <name>    Credential reference override");
         console.WriteLine("      --exclude <selector>   Exclude selected hosts");
         console.WriteLine();
         console.WriteLine("Examples:");

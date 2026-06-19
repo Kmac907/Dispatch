@@ -41,6 +41,7 @@ internal sealed class DispatchRunCommandParser
         var excludeSelectors = new List<string>();
         string? inventoryPath = null;
         string? configPath = null;
+        string? credentialReference = null;
         var scriptArguments = new List<string>();
 
         for (var index = 0; index < args.Count; index++)
@@ -139,6 +140,20 @@ internal sealed class DispatchRunCommandParser
                         return false;
                     }
 
+                    break;
+                case "--credential":
+                    if (!TryReadValue(args, ref index, arg, out credentialReference, out error))
+                    {
+                        return false;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(credentialReference))
+                    {
+                        error = "--credential requires a non-empty credential reference name.";
+                        return false;
+                    }
+
+                    credentialReference = credentialReference.Trim();
                     break;
                 case "--output":
                     if (!TryReadValue(args, ref index, arg, out var outputValue, out error))
@@ -305,11 +320,13 @@ internal sealed class DispatchRunCommandParser
             Payload: payload,
             Targets: targetResolution.Targets,
             Transport: resolvedTransport,
+            ConfigPath: configPath,
             ExpectedExitCodes: expectedExitCodes,
             Throttle: throttle,
             LocalRunRoot: localRunRoot,
             RemoteRunRoot: remoteRunRoot,
             ArtifactPaths: artifactPaths,
+            CredentialReference: credentialReference,
             RunAsSystem: runAsSystem,
             NoDashboard: noDashboard,
             OutputMode: outputMode,

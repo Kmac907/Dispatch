@@ -480,6 +480,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         [CommandOption("--config <path>")]
         public string? Config { get; init; }
 
+        [CommandOption("--credential <name>")]
+        public string? Credential { get; init; }
+
         [CommandOption("--exclude <selector>")]
         public string? Exclude { get; init; }
 
@@ -578,6 +581,8 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         string? RemoteRoot { get; }
 
         string? TargetFile { get; }
+
+        string? Credential { get; }
 
         string? Output { get; }
 
@@ -706,6 +711,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         AddValue(args, "--output-root", settings.OutputRoot);
         AddValue(args, "--remote-root", settings.RemoteRoot);
         AddValue(args, "--target-file", settings.TargetFile);
+        AddValue(args, "--credential", settings.Credential);
         AddValue(args, "--output", settings.Output);
     }
 

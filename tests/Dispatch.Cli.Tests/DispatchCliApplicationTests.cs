@@ -1851,6 +1851,140 @@ public sealed class DispatchCliApplicationTests
         }
     }
 
+    [Fact]
+    public async Task RunRouteCredentialOverrideBeatsInventoryCredentialReference()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(inventoryPath, """
+defaults:
+  credential: inventory-admin
+hosts:
+  WEB01:
+""");
+        var planner = new CapturingPlanner();
+        var provider = new CapturingCredentialProvider(available: true);
+        var application = CreateApplication(planner, credentialProvider: provider);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--inventory",
+                    inventoryPath,
+                    "--target",
+                    "WEB01",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "breakglass-admin",
+                    "--dry-run",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Equal("test", provider.LastOperation);
+            Assert.Equal(new CredentialReferenceRequest("breakglass-admin"), provider.LastReferenceRequest);
+            var target = Assert.Single(planner.LastRequest!.Targets);
+            Assert.Equal("breakglass-admin", target.CredentialReference);
+            Assert.DoesNotContain("inventory-admin", output + error, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("password", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(inventoryPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunRouteRejectsUnknownCredentialReferenceBeforePlanning()
+    {
+        var planner = new CapturingPlanner();
+        var provider = new CapturingCredentialProvider(available: true, succeeds: false);
+        var application = CreateApplication(planner, credentialProvider: provider);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            [
+                "run",
+                "cmd",
+                "whoami",
+                "--target",
+                "PC001",
+                "--transport",
+                "psrp",
+                "--credential",
+                "missing-admin",
+                "--dry-run",
+                "--output",
+                "json"
+            ],
+            CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output);
+        Assert.Null(planner.LastRequest);
+        Assert.Equal("test", provider.LastOperation);
+        Assert.Equal(new CredentialReferenceRequest("missing-admin"), provider.LastReferenceRequest);
+        Assert.Contains("Dispatch Credential Reference Invalid", error);
+        Assert.Contains("missing-admin", error);
+    }
+
+    [Fact]
+    public async Task RunRouteValidatesCredentialOverrideFromExplicitYamlConfig()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(configPath, """
+dispatch:
+  default_credential_provider: prompt
+credentials:
+  prod-admin:
+    provider: prompt
+    username: CONTOSO\prod.admin
+""");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "prod-admin",
+                    "--config",
+                    configPath,
+                    "--dry-run",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Equal("prod-admin", Assert.Single(planner.LastRequest!.Targets).CredentialReference);
+            Assert.DoesNotContain("password", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(configPath);
+        }
+    }
+
     [Theory]
     [InlineData("apply")]
     [InlineData("push")]
@@ -3136,7 +3270,7 @@ public sealed class DispatchCliApplicationTests
         }
     }
 
-    private sealed class CapturingCredentialProvider(bool available) : ICredentialProvider
+    private sealed class CapturingCredentialProvider(bool available, bool succeeds = true) : ICredentialProvider
     {
         private const string ProviderName = "test-provider";
         private readonly List<CredentialReference> references = [];
@@ -3181,7 +3315,14 @@ public sealed class DispatchCliApplicationTests
         {
             LastOperation = "test";
             LastReferenceRequest = request;
-            return Task.FromResult(available ? Success("Credential reference is available.", []) : Unavailable());
+            if (!available)
+            {
+                return Task.FromResult(Unavailable());
+            }
+
+            return Task.FromResult(succeeds
+                ? Success("Credential reference is available.", [])
+                : Failed($"Credential reference '{request.Name}' is not defined."));
         }
 
         public Task<CredentialProviderOperationResult> RemoveAsync(
@@ -3215,6 +3356,14 @@ public sealed class DispatchCliApplicationTests
                 ProviderAvailable: false,
                 Succeeded: false,
                 "test-provider is unavailable.",
+                []);
+
+        private static CredentialProviderOperationResult Failed(string message) =>
+            new(
+                ProviderName,
+                ProviderAvailable: true,
+                Succeeded: false,
+                message,
                 []);
     }
 

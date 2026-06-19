@@ -7,11 +7,13 @@ internal sealed record DispatchRunCommand(
     DispatchPayload Payload,
     IReadOnlyList<TargetSpec> Targets,
     TransportKind Transport,
+    string? ConfigPath,
     IReadOnlyList<int> ExpectedExitCodes,
     int? Throttle,
     string? LocalRunRoot,
     string? RemoteRunRoot,
     IReadOnlyList<string> ArtifactPaths,
+    string? CredentialReference,
     bool RunAsSystem,
     bool NoDashboard,
     DispatchOutputMode OutputMode,
@@ -23,7 +25,9 @@ internal sealed record DispatchRunCommand(
     public DispatchRequest ToRequest() =>
         new(
             payload: Payload,
-            targets: Targets,
+            targets: string.IsNullOrWhiteSpace(CredentialReference)
+                ? Targets
+                : Targets.Select(target => target with { CredentialReference = CredentialReference }).ToArray(),
             transport: Transport,
             expectedExitCodes: ExpectedExitCodes,
             throttle: Throttle,

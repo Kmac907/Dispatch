@@ -97,6 +97,11 @@ public sealed class DispatchCliApplication(
 
         try
         {
+            if (!await TryValidateCredentialReferenceAsync(command!, cancellationToken).ConfigureAwait(false))
+            {
+                return 1;
+            }
+
             var request = command!.ToRequest();
             if (command.DryRun)
             {
@@ -585,6 +590,70 @@ public sealed class DispatchCliApplication(
 
         DispatchStructuredOutputRenderer.RenderCredentialOperation(Console.Out, result, outputMode);
         return 0;
+    }
+
+    private async Task<bool> TryValidateCredentialReferenceAsync(
+        DispatchRunCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(command.CredentialReference))
+        {
+            return true;
+        }
+
+        var provider = CreateCredentialProviderForCommand(command);
+        var result = await provider
+            .TestAsync(new CredentialReferenceRequest(command.CredentialReference.Trim()), cancellationToken)
+            .ConfigureAwait(false);
+        if (result.ProviderAvailable && result.Succeeded)
+        {
+            return true;
+        }
+
+        var title = result.ProviderAvailable
+            ? "Dispatch Credential Reference Invalid"
+            : "Dispatch Credentials Unavailable";
+        SpectreConsoleRenderer.RenderError(Console.Error, title, result.Message);
+        return false;
+    }
+
+    private ICredentialProvider CreateCredentialProviderForCommand(DispatchRunCommand command)
+    {
+        if (string.IsNullOrWhiteSpace(command.ConfigPath) || !File.Exists(command.ConfigPath))
+        {
+            return credentialProvider;
+        }
+
+        try
+        {
+            var configuration = DispatchConfigFileReader.Load(command.ConfigPath);
+            if (!configuration.GetSection("Credentials").GetChildren().Any())
+            {
+                return credentialProvider;
+            }
+
+            var section = configuration.GetSection(DispatchOptions.SectionName);
+            var currentOptions = options.Value;
+            var explicitOptions = new DispatchOptions
+            {
+                Inventory = currentOptions.Inventory,
+                Target = currentOptions.Target,
+                Exclude = currentOptions.Exclude,
+                LocalRunRoot = currentOptions.LocalRunRoot,
+                RemoteRunRoot = currentOptions.RemoteRunRoot,
+                DefaultTransport = currentOptions.DefaultTransport,
+                Throttle = currentOptions.Throttle,
+                ExpectedExitCodes = currentOptions.ExpectedExitCodes,
+                PsExecPath = currentOptions.PsExecPath,
+                CredentialProvider = section["CredentialProvider"] ?? currentOptions.CredentialProvider,
+                CredentialStorePath = section["CredentialStorePath"] ?? currentOptions.CredentialStorePath
+            };
+            return new ConfigurationCredentialProvider(configuration, Options.Create(explicitOptions));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
+        {
+            return credentialProvider;
+        }
     }
 
     private static bool TryValidateCredentialName(string? name, out string? error)
