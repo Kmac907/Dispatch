@@ -1,5 +1,6 @@
 using Dispatch.Core.Hosting;
 using Dispatch.Core.Credentials;
+using Dispatch.Core.Defaults;
 using Dispatch.Transports.PsExec;
 using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
@@ -14,14 +15,22 @@ namespace Dispatch.Cli;
 [SupportedOSPlatform("windows")]
 public static class DispatchCliHost
 {
-    public static IHost Build(string[] args)
+    public static IHost Build(string[] args) => Build(args, DispatchDefaults.GlobalConfigPath);
+
+    internal static IHost Build(string[] args, string globalConfigPath)
     {
         var builder = Host.CreateApplicationBuilder(args);
 
         builder.Configuration
             .AddJsonFile("appsettings.json", optional: true)
-            .AddJsonFile("appsettings.local.json", optional: true)
-            .AddEnvironmentVariables(prefix: "DISPATCH_");
+            .AddJsonFile("appsettings.local.json", optional: true);
+
+        if (File.Exists(globalConfigPath))
+        {
+            builder.Configuration.AddInMemoryCollection(DispatchConfigFileReader.ReadYamlFile(globalConfigPath));
+        }
+
+        builder.Configuration.AddEnvironmentVariables(prefix: "DISPATCH_");
 
         builder.Logging.AddConsole();
         builder.Services.AddDispatchCore(builder.Configuration);

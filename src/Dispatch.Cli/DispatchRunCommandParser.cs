@@ -371,9 +371,7 @@ internal sealed class DispatchRunCommandParser
 
         try
         {
-            var configuration = new ConfigurationBuilder()
-                .AddJsonFile(configPath, optional: false)
-                .Build();
+            var configuration = DispatchConfigFileReader.Load(configPath);
             var section = configuration.GetSection(DispatchOptions.SectionName);
 
             config = config with

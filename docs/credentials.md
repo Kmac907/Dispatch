@@ -8,12 +8,14 @@ Current implementation status:
 
 - `dispatch creds add|list|test|remove` is wired to a credential provider abstraction.
 - The default provider is `none` and reports unavailable.
+- Dispatch loads the global YAML config from `C:\ProgramData\Dispatch\config.yml` by default when it exists. `dispatch run ps|cmd|exe --config <path>` also accepts YAML config for the current run defaults.
 - Configuring `Dispatch:CredentialProvider` as `file` or `local` enables a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`.
 - No plaintext password command-line flags are supported.
 - No credential secret is stored by the default provider or by the file-backed provider. The file-backed provider stores reference names and optional username metadata only.
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts.
 - YAML inventory validation rejects plaintext secret-like fields such as `password`, `secret`, `token`, `sas`, `sasToken`, and fields ending in `Password`, `Secret`, or `Token`.
-- YAML job credential validation, config-file secret policy validation, runtime secret resolution, and transport credential handoff are later slices.
+- YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
+- YAML job credential validation, full config credential-catalog resolution, runtime secret resolution, and transport credential handoff are later slices.
 
 Examples:
 
@@ -32,15 +34,12 @@ dispatch creds list --output json
 
 When no provider is configured, the command exits nonzero and reports provider availability. Structured output still includes the provider name, availability state, success state, message, and any references returned by the provider.
 
-To enable local reference metadata storage:
+To enable local reference metadata storage in the global Dispatch config:
 
-```json
-{
-  "Dispatch": {
-    "CredentialProvider": "file",
-    "CredentialStorePath": "C:\\ProgramData\\Dispatch\\Credentials\\references.json"
-  }
-}
+```yaml
+dispatch:
+  default_credential_provider: file
+  credential_store_path: C:\ProgramData\Dispatch\Credentials\references.json
 ```
 
 The file-backed provider writes a JSON catalog containing reference names and optional usernames. It does not prompt for, store, encrypt, decrypt, or hand off passwords.
