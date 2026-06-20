@@ -6,6 +6,7 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using System.Security;
 using System.Text.Json;
 using System.Threading.Channels;
 
@@ -1937,6 +1938,134 @@ hosts:
     }
 
     [Fact]
+    public async Task RunRouteDoesNotResolveRuntimeCredentialForPlan()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var provider = new CapturingCredentialProvider(available: true);
+        var runtimeResolver = new RecordingRuntimeCredentialResolver();
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            credentialProvider: provider,
+            runtimeCredentialResolver: runtimeResolver);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "prod-admin",
+                    "--plan"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Empty(runtimeResolver.Requests);
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal("prod-admin", Assert.Single(planner.LastRequest!.Targets).CredentialReference);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunRouteResolvesRuntimeCredentialBeforePsrpExecution()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var provider = new CapturingCredentialProvider(available: true);
+        using var credential = CreateResolvedCredential("prod-admin");
+        var runtimeResolver = new RecordingRuntimeCredentialResolver(
+            new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["prod-admin"] = credential
+            });
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            executor: executor,
+            displayMode: DispatchRunDisplayMode.AppendOnly,
+            credentialProvider: provider,
+            runtimeCredentialResolver: runtimeResolver);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "prod-admin",
+                    "--no-progress"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Equal(["prod-admin"], Assert.Single(runtimeResolver.Requests));
+            Assert.NotNull(executor.LastPlan);
+            Assert.Same(credential, executor.LastPlan!.RuntimeCredentials["prod-admin"]);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunRouteRejectsRuntimeCredentialForNonPsrpTransport()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var provider = new CapturingCredentialProvider(available: true);
+        var runtimeResolver = new RecordingRuntimeCredentialResolver();
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            credentialProvider: provider,
+            runtimeCredentialResolver: runtimeResolver);
+
+        try
+        {
+            var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--credential",
+                    "prod-admin",
+                    "--no-progress"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Dispatch Credential Handoff Unsupported", error);
+            Assert.Empty(runtimeResolver.Requests);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
     public async Task RunRouteValidatesCredentialOverrideFromExplicitYamlConfig()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -3147,7 +3276,8 @@ credentials:
         DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
         TextWriter? statusWriter = null,
         DispatchOptions? options = null,
-        ICredentialProvider? credentialProvider = null) =>
+        ICredentialProvider? credentialProvider = null,
+        IRuntimeCredentialResolver? runtimeCredentialResolver = null) =>
         new(
             Options.Create(options ?? new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
@@ -3155,7 +3285,8 @@ credentials:
             doctor ?? new StaticDoctor(new DispatchDoctorReport([])),
             displayMode,
             statusWriter,
-            credentialProvider);
+            credentialProvider,
+            runtimeCredentialResolver);
 
     private static IReadOnlyList<JsonDocument> ParseNdjson(string output) =>
         output
@@ -3183,6 +3314,18 @@ credentials:
 
     private static string NormalizeWhitespace(string value) =>
         string.Join(" ", value.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    private static DispatchResolvedCredential CreateResolvedCredential(string referenceName)
+    {
+        var password = new SecureString();
+        foreach (var character in "secret-value")
+        {
+            password.AppendChar(character);
+        }
+
+        password.MakeReadOnly();
+        return new DispatchResolvedCredential(referenceName, @"SCF\prod.admin", "prompt", password);
+    }
 
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {
@@ -3322,6 +3465,70 @@ credentials:
                         ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty)
                 ],
                 ResultPath: plan.LocalResultsJsonPath);
+        }
+    }
+
+    private sealed class CapturingSucceedingExecutor : IDispatchExecutor
+    {
+        public ExecutionPlan? LastPlan { get; private set; }
+
+        public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
+            ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken);
+
+        public async Task<DispatchRunResult> ExecuteAsync(
+            ExecutionPlan plan,
+            IDispatchExecutionObserver observer,
+            CancellationToken cancellationToken)
+        {
+            LastPlan = plan;
+            var target = Assert.Single(plan.Targets);
+            await observer.OnProgressAsync(
+                new DispatchExecutionProgress(plan.RunId, target.Target.Name, TargetExecutionState.Succeeded, DateTimeOffset.UnixEpoch),
+                cancellationToken);
+
+            return new DispatchRunResult(
+                RunId: plan.RunId,
+                StartedAt: DateTimeOffset.UnixEpoch,
+                EndedAt: DateTimeOffset.UnixEpoch,
+                RequestedBy: "test",
+                Transport: plan.Job.Transport,
+                PayloadType: plan.Job.Payload.PayloadType,
+                PayloadName: plan.Job.Payload.DisplayName,
+                Targets:
+                [
+                    new TargetExecutionResult(
+                        RunId: plan.RunId,
+                        Target: target.Target.Name,
+                        Transport: plan.Job.Transport,
+                        PayloadType: plan.Job.Payload.PayloadType,
+                        PayloadName: plan.Job.Payload.DisplayName,
+                        State: TargetExecutionState.Succeeded,
+                        ExitCode: 0,
+                        ExpectedExitCodes: plan.Job.ExpectedExitCodes,
+                        StartedAt: DateTimeOffset.UnixEpoch,
+                        EndedAt: DateTimeOffset.UnixEpoch,
+                        FailureCategory: FailureCategory.None,
+                        FailureMessage: null,
+                        ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty)
+                ],
+                ResultPath: plan.LocalResultsJsonPath);
+        }
+    }
+
+    private sealed class RecordingRuntimeCredentialResolver(
+        IReadOnlyDictionary<string, DispatchResolvedCredential>? resolvedCredentials = null) : IRuntimeCredentialResolver
+    {
+        public List<IReadOnlyList<string>> Requests { get; } = [];
+
+        public Task<RuntimeCredentialResolutionResult> ResolveAsync(
+            IEnumerable<string> credentialReferences,
+            CancellationToken cancellationToken)
+        {
+            var references = credentialReferences.ToArray();
+            Requests.Add(references);
+
+            return Task.FromResult(RuntimeCredentialResolutionResult.Success(
+                resolvedCredentials ?? new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)));
         }
     }
 

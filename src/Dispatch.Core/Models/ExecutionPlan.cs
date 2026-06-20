@@ -1,3 +1,6 @@
+using Dispatch.Core.Credentials;
+using System.Text.Json.Serialization;
+
 namespace Dispatch.Core.Models;
 
 public sealed record ExecutionPlan(
@@ -13,4 +16,9 @@ public sealed record ExecutionPlan(
     string LocalTargetsRoot = "",
     string LocalResultsJsonPath = "",
     string LocalResultsCsvPath = "",
-    string LocalEventsNdjsonPath = "");
+    string LocalEventsNdjsonPath = "")
+{
+    [JsonIgnore]
+    public IReadOnlyDictionary<string, DispatchResolvedCredential> RuntimeCredentials { get; init; } =
+        new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase);
+}

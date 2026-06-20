@@ -62,7 +62,8 @@ public sealed class PsrpScriptExecutor(
                     executionContext.PsrpConfigurationName,
                     executionContext.PsrpConnectionKind,
                     executionContext.PsrpAuthentication,
-                    executionContext.PsrpCertificateThumbprint),
+                    executionContext.PsrpCertificateThumbprint,
+                    request.Credential),
                 cancellationToken).ConfigureAwait(false);
 
             return CreateResult(request, startedAt, metadata, scriptResult);
@@ -103,7 +104,8 @@ public sealed class PsrpScriptExecutor(
                 executionContext.PsrpConfigurationName,
                 executionContext.PsrpConnectionKind,
                 executionContext.PsrpAuthentication,
-                executionContext.PsrpCertificateThumbprint),
+                executionContext.PsrpCertificateThumbprint,
+                request.Credential),
             cancellationToken).ConfigureAwait(false);
 
         return CreateResult(request, startedAt, metadata, commandResult);
@@ -124,6 +126,12 @@ public sealed class PsrpScriptExecutor(
         }
 
         metadata["executable"] = request.Target.PlannedCommand?.Executable ?? "powershell.exe";
+        if (request.Credential is not null)
+        {
+            metadata["credentialReference"] = request.Credential.ReferenceName;
+            metadata["credentialProvider"] = request.Credential.ProviderName;
+            metadata["credentialUserName"] = request.Credential.UserName;
+        }
 
         if (!result.Succeeded)
         {

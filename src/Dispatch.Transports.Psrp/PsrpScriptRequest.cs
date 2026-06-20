@@ -1,3 +1,4 @@
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 
 namespace Dispatch.Transports.Psrp;
@@ -11,4 +12,5 @@ public sealed record PsrpScriptRequest(
     string? ConfigurationName,
     PsrpConnectionKind ConnectionKind,
     PsrpAuthenticationKind AuthenticationKind,
-    string? CertificateThumbprint);
+    string? CertificateThumbprint,
+    DispatchResolvedCredential? Credential = null);

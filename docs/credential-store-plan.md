@@ -362,6 +362,14 @@ Password:
 
 Password is kept in memory only and discarded after the run.
 
+Current implementation:
+
+- Implemented for real `dispatch run ps|cmd|exe ... --transport psrp` execution.
+- The prompt happens after planning and before live rendering or endpoint work starts.
+- `--plan` / dry-run paths validate and carry the reference name but do not prompt.
+- The resolved password is converted to an in-memory PSRP `PSCredential` for command, script, and artifact sessions.
+- Raw WinRM, PsExec, YAML `apply`, and non-prompt providers remain later slices.
+
 ## PSCredential Provider
 
 PowerShell module wrapper only.
@@ -732,7 +740,7 @@ These are references, locations, auth mode names, or usernames, not secret value
 7. Implement credential metadata lookup from loaded Dispatch config.
 8. Implement `prompt` provider.
 9. Add `--credential` to `run` and `apply`.
-10. Wire resolved credentials into PSRP first.
+10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider runtime resolution for `run ps|cmd|exe --transport psrp`.
 11. Add PowerShell wrapper `pscredential` handoff.
 12. Add `dpapi_file`.
 13. Add `windows_credential_manager`.

@@ -1,3 +1,4 @@
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 using System.Management.Automation;
 using System.Management.Automation.Runspaces;
@@ -161,7 +162,7 @@ catch {
             attempt.Port,
             ApplicationName,
             BuildShellUri(configurationName),
-            credential: null);
+            CreatePowerShellCredential(request.Credential));
         connectionInfo.AuthenticationMechanism = MapAuthenticationMechanism(authenticationKind);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)
@@ -174,6 +175,11 @@ catch {
 
         return connectionInfo;
     }
+
+    internal static PSCredential? CreatePowerShellCredential(DispatchResolvedCredential? credential) =>
+        credential is null
+            ? null
+            : new PSCredential(credential.UserName, credential.Password);
 
     internal static PsrpCommandResult ParseResult(
         string payload,

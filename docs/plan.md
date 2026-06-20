@@ -1274,11 +1274,12 @@ Current implementation boundary:
 - Config-defined `credentials:<name>` entries are exposed to credential commands as a metadata-only catalog, including `provider: prompt` no-enrollment behavior for `creds add`.
 - Config-defined credential references are validated against provider-specific metadata before `creds test`, `creds add`, or direct `run ps|cmd|exe --credential <name>` planning accepts them. The current supported metadata validators cover `prompt`, `pscredential`, `dpapi_file`, `windows_credential_manager`, and `azure_keyvault` reference shapes without retrieving or storing secrets.
 - `dispatch run ps|cmd|exe --credential <name>` accepts a direct credential reference override, validates the reference through the configured provider before endpoint planning, and applies the reference to all selected targets.
+- For real `--transport psrp` execution, `provider: prompt` credential references resolve after planning and before live rendering or endpoint work; the password stays in memory, is passed to PSRP command/script/artifact sessions as a `PSCredential`, and is disposed after the run. Dry-run/plan paths validate and carry the reference name but do not prompt.
 - `Dispatch:CredentialProvider` values `file` and `local` enable a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`. This catalog stores reference names and optional username metadata only.
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
 - The target model is the global YAML `C:\ProgramData\Dispatch\config.yml` credential catalog described in `docs/credential-store-plan.md`; the current `references.json` catalog is not the long-term canonical credential catalog.
-- Runtime credential resolution/transport handoff and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
+- PSCredential PowerShell-wrapper handoff, DPAPI file resolution, Windows Credential Manager resolution, Azure Key Vault resolution, raw WinRM credential handoff, PsExec credential handoff, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
 
 #### 6.5 YAML Apply And Job Model
 

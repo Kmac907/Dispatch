@@ -16,13 +16,16 @@ public sealed class DispatchCliApplication(
     IDispatchDoctor doctor,
     DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
     TextWriter? statusWriter = null,
-    ICredentialProvider? credentialProvider = null)
+    ICredentialProvider? credentialProvider = null,
+    IRuntimeCredentialResolver? runtimeCredentialResolver = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
     private readonly DispatchRunRetryPlanner runRetryPlanner = new();
     private readonly ICredentialProvider credentialProvider =
         credentialProvider ?? new UnavailableCredentialProvider(options);
+    private readonly IRuntimeCredentialResolver runtimeCredentialResolver =
+        runtimeCredentialResolver ?? new UnavailableRuntimeCredentialResolver();
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -131,24 +134,50 @@ public sealed class DispatchCliApplication(
                 streamWriter.WritePlanningStarted();
                 var streamPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
                 streamWriter.WritePlan(streamPlan);
-                streamWriter.WriteExecutionStarted(streamPlan);
-                var streamResult = await executor.ExecuteAsync(streamPlan, streamWriter, cancellationToken).ConfigureAwait(false);
-                streamWriter.WriteResult(streamResult);
-                return streamResult.FailedCount == 0 && streamResult.TimedOutCount == 0 && streamResult.CancelledCount == 0 ? 0 : 1;
+                var resolvedStreamPlan = await ResolveRuntimeCredentialsAsync(streamPlan, cancellationToken).ConfigureAwait(false);
+                if (resolvedStreamPlan is null)
+                {
+                    return 1;
+                }
+
+                try
+                {
+                    streamWriter.WriteExecutionStarted(resolvedStreamPlan);
+                    var streamResult = await executor.ExecuteAsync(resolvedStreamPlan, streamWriter, cancellationToken).ConfigureAwait(false);
+                    streamWriter.WriteResult(streamResult);
+                    return streamResult.FailedCount == 0 && streamResult.TimedOutCount == 0 && streamResult.CancelledCount == 0 ? 0 : 1;
+                }
+                finally
+                {
+                    DisposeRuntimeCredentials(resolvedStreamPlan);
+                }
             }
 
             var plan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
                 ? await CreatePlanWithStatusAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                 : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-            var result = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
-                ? await RunWithSpectreProgressAsync(plan, command.NoDashboard, command.NoColor, cancellationToken).ConfigureAwait(false)
-                : await executor.ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken).ConfigureAwait(false);
-            if (!ShouldSuppressOutput(command))
+            var resolvedPlan = await ResolveRuntimeCredentialsAsync(plan, cancellationToken).ConfigureAwait(false);
+            if (resolvedPlan is null)
             {
-                DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, command.OutputMode);
+                return 1;
             }
 
-            return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
+            try
+            {
+                var result = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
+                    ? await RunWithSpectreProgressAsync(resolvedPlan, command.NoDashboard, command.NoColor, cancellationToken).ConfigureAwait(false)
+                    : await executor.ExecuteAsync(resolvedPlan, NullDispatchExecutionObserver.Instance, cancellationToken).ConfigureAwait(false);
+                if (!ShouldSuppressOutput(command))
+                {
+                    DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, command.OutputMode);
+                }
+
+                return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
+            }
+            finally
+            {
+                DisposeRuntimeCredentials(resolvedPlan);
+            }
         }
         catch (DispatchPlanningException exception)
         {
@@ -225,6 +254,53 @@ public sealed class DispatchCliApplication(
 
     private static bool ShouldSuppressOutput(DispatchRunCommand command) =>
         command.Quiet && command.OutputMode is DispatchOutputMode.Rich or DispatchOutputMode.Table;
+
+    private async Task<ExecutionPlan?> ResolveRuntimeCredentialsAsync(
+        ExecutionPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var credentialReferences = plan.Targets
+            .Select(static target => target.Target.CredentialReference)
+            .Where(static reference => !string.IsNullOrWhiteSpace(reference))
+            .Select(static reference => reference!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (credentialReferences.Length == 0)
+        {
+            return plan;
+        }
+
+        if (plan.Job.Transport != TransportKind.Psrp)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Credential Handoff Unsupported",
+                $"Runtime credential handoff is currently implemented for PSRP only. Transport '{plan.Job.Transport.ToDispatchString()}' cannot use credential reference '{credentialReferences[0]}'.");
+            return null;
+        }
+
+        var result = await runtimeCredentialResolver
+            .ResolveAsync(credentialReferences, cancellationToken)
+            .ConfigureAwait(false);
+        if (!result.Succeeded)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Credential Resolution Failed",
+                result.FailureMessage ?? "Credential resolution failed.");
+            return null;
+        }
+
+        return plan with { RuntimeCredentials = result.Credentials };
+    }
+
+    private static void DisposeRuntimeCredentials(ExecutionPlan plan)
+    {
+        foreach (var credential in plan.RuntimeCredentials.Values)
+        {
+            credential.Dispose();
+        }
+    }
 
     private bool ShouldUseLiveDashboard(bool noDashboard) =>
         displayMode switch

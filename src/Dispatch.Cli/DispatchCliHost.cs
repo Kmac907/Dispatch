@@ -34,6 +34,7 @@ public static class DispatchCliHost
 
         builder.Logging.AddConsole();
         builder.Services.AddDispatchCore(builder.Configuration);
+        builder.Services.AddSingleton<IRuntimeCredentialPrompt, ConsoleRuntimeCredentialPrompt>();
         builder.Services.AddDispatchPsExecTransport();
         builder.Services.AddDispatchPsrpTransport();
         builder.Services.AddDispatchWinRmTransport();
@@ -43,7 +44,8 @@ public static class DispatchCliHost
             services.GetRequiredService<Dispatch.Core.Execution.IDispatchPlanner>(),
             services.GetRequiredService<Dispatch.Core.Execution.IDispatchExecutor>(),
             services.GetRequiredService<IDispatchDoctor>(),
-            credentialProvider: services.GetRequiredService<ICredentialProvider>()));
+            credentialProvider: services.GetRequiredService<ICredentialProvider>(),
+            runtimeCredentialResolver: services.GetRequiredService<IRuntimeCredentialResolver>()));
 
         return builder.Build();
     }

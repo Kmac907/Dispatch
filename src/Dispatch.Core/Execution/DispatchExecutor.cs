@@ -169,8 +169,9 @@ internal sealed class DispatchExecutor(
 
             await NotifyTargetStateAsync(plan, target, TargetExecutionState.Executing, observer, cancellationToken).ConfigureAwait(false);
             var progressReporter = CreateProgressReporter(plan, target, observer, cancellationToken);
+            var credential = ResolveTargetCredential(plan, target);
             var execution = await transportExecutor.ExecuteScriptAsync(
-                new TransportScriptExecutionRequest(plan, target, targetPreparation, progressReporter),
+                new TransportScriptExecutionRequest(plan, target, targetPreparation, progressReporter, credential),
                 cancellationToken).ConfigureAwait(false);
 
             await NotifyTargetStateAsync(plan, target, TargetExecutionState.CollectingArtifacts, observer, cancellationToken).ConfigureAwait(false);
@@ -341,7 +342,7 @@ internal sealed class DispatchExecutor(
             Artifacts: artifacts.Artifacts,
             ArtifactCollectionStatus: artifacts.Status,
             ArtifactCollectionFailureMessage: artifacts.FailureMessage,
-            SecretHandoffStatus: "not-supported",
+            SecretHandoffStatus: GetCredentialHandoffStatus(plan, target),
             CleanupStatus: "not-started",
             TransportMetadata: execution.Metadata,
             StreamRecords: execution.StreamRecords);
@@ -371,9 +372,32 @@ internal sealed class DispatchExecutor(
             ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty,
             Artifacts: [],
             ArtifactCollectionStatus: "skipped",
-            SecretHandoffStatus: "not-supported",
+            SecretHandoffStatus: GetCredentialHandoffStatus(plan, target),
             CleanupStatus: "not-started",
             TransportMetadata: metadata);
+
+    private static Dispatch.Core.Credentials.DispatchResolvedCredential? ResolveTargetCredential(
+        ExecutionPlan plan,
+        TargetExecution target)
+    {
+        var reference = target.Target.CredentialReference;
+        return string.IsNullOrWhiteSpace(reference)
+            ? null
+            : plan.RuntimeCredentials.TryGetValue(reference.Trim(), out var credential)
+                ? credential
+                : null;
+    }
+
+    private static string GetCredentialHandoffStatus(ExecutionPlan plan, TargetExecution target)
+    {
+        var reference = target.Target.CredentialReference;
+        if (string.IsNullOrWhiteSpace(reference))
+        {
+            return "not-supported";
+        }
+
+        return plan.RuntimeCredentials.ContainsKey(reference.Trim()) ? "resolved" : "not-resolved";
+    }
 
     private static DispatchEventStreamWriter? CreateEventStreamWriter(ExecutionPlan plan)
     {

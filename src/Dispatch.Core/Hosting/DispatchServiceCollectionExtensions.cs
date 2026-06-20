@@ -35,6 +35,8 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IDispatchResultWriter, DispatchResultWriter>();
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
+        services.AddSingleton<IRuntimeCredentialPrompt, UnavailableRuntimeCredentialPrompt>();
+        services.AddSingleton<IRuntimeCredentialResolver, ConfigurationRuntimeCredentialResolver>();
         services.AddSingleton<ICredentialProvider>(services =>
         {
             var options = services.GetRequiredService<IOptions<DispatchOptions>>();

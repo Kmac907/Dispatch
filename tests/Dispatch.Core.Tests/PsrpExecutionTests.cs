@@ -2,6 +2,7 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Hosting;
 using Dispatch.Core.Models;
 using Dispatch.Core.Transports;
+using Dispatch.Core.Credentials;
 using Dispatch.Transports.Psrp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,6 +11,7 @@ using System.Management.Automation;
 using System.Management.Automation.Runspaces;
 using System.IO.Compression;
 using System.Runtime.Versioning;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -167,6 +169,57 @@ public sealed class PsrpExecutionTests
         Assert.Equal("PowerShell.7", commandClient.LastRequest!.ConfigurationName);
         Assert.Equal(PsrpConnectionKind.WsMan, commandClient.LastRequest.ConnectionKind);
         Assert.Equal(PsrpAuthenticationKind.Negotiate, commandClient.LastRequest.AuthenticationKind);
+    }
+
+    [Fact]
+    public async Task PsrpExecutorPassesResolvedCredentialToCommandClient()
+    {
+        using var credential = CreateResolvedCredential("prod-admin");
+        var commandClient = new StubCommandClient(PsrpCommandResult.Success(0, "ok\r\n", string.Empty));
+        var executor = new PsrpScriptExecutor(
+            commandClient,
+            new StubScriptClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)));
+        var request = CreateCommandExecutionRequest("whoami", "cmd", credential: credential);
+
+        var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Same(credential, commandClient.LastRequest!.Credential);
+        Assert.NotNull(result.Metadata);
+        Assert.Equal("prod-admin", result.Metadata["credentialReference"]);
+        Assert.Equal("prompt", result.Metadata["credentialProvider"]);
+        Assert.Equal(@"SCF\prod.admin", result.Metadata["credentialUserName"]);
+        Assert.DoesNotContain(result.Metadata, pair => pair.Value.Contains("secret", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PsrpExecutorPassesResolvedCredentialToScriptClient()
+    {
+        using var script = TemporaryScript.Create();
+        using var credential = CreateResolvedCredential("prod-admin");
+        var scriptClient = new StubScriptClient(PsrpCommandResult.Success(0, "ok\r\n", string.Empty));
+        var executor = new PsrpScriptExecutor(
+            new StubCommandClient(PsrpCommandResult.Success(0, string.Empty, string.Empty)),
+            scriptClient);
+        var request = new TransportScriptExecutionRequest(
+            CreatePlan(script.Path, TransportKind.Psrp),
+            CreateTargetExecution() with
+            {
+                Target = new TargetSpec("PC001", CredentialReference: "prod-admin")
+            },
+            new TargetScriptPreparationResult(
+                Target: new TargetSpec("PC001", CredentialReference: "prod-admin"),
+                RemoteScriptPath: @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1",
+                AdminShareScriptPath: null,
+                Succeeded: true),
+            Credential: credential);
+
+        var result = await executor.ExecuteScriptAsync(request, CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Same(credential, scriptClient.LastRequest!.Credential);
+        Assert.NotNull(result.Metadata);
+        Assert.Equal("prod-admin", result.Metadata["credentialReference"]);
     }
 
     [Fact]
@@ -425,6 +478,32 @@ public sealed class PsrpExecutionTests
     }
 
     [Fact]
+    public async Task PsrpArtifactCollectorPassesResolvedCredentialToArtifactClient()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        using var credential = CreateResolvedCredential("prod-admin");
+        var client = new RecordingArtifactClient(_ => PsrpArtifactDownloadResult.Missing());
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path) with
+        {
+            Target = new TargetSpec("PC001", CredentialReference: "prod-admin")
+        };
+        var plan = CreateArtifactPlan(targetRoot.Path, target, new ArtifactPolicy(["logs"]))
+            with
+            {
+                RuntimeCredentials = new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["prod-admin"] = credential
+                }
+            };
+
+        await collector.CollectAsync(plan, target, CancellationToken.None);
+
+        var request = Assert.Single(client.Requests);
+        Assert.Same(credential, request.Credential);
+    }
+
+    [Fact]
     public async Task PsrpArtifactCollectorReportsMeasuredDownloadProgressWhenArchiveSizeIsKnown()
     {
         using var targetRoot = TemporaryDirectory.Create();
@@ -609,11 +688,12 @@ public sealed class PsrpExecutionTests
         string? workingDirectory = null,
         string? configurationName = null,
         PsrpConnectionKind connectionKind = PsrpConnectionKind.WsMan,
-        PsrpAuthenticationKind authenticationKind = PsrpAuthenticationKind.Default)
+        PsrpAuthenticationKind authenticationKind = PsrpAuthenticationKind.Default,
+        DispatchResolvedCredential? credential = null)
     {
         var target = new TargetExecution(
             RunId: "run-001",
-            Target: new TargetSpec("PC001"),
+            Target: new TargetSpec("PC001", CredentialReference: credential?.ReferenceName),
             State: TargetExecutionState.Pending,
             PlannedLocalTargetRoot: @"C:\Dispatch\Tests\run-001\Targets\PC001",
             PlannedLocalResultPath: @"C:\Dispatch\Tests\run-001\Targets\PC001\result.json",
@@ -645,7 +725,19 @@ public sealed class PsrpExecutionTests
             AdminShareScriptPath: null,
             Succeeded: true);
 
-        return new TransportScriptExecutionRequest(plan, target, preparation);
+        return new TransportScriptExecutionRequest(plan, target, preparation, Credential: credential);
+    }
+
+    private static DispatchResolvedCredential CreateResolvedCredential(string referenceName)
+    {
+        var password = new SecureString();
+        foreach (var character in "secret-value")
+        {
+            password.AppendChar(character);
+        }
+
+        password.MakeReadOnly();
+        return new DispatchResolvedCredential(referenceName, @"SCF\prod.admin", "prompt", password);
     }
 
     private static TransportEndpointProbeRequest CreateProbeRequest(string targetName) =>
@@ -734,8 +826,13 @@ public sealed class PsrpExecutionTests
 
     private sealed class StubScriptClient(PsrpCommandResult result) : IPsrpScriptClient
     {
-        public Task<PsrpCommandResult> ExecuteAsync(PsrpScriptRequest request, CancellationToken cancellationToken) =>
-            Task.FromResult(result);
+        public PsrpScriptRequest? LastRequest { get; private set; }
+
+        public Task<PsrpCommandResult> ExecuteAsync(PsrpScriptRequest request, CancellationToken cancellationToken)
+        {
+            LastRequest = request;
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class RecordingArtifactClient(Func<PsrpArtifactRequest, PsrpArtifactDownloadResult> resultFactory) : IPsrpArtifactClient

@@ -19,7 +19,7 @@ public sealed class PsrpTransportDescriptor : ITransportDescriptor
         SupportsStreamedFileTransfer: true,
         SupportsPowerShellStreams: true,
         SupportsCurrentUser: true,
-        SupportsExplicitCredential: false,
+        SupportsExplicitCredential: true,
         SupportsRunAsSystem: false,
         SupportsCredentialDelegation: false);
 }

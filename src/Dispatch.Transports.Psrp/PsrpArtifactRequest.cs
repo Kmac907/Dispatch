@@ -1,3 +1,4 @@
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 
 namespace Dispatch.Transports.Psrp;
@@ -10,6 +11,7 @@ public sealed record PsrpArtifactRequest(
     string? ConfigurationName = null,
     PsrpConnectionKind ConnectionKind = PsrpConnectionKind.WsMan,
     PsrpAuthenticationKind AuthenticationKind = PsrpAuthenticationKind.Default,
-    string? CertificateThumbprint = null);
+    string? CertificateThumbprint = null,
+    DispatchResolvedCredential? Credential = null);
 
 public sealed record PsrpArtifactProgress(long CompletedBytes, long TotalBytes);

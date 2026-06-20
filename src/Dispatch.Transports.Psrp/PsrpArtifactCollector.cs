@@ -64,7 +64,8 @@ public sealed class PsrpArtifactCollector(IPsrpArtifactClient artifactClient) : 
                     executionContext.PsrpConfigurationName,
                     executionContext.PsrpConnectionKind,
                     executionContext.PsrpAuthentication,
-                    executionContext.PsrpCertificateThumbprint),
+                    executionContext.PsrpCertificateThumbprint,
+                    ResolveTargetCredential(plan, target)),
                 cancellationToken).ConfigureAwait(false);
 
             if (!download.Succeeded)
@@ -124,6 +125,18 @@ public sealed class PsrpArtifactCollector(IPsrpArtifactClient artifactClient) : 
         }
 
         return copiedArtifacts;
+    }
+
+    private static Dispatch.Core.Credentials.DispatchResolvedCredential? ResolveTargetCredential(
+        ExecutionPlan plan,
+        TargetExecution target)
+    {
+        var reference = target.Target.CredentialReference;
+        return string.IsNullOrWhiteSpace(reference)
+            ? null
+            : plan.RuntimeCredentials.TryGetValue(reference.Trim(), out var credential)
+                ? credential
+                : null;
     }
 
     private static IReadOnlyList<string> GetArtifactFolders(ArtifactPolicy policy) =>

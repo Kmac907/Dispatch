@@ -12,6 +12,7 @@ Current implementation status:
 - Config-defined `credentials:<name>` entries are available to `dispatch creds list|test|add|remove` as a metadata-only catalog.
 - Config-defined credential references are validated against the selected provider's required metadata before `creds test`, `creds add`, or `run ps|cmd|exe --credential <name>` accepts them.
 - `dispatch run ps|cmd|exe --credential <name>` accepts a credential reference override, validates it against the configured credential provider before planning endpoint work, and applies that reference to all selected targets.
+- `provider: prompt` references can now resolve at runtime for real `--transport psrp` execution. Dispatch prompts for the configured username's password before live rendering starts, keeps the password in memory only, passes it to PSRP as a `PSCredential`, and disposes it after the run.
 - Configuring `Dispatch:CredentialProvider` as `file` or `local` enables a file-backed reference catalog at `Dispatch:CredentialStorePath`, defaulting to `C:\ProgramData\Dispatch\Credentials\references.json`.
 - No plaintext password command-line flags are supported.
 - No credential secret is stored by the default provider or by the file-backed provider. The file-backed provider stores reference names and optional username metadata only.
@@ -19,7 +20,7 @@ Current implementation status:
 - Direct CLI `--credential <name>` overrides inventory credential references for the current ad-hoc run path.
 - YAML inventory validation rejects plaintext secret-like fields such as `password`, `secret`, `token`, `sas`, `sasToken`, and fields ending in `Password`, `Secret`, or `Token`.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
-- YAML job credential validation, runtime endpoint credential resolution, and transport credential handoff are later slices. This is distinct from runtime script secret handoff for SAS, Blob, or Key Vault payload secrets.
+- Runtime endpoint credential resolution is currently limited to prompt-provider PSRP handoff. `pscredential` wrapper handoff, `dpapi_file`, `windows_credential_manager`, `azure_keyvault`, raw WinRM handoff, PsExec handoff, and YAML job credential validation are later slices. This is distinct from runtime script secret handoff for SAS, Blob, or Key Vault payload secrets.
 
 Examples:
 
@@ -59,7 +60,7 @@ credentials:
     username: CONTOSO\prod.admin
 ```
 
-For `provider: prompt`, `dispatch creds add prod-admin` performs no secret enrollment and reports that the credential will prompt at runtime once runtime prompting is implemented.
+For `provider: prompt`, `dispatch creds add prod-admin` performs no secret enrollment and reports that the credential will prompt at runtime. Runtime prompting currently applies to real PSRP execution only; `--plan` and dry-run output do not prompt or resolve passwords.
 
 Provider metadata validation currently requires:
 
@@ -90,7 +91,7 @@ hosts:
     credential: host-admin
 ```
 
-Reference names are metadata only in the current slice. Inventory references are carried through target resolution, and a direct `--credential <name>` override replaces the inventory-selected reference for the current ad-hoc run. No password is retrieved or handed to transports yet.
+Reference names are metadata in plans and logs. Inventory references are carried through target resolution, and a direct `--credential <name>` override replaces the inventory-selected reference for the current ad-hoc run. For real PSRP runs with `provider: prompt`, Dispatch prompts for the referenced password before execution and passes an in-memory `PSCredential` to command, script, and artifact PSRP sessions.
 
 Security boundary:
 

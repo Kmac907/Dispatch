@@ -232,7 +232,7 @@ finally {
             attempt.Port,
             ApplicationName,
             PsrpCommandClient.BuildShellUri(configurationName),
-            credential: null);
+            PsrpCommandClient.CreatePowerShellCredential(request.Credential));
         connectionInfo.AuthenticationMechanism = PsrpCommandClient.MapAuthenticationMechanism(authenticationKind);
 
         if (request.ExecutionTimeout is { } timeout && timeout > TimeSpan.Zero)
