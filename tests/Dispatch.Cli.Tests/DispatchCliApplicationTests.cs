@@ -2115,6 +2115,66 @@ credentials:
     }
 
     [Fact]
+    public async Task RunRouteResolvesRuntimeCredentialFromExplicitYamlConfig()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(configPath, """
+dispatch:
+  default_credential_provider: prompt
+credentials:
+  prod-admin:
+    provider: prompt
+    username: CONTOSO\prod.admin
+""");
+        var executor = new CapturingSucceedingExecutor();
+        var prompt = new RecordingRuntimeCredentialPrompt("secret-value");
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            executor: executor,
+            displayMode: DispatchRunDisplayMode.AppendOnly,
+            runtimeCredentialPrompt: prompt);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "prod-admin",
+                    "--config",
+                    configPath,
+                    "--no-progress",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            var request = Assert.Single(prompt.Requests);
+            Assert.Equal("prod-admin", request.ReferenceName);
+            Assert.Equal(@"CONTOSO\prod.admin", request.UserName);
+            Assert.NotNull(executor.LastPlan);
+            var credential = Assert.Single(executor.LastPlan!.RuntimeCredentials.Values);
+            Assert.Equal("prod-admin", credential.ReferenceName);
+            Assert.Equal(@"CONTOSO\prod.admin", credential.UserName);
+            Assert.DoesNotContain("secret-value", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+            File.Delete(configPath);
+        }
+    }
+
+    [Fact]
     public async Task RunRouteRejectsInvalidCredentialOverrideMetadataFromExplicitYamlConfigBeforePlanning()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -3277,7 +3337,8 @@ credentials:
         TextWriter? statusWriter = null,
         DispatchOptions? options = null,
         ICredentialProvider? credentialProvider = null,
-        IRuntimeCredentialResolver? runtimeCredentialResolver = null) =>
+        IRuntimeCredentialResolver? runtimeCredentialResolver = null,
+        IRuntimeCredentialPrompt? runtimeCredentialPrompt = null) =>
         new(
             Options.Create(options ?? new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
@@ -3286,7 +3347,8 @@ credentials:
             displayMode,
             statusWriter,
             credentialProvider,
-            runtimeCredentialResolver);
+            runtimeCredentialResolver,
+            runtimeCredentialPrompt);
 
     private static IReadOnlyList<JsonDocument> ParseNdjson(string output) =>
         output
@@ -3529,6 +3591,25 @@ credentials:
 
             return Task.FromResult(RuntimeCredentialResolutionResult.Success(
                 resolvedCredentials ?? new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)));
+        }
+    }
+
+    private sealed class RecordingRuntimeCredentialPrompt(string password) : IRuntimeCredentialPrompt
+    {
+        public List<RuntimeCredentialPromptRequest> Requests { get; } = [];
+
+        public Task<SecureString> PromptForPasswordAsync(
+            RuntimeCredentialPromptRequest request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            var secureString = new SecureString();
+            foreach (var character in password)
+            {
+                secureString.AppendChar(character);
+            }
+
+            return Task.FromResult(secureString);
         }
     }
 

@@ -4,6 +4,7 @@ using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
@@ -17,7 +18,8 @@ public sealed class DispatchCliApplication(
     DispatchRunDisplayMode displayMode = DispatchRunDisplayMode.Auto,
     TextWriter? statusWriter = null,
     ICredentialProvider? credentialProvider = null,
-    IRuntimeCredentialResolver? runtimeCredentialResolver = null)
+    IRuntimeCredentialResolver? runtimeCredentialResolver = null,
+    IRuntimeCredentialPrompt? runtimeCredentialPrompt = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
@@ -26,6 +28,8 @@ public sealed class DispatchCliApplication(
         credentialProvider ?? new UnavailableCredentialProvider(options);
     private readonly IRuntimeCredentialResolver runtimeCredentialResolver =
         runtimeCredentialResolver ?? new UnavailableRuntimeCredentialResolver();
+    private readonly IRuntimeCredentialPrompt runtimeCredentialPrompt =
+        runtimeCredentialPrompt ?? new UnavailableRuntimeCredentialPrompt();
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -134,7 +138,7 @@ public sealed class DispatchCliApplication(
                 streamWriter.WritePlanningStarted();
                 var streamPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
                 streamWriter.WritePlan(streamPlan);
-                var resolvedStreamPlan = await ResolveRuntimeCredentialsAsync(streamPlan, cancellationToken).ConfigureAwait(false);
+                var resolvedStreamPlan = await ResolveRuntimeCredentialsAsync(streamPlan, command, cancellationToken).ConfigureAwait(false);
                 if (resolvedStreamPlan is null)
                 {
                     return 1;
@@ -156,7 +160,7 @@ public sealed class DispatchCliApplication(
             var plan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
                 ? await CreatePlanWithStatusAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                 : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-            var resolvedPlan = await ResolveRuntimeCredentialsAsync(plan, cancellationToken).ConfigureAwait(false);
+            var resolvedPlan = await ResolveRuntimeCredentialsAsync(plan, command, cancellationToken).ConfigureAwait(false);
             if (resolvedPlan is null)
             {
                 return 1;
@@ -257,6 +261,7 @@ public sealed class DispatchCliApplication(
 
     private async Task<ExecutionPlan?> ResolveRuntimeCredentialsAsync(
         ExecutionPlan plan,
+        DispatchRunCommand command,
         CancellationToken cancellationToken)
     {
         var credentialReferences = plan.Targets
@@ -279,7 +284,8 @@ public sealed class DispatchCliApplication(
             return null;
         }
 
-        var result = await runtimeCredentialResolver
+        var resolver = CreateRuntimeCredentialResolverForCommand(command);
+        var result = await resolver
             .ResolveAsync(credentialReferences, cancellationToken)
             .ConfigureAwait(false);
         if (!result.Succeeded)
@@ -695,22 +701,51 @@ public sealed class DispatchCliApplication(
 
     private ICredentialProvider CreateCredentialProviderForCommand(DispatchRunCommand command)
     {
-        if (string.IsNullOrWhiteSpace(command.ConfigPath) || !File.Exists(command.ConfigPath))
+        if (!TryCreateExplicitConfiguration(command, out var configuration, out var explicitOptions))
         {
             return credentialProvider;
         }
 
+        if (!configuration.GetSection("Credentials").GetChildren().Any())
+        {
+            return credentialProvider;
+        }
+
+        return new ConfigurationCredentialProvider(configuration, Options.Create(explicitOptions));
+    }
+
+    private IRuntimeCredentialResolver CreateRuntimeCredentialResolverForCommand(DispatchRunCommand command)
+    {
+        if (!TryCreateExplicitConfiguration(command, out var configuration, out var explicitOptions)
+            || !configuration.GetSection("Credentials").GetChildren().Any())
+        {
+            return runtimeCredentialResolver;
+        }
+
+        return new ConfigurationRuntimeCredentialResolver(
+            configuration,
+            Options.Create(explicitOptions),
+            runtimeCredentialPrompt);
+    }
+
+    private bool TryCreateExplicitConfiguration(
+        DispatchRunCommand command,
+        out IConfiguration configuration,
+        out DispatchOptions explicitOptions)
+    {
+        configuration = new ConfigurationBuilder().Build();
+        explicitOptions = options.Value;
+        if (string.IsNullOrWhiteSpace(command.ConfigPath) || !File.Exists(command.ConfigPath))
+        {
+            return false;
+        }
+
         try
         {
-            var configuration = DispatchConfigFileReader.Load(command.ConfigPath);
-            if (!configuration.GetSection("Credentials").GetChildren().Any())
-            {
-                return credentialProvider;
-            }
-
+            configuration = DispatchConfigFileReader.Load(command.ConfigPath);
             var section = configuration.GetSection(DispatchOptions.SectionName);
             var currentOptions = options.Value;
-            var explicitOptions = new DispatchOptions
+            explicitOptions = new DispatchOptions
             {
                 Inventory = currentOptions.Inventory,
                 Target = currentOptions.Target,
@@ -724,11 +759,13 @@ public sealed class DispatchCliApplication(
                 CredentialProvider = section["CredentialProvider"] ?? currentOptions.CredentialProvider,
                 CredentialStorePath = section["CredentialStorePath"] ?? currentOptions.CredentialStorePath
             };
-            return new ConfigurationCredentialProvider(configuration, Options.Create(explicitOptions));
+            return true;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
         {
-            return credentialProvider;
+            configuration = new ConfigurationBuilder().Build();
+            explicitOptions = options.Value;
+            return false;
         }
     }
 

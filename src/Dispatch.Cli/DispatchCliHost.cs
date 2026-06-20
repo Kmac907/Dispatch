@@ -45,7 +45,8 @@ public static class DispatchCliHost
             services.GetRequiredService<Dispatch.Core.Execution.IDispatchExecutor>(),
             services.GetRequiredService<IDispatchDoctor>(),
             credentialProvider: services.GetRequiredService<ICredentialProvider>(),
-            runtimeCredentialResolver: services.GetRequiredService<IRuntimeCredentialResolver>()));
+            runtimeCredentialResolver: services.GetRequiredService<IRuntimeCredentialResolver>(),
+            runtimeCredentialPrompt: services.GetRequiredService<IRuntimeCredentialPrompt>()));
 
         return builder.Build();
     }
