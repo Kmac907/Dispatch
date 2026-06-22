@@ -39,6 +39,8 @@ When reporting live endpoint validation, include:
 
 Do not report a live validation pass if no endpoint was actually reached and executed.
 
-## Current Approved Lab Pattern
+## Local Test Host Catalog
 
-The current lab often uses named endpoints such as `82H9704` and `92H9704`. These are validation targets, not permanent product requirements. If one of them is offline, validation can still pass against the other reachable approved endpoint. If both are offline or unreachable, provide a reachable replacement endpoint or reconnect one of the existing devices.
+Concrete lab host names must not be committed in public docs or tracked files. Keep the current approved validation targets in `workflow/build/test-hosts.yml`, which is ignored by git through the existing `/workflow` ignore rule.
+
+The local test-host file should list approved endpoints by transport and can be changed per workstation, lab, or validation environment. If one listed device is offline, validation can still pass against another reachable approved endpoint. If every listed device is offline or unreachable, provide a reachable replacement endpoint or reconnect one of the existing devices before claiming live endpoint validation for that slice.

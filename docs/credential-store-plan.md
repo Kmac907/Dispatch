@@ -68,7 +68,7 @@ dispatch:
 credentials:
   prod-admin:
     provider: prompt
-    username: SCF\prod.admin
+    username: CONTOSO\prod.admin
 
   helpdesk-local:
     provider: dpapi_file
@@ -77,13 +77,13 @@ credentials:
 
   domain-admin:
     provider: windows_credential_manager
-    username: SCF\domain.admin
+    username: CONTOSO\domain.admin
     target: Dispatch/domain-admin
 
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: default_azure_credential
 ```
@@ -93,7 +93,7 @@ This file is the credential reference catalog and provider-location catalog.
 Meaning:
 
 ```text
-prod-admin       -> prompt user for SCF\prod.admin password
+prod-admin       -> prompt user for CONTOSO\prod.admin password
 helpdesk-local   -> load DPAPI-protected file
 domain-admin     -> load Windows Credential Manager target
 kv-prod-admin    -> retrieve secret from Azure Key Vault
@@ -109,8 +109,8 @@ Example:
 credentials:
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: default_azure_credential
 ```
@@ -120,7 +120,7 @@ Meaning:
 ```text
 Use Azure SDK DefaultAzureCredential to authenticate to Key Vault.
 Then read secret prod-admin-password.
-Use that secret as the password for SCF\prod.admin.
+Use that secret as the password for CONTOSO\prod.admin.
 ```
 
 Planned auth values:
@@ -170,8 +170,8 @@ System-assigned managed identity:
 credentials:
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: managed_identity
 ```
@@ -182,8 +182,8 @@ User-assigned managed identity:
 credentials:
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: managed_identity
     managed_identity_client_id: 00000000-0000-0000-0000-000000000000
@@ -195,8 +195,8 @@ Azure CLI explicit mode:
 credentials:
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: azure_cli
 ```
@@ -343,7 +343,7 @@ Config:
 credentials:
   prod-admin:
     provider: prompt
-    username: SCF\prod.admin
+    username: CONTOSO\prod.admin
 ```
 
 Runtime:
@@ -356,7 +356,7 @@ Prompt:
 
 ```text
 Credential: prod-admin
-Username: SCF\prod.admin
+Username: CONTOSO\prod.admin
 Password:
 ```
 
@@ -380,13 +380,13 @@ Config:
 credentials:
   prod-admin:
     provider: pscredential
-    username: SCF\prod.admin
+    username: CONTOSO\prod.admin
 ```
 
 PowerShell:
 
 ```powershell
-$cred = Get-Credential SCF\prod.admin
+$cred = Get-Credential CONTOSO\prod.admin
 
 Invoke-DispatchRun `
   -Job .\job.yml `
@@ -445,7 +445,7 @@ Config:
 credentials:
   domain-admin:
     provider: windows_credential_manager
-    username: SCF\domain.admin
+    username: CONTOSO\domain.admin
     target: Dispatch/domain-admin
 ```
 
@@ -475,8 +475,8 @@ Config:
 credentials:
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: default_azure_credential
 ```
@@ -490,7 +490,7 @@ dispatch apply .\job.yml
 Dispatch retrieves the secret from:
 
 ```text
-https://scf-dispatch-kv.vault.azure.net/secrets/prod-admin-password
+https://contoso-dispatch-kv.vault.azure.net/secrets/prod-admin-password
 ```
 
 Then builds an in-memory credential object for the transport.
@@ -546,7 +546,7 @@ Config:
 credentials:
   prod-admin:
     provider: prompt
-    username: SCF\prod.admin
+    username: CONTOSO\prod.admin
 ```
 
 Enrollment behavior:
@@ -567,7 +567,7 @@ Config:
 credentials:
   prod-admin:
     provider: pscredential
-    username: SCF\prod.admin
+    username: CONTOSO\prod.admin
 ```
 
 Enrollment behavior from direct `dispatch.exe`:
@@ -621,7 +621,7 @@ Config:
 credentials:
   domain-admin:
     provider: windows_credential_manager
-    username: SCF\domain.admin
+    username: CONTOSO\domain.admin
     target: Dispatch/domain-admin
 ```
 
@@ -651,8 +651,8 @@ Config:
 credentials:
   kv-prod-admin:
     provider: azure_keyvault
-    username: SCF\prod.admin
-    vault_uri: https://scf-dispatch-kv.vault.azure.net/
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
     secret_name: prod-admin-password
     auth: default_azure_credential
 ```
@@ -747,7 +747,7 @@ vault_uri: https://...
 auth: default_azure_credential
 target: Dispatch/domain-admin
 path: C:\...
-username: SCF\prod.admin
+username: CONTOSO\prod.admin
 ```
 
 These are references, locations, auth mode names, or usernames, not secret values.
