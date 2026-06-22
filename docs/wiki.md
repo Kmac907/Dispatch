@@ -334,6 +334,9 @@ Must include:
 Purpose:
 - Define how Dispatch is verified.
 
+Required status:
+- already exists
+
 Must include:
 - unit and CLI test expectations
 - live validation expectations
