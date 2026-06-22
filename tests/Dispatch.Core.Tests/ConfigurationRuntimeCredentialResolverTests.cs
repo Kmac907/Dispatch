@@ -52,18 +52,20 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsyncRejectsLaterProtectedProvidersUntilTheirRuntimeSlices()
+    public async Task ResolveAsyncRejectsAzureKeyVaultUntilRuntimeSlice()
     {
         var resolver = CreateResolver(
             new Dictionary<string, string?>
             {
-                ["Credentials:domain-admin:Provider"] = "windows_credential_manager",
-                ["Credentials:domain-admin:Username"] = @"SCF\domain.admin",
-                ["Credentials:domain-admin:Target"] = "Dispatch/domain-admin"
+                ["Credentials:kv-prod-admin:Provider"] = "azure_keyvault",
+                ["Credentials:kv-prod-admin:Username"] = @"SCF\prod.admin",
+                ["Credentials:kv-prod-admin:VaultUri"] = "https://scf-dispatch-kv.vault.azure.net/",
+                ["Credentials:kv-prod-admin:SecretName"] = "prod-admin-password",
+                ["Credentials:kv-prod-admin:Auth"] = "default_azure_credential"
             },
             new RecordingRuntimeCredentialPrompt("secret-value"));
 
-        var result = await resolver.ResolveAsync(["domain-admin"], CancellationToken.None);
+        var result = await resolver.ResolveAsync(["kv-prod-admin"], CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Contains("runtime resolution is not implemented", result.FailureMessage);

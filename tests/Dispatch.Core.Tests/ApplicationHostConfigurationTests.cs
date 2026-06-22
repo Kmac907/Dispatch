@@ -158,6 +158,14 @@ public sealed class ApplicationHostConfigurationTests
             return;
         }
 
+        if (providerName == "windows_credential_manager")
+        {
+            Assert.False(result.Succeeded);
+            Assert.Contains("Windows Credential Manager target", result.Message);
+            Assert.DoesNotContain("missing required field", result.Message, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
         Assert.True(result.Succeeded);
         Assert.Contains(providerName, result.Message, StringComparison.OrdinalIgnoreCase);
     }

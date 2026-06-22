@@ -14,6 +14,7 @@ public sealed class ConfigurationRuntimeCredentialResolver(
     private const string PromptProviderName = "prompt";
     private const string PsCredentialProviderName = "pscredential";
     private const string DpapiFileProviderName = "dpapi_file";
+    private const string WindowsCredentialManagerProviderName = "windows_credential_manager";
 
     public async Task<RuntimeCredentialResolutionResult> ResolveAsync(
         IEnumerable<string> credentialReferences,
@@ -71,11 +72,27 @@ public sealed class ConfigurationRuntimeCredentialResolver(
                     continue;
                 }
 
+                if (providerName.Equals(WindowsCredentialManagerProviderName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var windowsCredentialUsername = NormalizeOptionalValue(credential["Username"]);
+                    var target = NormalizeOptionalValue(credential["Target"]);
+                    if (string.IsNullOrWhiteSpace(windowsCredentialUsername) || string.IsNullOrWhiteSpace(target))
+                    {
+                        return FailAndDispose(
+                            resolved,
+                            $"Credential reference '{reference}' is missing required field(s) for provider 'windows_credential_manager': username, target.");
+                    }
+
+                    var windowsCredentialPassword = WindowsCredentialManagerStore.ReadPassword(target, windowsCredentialUsername);
+                    resolved[reference] = new DispatchResolvedCredential(reference, windowsCredentialUsername, providerName, windowsCredentialPassword);
+                    continue;
+                }
+
                 if (!providerName.Equals(PromptProviderName, StringComparison.OrdinalIgnoreCase))
                 {
                     return FailAndDispose(
                         resolved,
-                        $"Credential provider '{providerName}' runtime resolution is not implemented in this build. Prompt-provider and DPAPI-file PSRP handoff are the current supported slices.");
+                        $"Credential provider '{providerName}' runtime resolution is not implemented in this build. Prompt, DPAPI-file, and Windows Credential Manager PSRP handoff are the current supported slices.");
                 }
 
                 var username = NormalizeOptionalValue(credential["Username"]);

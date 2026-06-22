@@ -64,6 +64,12 @@ public sealed class ConfigurationCredentialProvider(
                 .ConfigureAwait(false);
         }
 
+        if (provider.Equals(WindowsCredentialManagerProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return await EnrollWindowsCredentialManagerAsync(normalizedName, credential, request.Force, references, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         return Failure($"Credential provider '{provider}' enrollment is not implemented in this build.", references);
     }
 
@@ -96,23 +102,43 @@ public sealed class ConfigurationCredentialProvider(
         }
 
         var provider = validation.ProviderName;
+        if (provider.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var password = DpapiCredentialFileStore.ReadPassword(
+                    normalizedName,
+                    credential["Username"]!,
+                    credential["Path"]!);
+                return Task.FromResult(Success($"Credential reference '{normalizedName}' has a readable DPAPI-protected credential file.", references));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or InvalidOperationException or PlatformNotSupportedException)
+            {
+                return Task.FromResult(Failure($"Credential reference '{normalizedName}' DPAPI credential file is not usable. {exception.Message}", references));
+            }
+        }
+
+        if (provider.Equals(WindowsCredentialManagerProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                using var password = WindowsCredentialManagerStore.ReadPassword(
+                    credential["Target"]!,
+                    credential["Username"]!);
+                return Task.FromResult(Success($"Credential reference '{normalizedName}' has a readable Windows Credential Manager target.", references));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or InvalidOperationException or PlatformNotSupportedException)
+            {
+                return Task.FromResult(Failure($"Credential reference '{normalizedName}' Windows Credential Manager target is not usable. {exception.Message}", references));
+            }
+        }
+
         if (!provider.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
         {
             return Task.FromResult(Success($"Credential reference '{normalizedName}' is defined with provider '{provider}'.", references));
         }
 
-        try
-        {
-            using var password = DpapiCredentialFileStore.ReadPassword(
-                normalizedName,
-                credential["Username"]!,
-                credential["Path"]!);
-            return Task.FromResult(Success($"Credential reference '{normalizedName}' has a readable DPAPI-protected credential file.", references));
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or InvalidOperationException or PlatformNotSupportedException)
-        {
-            return Task.FromResult(Failure($"Credential reference '{normalizedName}' DPAPI credential file is not usable. {exception.Message}", references));
-        }
+        return Task.FromResult(Success($"Credential reference '{normalizedName}' is defined with provider '{provider}'.", references));
     }
 
     public Task<CredentialProviderOperationResult> RemoveAsync(
@@ -139,9 +165,22 @@ public sealed class ConfigurationCredentialProvider(
 
         if (!validation.ProviderName.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
         {
-            return Task.FromResult(Failure(
-                "Config-defined credential references must be removed from Dispatch config.",
-                references));
+            if (!validation.ProviderName.Equals(WindowsCredentialManagerProviderName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Task.FromResult(Failure(
+                    "Config-defined credential references must be removed from Dispatch config.",
+                    references));
+            }
+
+            try
+            {
+                WindowsCredentialManagerStore.Delete(credential["Target"]!);
+                return Task.FromResult(Success($"Windows Credential Manager target for '{normalizedName}' was removed. The config reference remains until removed from Dispatch config.", references));
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return Task.FromResult(Failure($"Windows Credential Manager target for '{normalizedName}' could not be removed. {exception.Message}", references));
+            }
         }
 
         try
@@ -152,6 +191,57 @@ public sealed class ConfigurationCredentialProvider(
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return Task.FromResult(Failure($"DPAPI credential file for '{normalizedName}' could not be removed. {exception.Message}", references));
+        }
+    }
+
+    private async Task<CredentialProviderOperationResult> EnrollWindowsCredentialManagerAsync(
+        string name,
+        IConfigurationSection credential,
+        bool force,
+        IReadOnlyList<CredentialReference> references,
+        CancellationToken cancellationToken)
+    {
+        var target = credential["Target"]!;
+        if (!force && WindowsCredentialManagerStore.Exists(target))
+        {
+            return Failure($"Windows Credential Manager target '{target}' already exists. Use --force to overwrite it.", references);
+        }
+
+        if (prompt is null)
+        {
+            return Failure("Windows Credential Manager enrollment requires an interactive secure password prompt.", references);
+        }
+
+        SecureString? password = null;
+        SecureString? confirmation = null;
+        try
+        {
+            var username = credential["Username"]!;
+            password = await prompt.PromptForPasswordAsync(
+                    new RuntimeCredentialPromptRequest(name, username, WindowsCredentialManagerProviderName, "Password"),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            confirmation = await prompt.PromptForPasswordAsync(
+                    new RuntimeCredentialPromptRequest(name, username, WindowsCredentialManagerProviderName, "Confirm password"),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            if (!WindowsCredentialManagerStore.PasswordsEqual(password, confirmation))
+            {
+                return Failure("Password confirmation did not match. No Windows Credential Manager credential was written.", references);
+            }
+
+            WindowsCredentialManagerStore.Write(target, username, password, force);
+            return Success($"Windows Credential Manager target for '{name}' was written to '{target}'.", references);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException)
+        {
+            return Failure($"Windows Credential Manager enrollment failed for '{name}'. {exception.Message}", references);
+        }
+        finally
+        {
+            password?.Dispose();
+            confirmation?.Dispose();
         }
     }
 

@@ -2201,7 +2201,7 @@ credentials:
         var credentialProvider = new ConfigurationCredentialProvider(
             configuration,
             Options.Create(new DispatchOptions { CredentialProvider = "prompt" }),
-            new RecordingRuntimeCredentialPrompt("secret-value"));
+            new RecordingRuntimeCredentialPrompt("secret-value", "secret-value"));
         var add = await credentialProvider.AddAsync(
             new CredentialAddRequest("helpdesk-local", null),
             CancellationToken.None);
@@ -2247,6 +2247,84 @@ credentials:
         }
         finally
         {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunRouteResolvesWindowsCredentialManagerRuntimeCredentialFromExplicitYamlConfig()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-cli-wcm-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "test.ps1");
+        var configPath = Path.Combine(root, "config.yml");
+        var target = $"Dispatch/Tests/{Guid.NewGuid():N}";
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(configPath, $$"""
+dispatch:
+  default_credential_provider: prompt
+credentials:
+  domain-admin:
+    provider: windows_credential_manager
+    username: SCF\domain.admin
+    target: {{target}}
+""");
+        var configuration = DispatchConfigFileReader.Load(configPath);
+        var credentialProvider = new ConfigurationCredentialProvider(
+            configuration,
+            Options.Create(new DispatchOptions { CredentialProvider = "prompt" }),
+            new RecordingRuntimeCredentialPrompt("secret-value", "secret-value"));
+        var add = await credentialProvider.AddAsync(
+            new CredentialAddRequest("domain-admin", null),
+            CancellationToken.None);
+        Assert.True(add.Succeeded, add.Message);
+
+        var executor = new CapturingSucceedingExecutor();
+        var prompt = new RecordingRuntimeCredentialPrompt("unused");
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            executor: executor,
+            displayMode: DispatchRunDisplayMode.AppendOnly,
+            runtimeCredentialPrompt: prompt);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "domain-admin",
+                    "--config",
+                    configPath,
+                    "--no-progress",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Empty(prompt.Requests);
+            Assert.NotNull(executor.LastPlan);
+            var credential = Assert.Single(executor.LastPlan!.RuntimeCredentials.Values);
+            Assert.Equal("domain-admin", credential.ReferenceName);
+            Assert.Equal(@"SCF\domain.admin", credential.UserName);
+            Assert.Equal("windows_credential_manager", credential.ProviderName);
+            Assert.DoesNotContain("secret-value", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            WindowsCredentialManagerStore.Delete(target);
             Directory.Delete(root, recursive: true);
         }
     }
@@ -3671,8 +3749,10 @@ credentials:
         }
     }
 
-    private sealed class RecordingRuntimeCredentialPrompt(string password) : IRuntimeCredentialPrompt
+    private sealed class RecordingRuntimeCredentialPrompt(params string[] passwords) : IRuntimeCredentialPrompt
     {
+        private readonly Queue<string> passwords = new(passwords);
+
         public List<RuntimeCredentialPromptRequest> Requests { get; } = [];
 
         public Task<SecureString> PromptForPasswordAsync(
@@ -3680,6 +3760,7 @@ credentials:
             CancellationToken cancellationToken)
         {
             Requests.Add(request);
+            var password = passwords.Count == 0 ? string.Empty : passwords.Dequeue();
             var secureString = new SecureString();
             foreach (var character in password)
             {

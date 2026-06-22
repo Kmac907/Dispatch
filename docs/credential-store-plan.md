@@ -457,6 +457,16 @@ dispatch creds add domain-admin
 
 Dispatch securely prompts and stores the credential in Windows Credential Manager using the configured target.
 
+Current implementation:
+
+- Implemented for direct `dispatch.exe` config-defined `windows_credential_manager` references.
+- `dispatch creds add <name>` prompts for password and confirmation, then writes a generic Windows Credential Manager entry to the configured `target`.
+- `dispatch creds add <name>` refuses to overwrite an existing target unless `--force` is supplied.
+- `dispatch creds test <name>` verifies that the target exists, matches the configured username, and can be read by the current Windows user.
+- `dispatch creds remove <name>` deletes the configured Windows Credential Manager target but leaves the reference in `C:\ProgramData\Dispatch\config.yml`.
+- Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured Windows Credential Manager target into an in-memory PSRP `PSCredential`.
+- Raw WinRM, PsExec, YAML `apply`, and Azure Key Vault remain later slices.
+
 ## Azure Key Vault Provider
 
 Config:
@@ -753,10 +763,10 @@ These are references, locations, auth mode names, or usernames, not secret value
 7. Implement credential metadata lookup from loaded Dispatch config.
 8. Implement `prompt` provider.
 9. Add `--credential` to `run` and `apply`.
-10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider and DPAPI-file runtime resolution for `run ps|cmd|exe --transport psrp`.
+10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider, DPAPI-file, and Windows Credential Manager runtime resolution for `run ps|cmd|exe --transport psrp`.
 11. Add PowerShell wrapper `pscredential` handoff.
 12. Add `dpapi_file`. Current implementation covers enrollment, test, remove, and PSRP runtime resolution; restrictive file ACL hardening remains a later security-hardening slice.
-13. Add `windows_credential_manager`.
+13. Add `windows_credential_manager`. Current implementation covers enrollment, test, remove, and PSRP runtime resolution.
 14. Add `azure_keyvault`.
 
 ## Final Mental Model
