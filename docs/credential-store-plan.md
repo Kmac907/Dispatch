@@ -427,6 +427,16 @@ Run:
 dispatch run ps .\Fix.ps1 --target KIOSK01 --credential helpdesk-local
 ```
 
+Current implementation:
+
+- Implemented for direct `dispatch.exe` config-defined `dpapi_file` references.
+- `dispatch creds add <name>` prompts for password and confirmation, then writes a Windows DPAPI CurrentUser-protected file to the configured `path`.
+- `dispatch creds add <name>` refuses to overwrite an existing file unless `--force` is supplied.
+- `dispatch creds test <name>` verifies that the file exists, matches the configured reference and username, and can be decrypted by the current Windows user.
+- `dispatch creds remove <name>` deletes the configured protected file but leaves the reference in `C:\ProgramData\Dispatch\config.yml`.
+- Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured DPAPI file into an in-memory PSRP `PSCredential`.
+- Raw WinRM, PsExec, YAML `apply`, and Windows ACL hardening for the protected file remain later slices.
+
 ## Windows Credential Manager Provider
 
 Config:
@@ -688,6 +698,9 @@ pscredential:
 
 dpapi_file:
   add = prompt and store DPAPI-protected file
+  test = verify file exists, reference/username matches config, and current Windows user can decrypt it
+  remove = delete configured protected file, leaving config.yml reference intact
+  runtime = implemented for PSRP handoff
 
 windows_credential_manager:
   add = prompt and store in Windows Credential Manager
@@ -740,9 +753,9 @@ These are references, locations, auth mode names, or usernames, not secret value
 7. Implement credential metadata lookup from loaded Dispatch config.
 8. Implement `prompt` provider.
 9. Add `--credential` to `run` and `apply`.
-10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider runtime resolution for `run ps|cmd|exe --transport psrp`.
+10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider and DPAPI-file runtime resolution for `run ps|cmd|exe --transport psrp`.
 11. Add PowerShell wrapper `pscredential` handoff.
-12. Add `dpapi_file`.
+12. Add `dpapi_file`. Current implementation covers enrollment, test, remove, and PSRP runtime resolution; restrictive file ACL hardening remains a later security-hardening slice.
 13. Add `windows_credential_manager`.
 14. Add `azure_keyvault`.
 

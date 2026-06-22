@@ -557,6 +557,7 @@ public sealed class DispatchCliApplication(
     internal async Task<int> RunCredsAddCommandAsync(
         string name,
         string? userName,
+        bool force,
         string? outputValue,
         CancellationToken cancellationToken)
     {
@@ -573,7 +574,7 @@ public sealed class DispatchCliApplication(
         }
 
         var result = await credentialProvider
-            .AddAsync(new CredentialAddRequest(name.Trim(), NormalizeOptionalValue(userName)), cancellationToken)
+            .AddAsync(new CredentialAddRequest(name.Trim(), NormalizeOptionalValue(userName), force), cancellationToken)
             .ConfigureAwait(false);
         return RenderCredentialOperationResult(result, outputMode);
     }
@@ -711,7 +712,7 @@ public sealed class DispatchCliApplication(
             return credentialProvider;
         }
 
-        return new ConfigurationCredentialProvider(configuration, Options.Create(explicitOptions));
+        return new ConfigurationCredentialProvider(configuration, Options.Create(explicitOptions), runtimeCredentialPrompt);
     }
 
     private IRuntimeCredentialResolver CreateRuntimeCredentialResolverForCommand(DispatchRunCommand command)

@@ -23,7 +23,7 @@ internal sealed class ConsoleRuntimeCredentialPrompt : IRuntimeCredentialPrompt
 
             Console.Error.WriteLine($"Credential: {request.ReferenceName}");
             Console.Error.WriteLine($"Username: {request.UserName}");
-            Console.Error.Write("Password: ");
+            Console.Error.Write($"{request.PromptLabel}: ");
 
             var password = new SecureString();
             while (true)

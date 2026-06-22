@@ -1,12 +1,14 @@
 using Dispatch.Core.Configuration;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using System.Security;
 
 namespace Dispatch.Core.Credentials;
 
 public sealed class ConfigurationCredentialProvider(
     IConfiguration configuration,
-    IOptions<DispatchOptions> options) : ICredentialProvider
+    IOptions<DispatchOptions> options,
+    IRuntimeCredentialPrompt? prompt = null) : ICredentialProvider
 {
     public const string ProviderName = "config";
 
@@ -23,7 +25,7 @@ public sealed class ConfigurationCredentialProvider(
             IsAvailable: true,
             "Credential references are loaded from Dispatch config. No plaintext secrets are stored."));
 
-    public Task<CredentialProviderOperationResult> AddAsync(
+    public async Task<CredentialProviderOperationResult> AddAsync(
         CredentialAddRequest request,
         CancellationToken cancellationToken)
     {
@@ -31,26 +33,38 @@ public sealed class ConfigurationCredentialProvider(
         var references = ListReferences();
         if (normalizedName is null)
         {
-            return Task.FromResult(Failure("Credential name is required.", references));
+            return Failure("Credential name is required.", references);
         }
 
         if (!TryFindCredential(normalizedName, out var credential))
         {
-            return Task.FromResult(Failure($"Credential reference '{normalizedName}' is not defined in Dispatch config.", references));
+            return Failure($"Credential reference '{normalizedName}' is not defined in Dispatch config.", references);
         }
 
         var validation = ValidateCredentialDefinition(normalizedName, credential);
         if (!validation.Succeeded)
         {
-            return Task.FromResult(Failure(validation.Message, references));
+            return Failure(validation.Message, references);
         }
 
         var provider = validation.ProviderName;
-        return Task.FromResult(provider.Equals(PromptProviderName, StringComparison.OrdinalIgnoreCase)
-            ? Success($"No enrollment required. Credential '{normalizedName}' will prompt at runtime.", references)
-            : provider.Equals(PsCredentialProviderName, StringComparison.OrdinalIgnoreCase)
-                ? Failure("PSCredential credentials are supplied by the PowerShell wrapper at runtime and cannot be enrolled by dispatch.exe.", references)
-                : Failure($"Credential provider '{provider}' enrollment is not implemented in this build.", references));
+        if (provider.Equals(PromptProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return Success($"No enrollment required. Credential '{normalizedName}' will prompt at runtime.", references);
+        }
+
+        if (provider.Equals(PsCredentialProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return Failure("PSCredential credentials are supplied by the PowerShell wrapper at runtime and cannot be enrolled by dispatch.exe.", references);
+        }
+
+        if (provider.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return await EnrollDpapiFileAsync(normalizedName, credential, request.Force, references, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        return Failure($"Credential provider '{provider}' enrollment is not implemented in this build.", references);
     }
 
     public Task<CredentialProviderOperationResult> ListAsync(CancellationToken cancellationToken)
@@ -82,15 +96,117 @@ public sealed class ConfigurationCredentialProvider(
         }
 
         var provider = validation.ProviderName;
-        return Task.FromResult(Success($"Credential reference '{normalizedName}' is defined with provider '{provider}'.", references));
+        if (!provider.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(Success($"Credential reference '{normalizedName}' is defined with provider '{provider}'.", references));
+        }
+
+        try
+        {
+            using var password = DpapiCredentialFileStore.ReadPassword(
+                normalizedName,
+                credential["Username"]!,
+                credential["Path"]!);
+            return Task.FromResult(Success($"Credential reference '{normalizedName}' has a readable DPAPI-protected credential file.", references));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException or InvalidOperationException or PlatformNotSupportedException)
+        {
+            return Task.FromResult(Failure($"Credential reference '{normalizedName}' DPAPI credential file is not usable. {exception.Message}", references));
+        }
     }
 
     public Task<CredentialProviderOperationResult> RemoveAsync(
         CredentialReferenceRequest request,
-        CancellationToken cancellationToken) =>
-        Task.FromResult(Failure(
-            "Config-defined credential references must be removed from Dispatch config.",
-            ListReferences()));
+        CancellationToken cancellationToken)
+    {
+        var normalizedName = NormalizeName(request.Name);
+        var references = ListReferences();
+        if (normalizedName is null)
+        {
+            return Task.FromResult(Failure("Credential name is required.", references));
+        }
+
+        if (!TryFindCredential(normalizedName, out var credential))
+        {
+            return Task.FromResult(Failure($"Credential reference '{normalizedName}' is not defined in Dispatch config.", references));
+        }
+
+        var validation = ValidateCredentialDefinition(normalizedName, credential);
+        if (!validation.Succeeded)
+        {
+            return Task.FromResult(Failure(validation.Message, references));
+        }
+
+        if (!validation.ProviderName.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(Failure(
+                "Config-defined credential references must be removed from Dispatch config.",
+                references));
+        }
+
+        try
+        {
+            DpapiCredentialFileStore.Delete(credential["Path"]!);
+            return Task.FromResult(Success($"DPAPI credential file for '{normalizedName}' was removed. The config reference remains until removed from Dispatch config.", references));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return Task.FromResult(Failure($"DPAPI credential file for '{normalizedName}' could not be removed. {exception.Message}", references));
+        }
+    }
+
+    private async Task<CredentialProviderOperationResult> EnrollDpapiFileAsync(
+        string name,
+        IConfigurationSection credential,
+        bool force,
+        IReadOnlyList<CredentialReference> references,
+        CancellationToken cancellationToken)
+    {
+        var path = credential["Path"]!;
+        if (File.Exists(path) && !force)
+        {
+            return Failure($"DPAPI credential file '{Path.GetFullPath(path)}' already exists. Use --force to overwrite it.", references);
+        }
+
+        if (prompt is null)
+        {
+            return Failure("DPAPI credential enrollment requires an interactive secure password prompt.", references);
+        }
+
+        SecureString? password = null;
+        SecureString? confirmation = null;
+        try
+        {
+            var username = credential["Username"]!;
+            password = await prompt.PromptForPasswordAsync(
+                    new RuntimeCredentialPromptRequest(name, username, DpapiFileProviderName, "Password"),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            confirmation = await prompt.PromptForPasswordAsync(
+                    new RuntimeCredentialPromptRequest(name, username, DpapiFileProviderName, "Confirm password"),
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            var enteredPassword = password;
+            var confirmedPassword = confirmation;
+            if (!DpapiCredentialFileStore.PasswordsEqual(enteredPassword, confirmedPassword))
+            {
+                return Failure("Password confirmation did not match. No credential file was written.", references);
+            }
+
+            DpapiCredentialFileStore.Write(name, username, path, enteredPassword, force);
+            return Success($"DPAPI credential file for '{name}' was written to '{Path.GetFullPath(path)}'.", references);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or PlatformNotSupportedException)
+        {
+            return Failure($"DPAPI credential enrollment failed for '{name}'. {exception.Message}", references);
+        }
+        finally
+        {
+            password?.Dispose();
+            confirmation?.Dispose();
+        }
+    }
 
     private IReadOnlyList<CredentialReference> ListReferences() =>
         configuration

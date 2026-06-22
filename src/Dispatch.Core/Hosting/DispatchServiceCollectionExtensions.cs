@@ -42,7 +42,10 @@ public static class DispatchServiceCollectionExtensions
             var options = services.GetRequiredService<IOptions<DispatchOptions>>();
             if (configuration.GetSection("Credentials").GetChildren().Any())
             {
-                return new ConfigurationCredentialProvider(configuration, options);
+                return new ConfigurationCredentialProvider(
+                    configuration,
+                    options,
+                    services.GetRequiredService<IRuntimeCredentialPrompt>());
             }
 
             var providerName = options.Value.CredentialProvider;

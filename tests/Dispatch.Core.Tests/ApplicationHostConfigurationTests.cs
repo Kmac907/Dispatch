@@ -150,6 +150,14 @@ public sealed class ApplicationHostConfigurationTests
 
         var result = await credentialProvider.TestAsync(new CredentialReferenceRequest("prod-admin"), CancellationToken.None);
 
+        if (providerName == "dpapi_file")
+        {
+            Assert.False(result.Succeeded);
+            Assert.Contains("DPAPI credential file", result.Message);
+            Assert.DoesNotContain("missing required field", result.Message, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
         Assert.True(result.Succeeded);
         Assert.Contains(providerName, result.Message, StringComparison.OrdinalIgnoreCase);
     }

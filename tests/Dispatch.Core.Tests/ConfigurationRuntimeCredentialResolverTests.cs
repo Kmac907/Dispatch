@@ -57,13 +57,13 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
         var resolver = CreateResolver(
             new Dictionary<string, string?>
             {
-                ["Credentials:helpdesk-local:Provider"] = "dpapi_file",
-                ["Credentials:helpdesk-local:Username"] = @".\helpdesk-admin",
-                ["Credentials:helpdesk-local:Path"] = @"C:\ProgramData\Dispatch\Credentials\helpdesk-local.cred"
+                ["Credentials:domain-admin:Provider"] = "windows_credential_manager",
+                ["Credentials:domain-admin:Username"] = @"SCF\domain.admin",
+                ["Credentials:domain-admin:Target"] = "Dispatch/domain-admin"
             },
             new RecordingRuntimeCredentialPrompt("secret-value"));
 
-        var result = await resolver.ResolveAsync(["helpdesk-local"], CancellationToken.None);
+        var result = await resolver.ResolveAsync(["domain-admin"], CancellationToken.None);
 
         Assert.False(result.Succeeded);
         Assert.Contains("runtime resolution is not implemented", result.FailureMessage);

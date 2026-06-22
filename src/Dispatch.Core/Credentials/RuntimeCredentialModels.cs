@@ -36,7 +36,8 @@ public sealed class DispatchResolvedCredential : IDisposable
 public sealed record RuntimeCredentialPromptRequest(
     string ReferenceName,
     string UserName,
-    string ProviderName);
+    string ProviderName,
+    string PromptLabel = "Password");
 
 public interface IRuntimeCredentialPrompt
 {

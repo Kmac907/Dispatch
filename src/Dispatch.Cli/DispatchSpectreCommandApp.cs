@@ -318,7 +318,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             }
 
             return await application
-                .RunCredsAddCommandAsync(settings.Name, settings.UserName, settings.Output, cancellationToken)
+                .RunCredsAddCommandAsync(settings.Name, settings.UserName, settings.Force, settings.Output, cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -449,6 +449,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--username <name>")]
         public string? UserName { get; init; }
+
+        [CommandOption("--force")]
+        public bool Force { get; init; }
 
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }

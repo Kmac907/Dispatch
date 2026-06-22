@@ -2175,6 +2175,83 @@ credentials:
     }
 
     [Fact]
+    public async Task RunRouteResolvesDpapiRuntimeCredentialFromExplicitYamlConfig()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-cli-dpapi-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "test.ps1");
+        var configPath = Path.Combine(root, "config.yml");
+        var credentialPath = Path.Combine(root, "helpdesk-local.cred").Replace('\\', '/');
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(configPath, $$"""
+dispatch:
+  default_credential_provider: prompt
+credentials:
+  helpdesk-local:
+    provider: dpapi_file
+    username: .\helpdesk-admin
+    path: {{credentialPath}}
+""");
+        var configuration = DispatchConfigFileReader.Load(configPath);
+        var credentialProvider = new ConfigurationCredentialProvider(
+            configuration,
+            Options.Create(new DispatchOptions { CredentialProvider = "prompt" }),
+            new RecordingRuntimeCredentialPrompt("secret-value"));
+        var add = await credentialProvider.AddAsync(
+            new CredentialAddRequest("helpdesk-local", null),
+            CancellationToken.None);
+        Assert.True(add.Succeeded, add.Message);
+
+        var executor = new CapturingSucceedingExecutor();
+        var prompt = new RecordingRuntimeCredentialPrompt("unused");
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            executor: executor,
+            displayMode: DispatchRunDisplayMode.AppendOnly,
+            runtimeCredentialPrompt: prompt);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--credential",
+                    "helpdesk-local",
+                    "--config",
+                    configPath,
+                    "--no-progress",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Empty(prompt.Requests);
+            Assert.NotNull(executor.LastPlan);
+            var credential = Assert.Single(executor.LastPlan!.RuntimeCredentials.Values);
+            Assert.Equal("helpdesk-local", credential.ReferenceName);
+            Assert.Equal(@".\helpdesk-admin", credential.UserName);
+            Assert.Equal("dpapi_file", credential.ProviderName);
+            Assert.DoesNotContain("secret-value", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunRouteRejectsInvalidCredentialOverrideMetadataFromExplicitYamlConfigBeforePlanning()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -2282,11 +2359,11 @@ credentials:
         var application = CreateApplication(new CapturingPlanner(), credentialProvider: provider);
 
         var (addExit, addOutput, addError) = await CaptureConsoleAsync(() => application.RunAsync(
-            ["creds", "add", "prod-admin", "--username", @"CONTOSO\Admin"],
+            ["creds", "add", "prod-admin", "--username", @"CONTOSO\Admin", "--force"],
             CancellationToken.None));
         Assert.True(addExit == 0, $"Exit {addExit}. Stdout: {addOutput}. Stderr: {addError}");
         Assert.Equal("add", provider.LastOperation);
-        Assert.Equal(new CredentialAddRequest("prod-admin", @"CONTOSO\Admin"), provider.LastAddRequest);
+        Assert.Equal(new CredentialAddRequest("prod-admin", @"CONTOSO\Admin", Force: true), provider.LastAddRequest);
         Assert.Contains("Provider: test-provider", addOutput);
         Assert.DoesNotContain("password", addOutput, StringComparison.OrdinalIgnoreCase);
 

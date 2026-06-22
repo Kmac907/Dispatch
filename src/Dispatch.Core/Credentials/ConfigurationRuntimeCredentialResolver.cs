@@ -13,6 +13,7 @@ public sealed class ConfigurationRuntimeCredentialResolver(
     private const string CredentialsSectionName = "Credentials";
     private const string PromptProviderName = "prompt";
     private const string PsCredentialProviderName = "pscredential";
+    private const string DpapiFileProviderName = "dpapi_file";
 
     public async Task<RuntimeCredentialResolutionResult> ResolveAsync(
         IEnumerable<string> credentialReferences,
@@ -54,11 +55,27 @@ public sealed class ConfigurationRuntimeCredentialResolver(
                         $"Credential reference '{reference}' uses provider 'pscredential', which is only valid through the PowerShell wrapper.");
                 }
 
+                if (providerName.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var dpapiUsername = NormalizeOptionalValue(credential["Username"]);
+                    var path = NormalizeOptionalValue(credential["Path"]);
+                    if (string.IsNullOrWhiteSpace(dpapiUsername) || string.IsNullOrWhiteSpace(path))
+                    {
+                        return FailAndDispose(
+                            resolved,
+                            $"Credential reference '{reference}' is missing required field(s) for provider 'dpapi_file': username, path.");
+                    }
+
+                    var dpapiPassword = DpapiCredentialFileStore.ReadPassword(reference, dpapiUsername, path);
+                    resolved[reference] = new DispatchResolvedCredential(reference, dpapiUsername, providerName, dpapiPassword);
+                    continue;
+                }
+
                 if (!providerName.Equals(PromptProviderName, StringComparison.OrdinalIgnoreCase))
                 {
                     return FailAndDispose(
                         resolved,
-                        $"Credential provider '{providerName}' runtime resolution is not implemented in this build. Prompt-provider PSRP handoff is the current supported slice.");
+                        $"Credential provider '{providerName}' runtime resolution is not implemented in this build. Prompt-provider and DPAPI-file PSRP handoff are the current supported slices.");
                 }
 
                 var username = NormalizeOptionalValue(credential["Username"]);
@@ -90,7 +107,7 @@ public sealed class ConfigurationRuntimeCredentialResolver(
             DisposeAll(resolved);
             throw;
         }
-        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException)
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or UnauthorizedAccessException or InvalidDataException or FormatException or PlatformNotSupportedException)
         {
             return FailAndDispose(resolved, exception.Message);
         }

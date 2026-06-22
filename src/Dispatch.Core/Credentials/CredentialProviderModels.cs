@@ -11,7 +11,8 @@ public sealed record CredentialReference(
 
 public sealed record CredentialAddRequest(
     string Name,
-    string? UserName);
+    string? UserName,
+    bool Force = false);
 
 public sealed record CredentialReferenceRequest(
     string Name);
