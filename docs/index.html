@@ -27,7 +27,7 @@
       <div class="hero-inner">
         <div>
           <p class="eyebrow">Windows endpoint automation</p>
-          <h1>Agentless Windows endpoint automation.</h1>
+          <h1>Agentless Windows Endpoint Automation.</h1>
           <p class="lead">Run PowerShell scripts and commands over PSRP or WinRM, select targets from inventory, and keep durable results for every run.</p>
           <div class="hero-actions">
             <a class="button" href="getting-started.html">Get Started</a>
@@ -37,8 +37,8 @@
         </div>
         <div class="hero-panel" aria-label="Dispatch run output model preview">
           <div class="hero-panel-header">
-            <span>Dispatch run</span>
-            <span class="status-dot">Live status</span>
+            <span>Dispatch run summary</span>
+            <span class="status-dot">Completed</span>
           </div>
           <div class="hero-panel-body">
             <div class="stat-grid">
@@ -46,13 +46,16 @@
               <div class="stat"><span>Outputs</span><strong>JSON, NDJSON, stdout, stderr</strong></div>
               <div class="stat"><span>Config</span><strong>YAML inventory and config</strong></div>
             </div>
-            <div class="event-table" aria-hidden="true">
-              <div class="event-row"><span>Phase</span><span>Event</span><span>Output</span></div>
-              <div class="event-row"><span>Plan</span><span>Resolve targets and transport</span><span>Plan</span></div>
-              <div class="event-row"><span>Run</span><span>Execute selected payload</span><span>Events</span></div>
-              <div class="event-row"><span>Close</span><span>Write final summary</span><span>Results</span></div>
+            <div class="completion-preview" aria-hidden="true">
+              <div class="completion-bar"><span style="width: 100%;"></span></div>
+              <div class="completion-text">3/3 targets complete · 2 succeeded · 1 failed</div>
             </div>
-            <p class="hero-note">The UI reflects implemented contracts and planned v1 surfaces; unsupported commands fail clearly until their roadmap slices land.</p>
+            <div class="event-table" aria-hidden="true">
+              <div class="event-row"><span>Target</span><span>Status</span><span>Phase</span><span>Detail</span></div>
+              <div class="event-row"><span>PC001</span><span>Success</span><span>Complete</span><span>Exit 0 · Active 00:01</span></div>
+              <div class="event-row"><span>PC002</span><span>Success</span><span>Complete</span><span>Exit 0 · Active 00:01</span></div>
+              <div class="event-row"><span>PC003</span><span>Failed</span><span>Complete</span><span>Probe failed · DNS unavailable</span></div>
+            </div>
           </div>
         </div>
       </div>

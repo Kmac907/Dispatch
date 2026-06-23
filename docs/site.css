@@ -343,15 +343,43 @@ main :not(pre) > code {
   overflow: hidden;
 }
 
+.completion-preview {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #274153;
+  border-radius: 7px;
+  background: #172c3d;
+}
+
+.completion-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #0f1c28;
+  overflow: hidden;
+}
+
+.completion-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #8bd9e7;
+}
+
+.completion-text {
+  margin-top: 8px;
+  color: #cfe1eb;
+  font-size: 12px;
+}
+
 .event-row {
   display: grid;
-  grid-template-columns: 78px 1fr 88px;
+  grid-template-columns: 72px 76px 86px minmax(0, 1fr);
   gap: 12px;
   padding: 9px 10px;
   color: #cfe1eb;
   border-top: 1px solid #274153;
   font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .event-row:first-child {
