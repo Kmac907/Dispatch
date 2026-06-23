@@ -31,6 +31,14 @@ internal static class DispatchApplyJobParser
         "reboot"
     };
 
+    private static readonly HashSet<string> UnsupportedVarsSourceKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "group_vars",
+        "host_vars",
+        "vars_files",
+        "include_vars"
+    };
+
     public static bool TryParse(
         string jobPath,
         ApplyCommandOptions options,
@@ -167,6 +175,12 @@ internal static class DispatchApplyJobParser
             var path = sectionStack.Select(static part => part.Key).Append(key).ToArray();
             if (!TryValidateKey(jobPath, lineNumber, path, out error))
             {
+                return false;
+            }
+
+            if (path.Length == 1 && UnsupportedVarsSourceKeys.Contains(key))
+            {
+                error = $"{jobPath}:{lineNumber}: vars source '{key}' is not supported in v1 jobs. Use inline job.vars only.";
                 return false;
             }
 
@@ -322,6 +336,18 @@ internal static class DispatchApplyJobParser
 
         if (path[0].Equals("vars", StringComparison.OrdinalIgnoreCase))
         {
+            if (path.Any(static part => UnsupportedVarsSourceKeys.Contains(part)))
+            {
+                error = $"{jobPath}:{lineNumber}: vars source '{path[^1]}' is not supported in v1 jobs. Use inline job.vars only.";
+                return false;
+            }
+
+            if (path.Any(static part => part.Equals("transport", StringComparison.OrdinalIgnoreCase)))
+            {
+                error = $"{jobPath}:{lineNumber}: transport is a first-class job field and is not allowed under job.vars.";
+                return false;
+            }
+
             return true;
         }
 

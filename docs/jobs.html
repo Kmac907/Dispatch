@@ -75,6 +75,7 @@ dispatch apply .\job.yml --credential breakglass-admin
 <p><code>credential</code> selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.</p>
 <h2>Job Variables</h2>
 <p><code>job.vars</code> is the v1 runtime/task-input variable bag. Inventory vars are host/group metadata and are not automatically merged into runtime task variables.</p>
+<p>Transport is not allowed under <code>job.vars</code>; use the top-level <code>transport</code> field. Separate vars-file concepts such as <code>group_vars</code>, <code>host_vars</code>, <code>vars_files</code>, and <code>include_vars</code> are not part of v1 jobs and fail validation before endpoint work.</p>
 <h2>Task Vocabulary</h2>
 <p>Planned v1 task vocabulary:</p>
 <ul>

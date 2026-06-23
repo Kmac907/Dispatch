@@ -2664,6 +2664,86 @@ credentials:
         }
     }
 
+    [Fact]
+    public async Task ApplyPlanRejectsTransportUnderJobVarsBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            vars:
+              transport: winrm
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("transport is a first-class job field", error);
+            Assert.Contains("job.vars", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("group_vars")]
+    [InlineData("host_vars")]
+    [InlineData("vars_files")]
+    [InlineData("include_vars")]
+    public async Task ApplyPlanRejectsUnsupportedVarsSourcesBeforePlanning(string fieldName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            $$"""
+            hosts: PC001
+            transport: psrp
+            {{fieldName}}:
+              - extra.yml
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("vars source", error);
+            Assert.Contains(fieldName, error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("hosts", "list")]
     [InlineData("init", "job")]

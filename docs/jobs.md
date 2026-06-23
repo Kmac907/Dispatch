@@ -42,6 +42,8 @@ The current implementation converts the supported job subset into the same plann
 
 `job.vars` is the v1 runtime/task-input variable bag. Inventory vars are host/group metadata and are not automatically merged into runtime task variables.
 
+Transport is not allowed under `job.vars`; use the top-level `transport` field. Separate vars-file concepts such as `group_vars`, `host_vars`, `vars_files`, and `include_vars` are not part of v1 jobs and fail validation before endpoint work.
+
 ## Task Vocabulary
 
 Planned v1 task vocabulary:

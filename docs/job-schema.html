@@ -102,6 +102,8 @@ tasks:
 <li>missing required fields</li>
 <li>unsupported task type</li>
 <li>unsupported field</li>
+<li>unsupported vars-source concepts such as <code>group_vars</code>, <code>host_vars</code>, <code>vars_files</code>, or <code>include_vars</code></li>
+<li><code>transport</code> under <code>job.vars</code></li>
 <li>plaintext secret-like keys</li>
 <li>unresolved hosts or inventory selectors</li>
 <li>unsupported transport/payload combinations</li>
@@ -117,6 +119,7 @@ tasks:
 <li><code>strategy.serial</code></li>
 </ul>
 <p>Relative <code>ps</code> task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as <code>dispatch run ps</code>. Multiple tasks and other planned task types remain later <code>6.5</code> work.</p>
+<p><code>job.vars</code> is only an inline runtime/task-input bag. Transport selection must use the top-level <code>transport</code> field, and separate vars-file concepts are rejected before endpoint work.</p>
 <h2>Secret Boundary</h2>
 <p>Job files may contain credential reference names, but must not contain passwords, tokens, SAS values, or secret material.</p>
   </article>

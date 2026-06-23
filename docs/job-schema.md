@@ -62,6 +62,8 @@ Validation must fail before endpoint work for:
 - missing required fields
 - unsupported task type
 - unsupported field
+- unsupported vars-source concepts such as `group_vars`, `host_vars`, `vars_files`, or `include_vars`
+- `transport` under `job.vars`
 - plaintext secret-like keys
 - unresolved hosts or inventory selectors
 - unsupported transport/payload combinations
@@ -78,6 +80,8 @@ The current `apply` slice supports plan and execution for:
 - `strategy.serial`
 
 Relative `ps` task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`. Multiple tasks and other planned task types remain later `6.5` work.
+
+`job.vars` is only an inline runtime/task-input bag. Transport selection must use the top-level `transport` field, and separate vars-file concepts are rejected before endpoint work.
 
 ## Secret Boundary
 
