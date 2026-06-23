@@ -63,7 +63,7 @@ Credential metadata lookup always comes from the loaded Dispatch config.
 | --- | --- | --- |
 | `prompt` | Prompt securely at runtime. | No secret enrollment; `creds add` reports that runtime prompting will be used. |
 | `pscredential` | PowerShell module wrapper handoff only. | Invalid from direct `dispatch.exe`; the wrapper supplies the credential in-process. |
-| `dpapi_file` | Local Windows DPAPI-protected file. | Prompts, confirms, protects with DPAPI, and writes the configured file. |
+| `dpapi_file` | Local Windows DPAPI-protected file. | Prompts, confirms, protects with DPAPI, writes the configured file, and restricts file ACLs to the current Windows user, local Administrators, and LocalSystem. |
 | `windows_credential_manager` | Windows Credential Manager generic credential. | Prompts, confirms, and writes the configured target. |
 | `azure_keyvault` | Azure Key Vault secret retrieval for the endpoint password. | Validates Key Vault access and secret readability; no local password storage. |
 
@@ -87,6 +87,8 @@ dispatch creds remove prod-admin
 ```
 
 Use `--force` when overwriting an existing DPAPI file or Windows Credential Manager target.
+
+DPAPI file enrollment disables inherited ACLs on the protected file. The file remains local to the configured path and is readable only by the current Windows user that enrolled it, local Administrators, and LocalSystem.
 
 ## Runtime Use
 

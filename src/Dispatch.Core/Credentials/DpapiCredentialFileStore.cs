@@ -1,5 +1,8 @@
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -50,9 +53,13 @@ internal static class DpapiCredentialFileStore
                     DateTimeOffset.UtcNow);
                 var json = JsonSerializer.Serialize(file, new JsonSerializerOptions { WriteIndented = true });
                 var mode = overwrite ? FileMode.Create : FileMode.CreateNew;
-                using var stream = new FileStream(fullPath, mode, FileAccess.Write, FileShare.None);
-                using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-                writer.Write(json);
+                using (var stream = new FileStream(fullPath, mode, FileAccess.Write, FileShare.None))
+                using (var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)))
+                {
+                    writer.Write(json);
+                }
+
+                ApplyRestrictiveFileAcl(fullPath);
             }
             finally
             {
@@ -278,6 +285,24 @@ internal static class DpapiCredentialFileStore
     private static void CryptographicOperationsZeroMemory(byte[] bytes)
     {
         Array.Clear(bytes, 0, bytes.Length);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void ApplyRestrictiveFileAcl(string fullPath)
+    {
+        var currentUser = WindowsIdentity.GetCurrent().User
+            ?? throw new InvalidOperationException("Could not determine the current Windows user SID for DPAPI credential file ACL hardening.");
+        var administrators = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var localSystem = new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null);
+
+        var fileSecurity = new FileSecurity();
+        fileSecurity.SetOwner(currentUser);
+        fileSecurity.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+        fileSecurity.AddAccessRule(new FileSystemAccessRule(currentUser, FileSystemRights.FullControl, AccessControlType.Allow));
+        fileSecurity.AddAccessRule(new FileSystemAccessRule(administrators, FileSystemRights.FullControl, AccessControlType.Allow));
+        fileSecurity.AddAccessRule(new FileSystemAccessRule(localSystem, FileSystemRights.FullControl, AccessControlType.Allow));
+
+        new FileInfo(fullPath).SetAccessControl(fileSecurity);
     }
 
     [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]

@@ -3,7 +3,10 @@ using Dispatch.Core.Credentials;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Security;
+using System.Security.AccessControl;
+using System.Security.Principal;
 
 namespace Dispatch.Core.Tests;
 
@@ -85,6 +88,63 @@ public sealed class ConfigurationCredentialProviderDpapiTests
             Assert.False(add.Succeeded);
             Assert.Contains("confirmation", add.Message, StringComparison.OrdinalIgnoreCase);
             Assert.False(File.Exists(credentialPath));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task DpapiFileAddRestrictsCredentialFileAcl()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = CreateTemporaryDirectory();
+        var credentialPath = Path.Combine(root, "helpdesk-local.cred");
+        var provider = CreateProvider(
+            credentialPath,
+            new RecordingRuntimeCredentialPrompt("secret-value", "secret-value"));
+
+        try
+        {
+            var add = await provider.AddAsync(
+                new CredentialAddRequest("helpdesk-local", null),
+                CancellationToken.None);
+
+            Assert.True(add.Succeeded, add.Message);
+
+            var fileSecurity = new FileInfo(credentialPath).GetAccessControl(AccessControlSections.Access | AccessControlSections.Owner);
+            Assert.True(fileSecurity.AreAccessRulesProtected);
+
+            var currentUser = WindowsIdentity.GetCurrent().User!;
+            var allowedSids = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                currentUser.Value,
+                new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null).Value,
+                new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null).Value
+            };
+
+            var rules = fileSecurity
+                .GetAccessRules(includeExplicit: true, includeInherited: true, targetType: typeof(SecurityIdentifier))
+                .OfType<FileSystemAccessRule>()
+                .ToArray();
+
+            Assert.NotEmpty(rules);
+            Assert.All(rules, rule =>
+            {
+                Assert.False(rule.IsInherited);
+                Assert.Equal(AccessControlType.Allow, rule.AccessControlType);
+                var sid = Assert.IsType<SecurityIdentifier>(rule.IdentityReference);
+                Assert.Contains(sid.Value, allowedSids);
+                Assert.True(rule.FileSystemRights.HasFlag(FileSystemRights.FullControl));
+            });
+
+            Assert.Contains(rules, rule => ((SecurityIdentifier)rule.IdentityReference).Value.Equals(currentUser.Value, StringComparison.OrdinalIgnoreCase));
         }
         finally
         {
