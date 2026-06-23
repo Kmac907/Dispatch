@@ -23,7 +23,7 @@ dispatch version
 dispatch apply <job.yml> [--config <path>] [--credential <name>] [--transport psrp|winrm|psexec] [--plan] [--output rich|table|json|ndjson|yaml]
 ```
 
-Status: partial/current. `--plan` is implemented for one script-first `ps` task. Full job execution and additional task types remain planned v1.
+Status: partial/current. Plan and execution are implemented for one script-first `ps` task. Multi-task jobs and additional task types remain planned v1.
 
 Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.
 

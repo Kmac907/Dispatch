@@ -1315,11 +1315,12 @@ Scope:
 
 Current implementation boundary:
 - `dispatch apply <job.yml> --plan` parses a script-first YAML job with one `ps` task.
+- `dispatch apply <job.yml>` executes that same script-first subset through the shared planner/executor path used by `dispatch run ps`.
 - The current apply parser supports `hosts`, `transport`, `credential`, `defaults.expected_exit_codes`, and `strategy.serial` for plan creation.
 - Relative `ps` task paths resolve relative to the job file.
 - `--config`, `--credential`, `--transport`, `--output`, and `--no-color` are accepted on the current `apply --plan` path.
 - Unsupported task types, multiple tasks, unsupported fields, and plaintext secret-like fields fail before planning or endpoint work.
-- Normal `dispatch apply <job.yml>` execution remains planned until the next `6.5` execution slice.
+- Multi-task jobs, non-`ps` task execution, `--check`, and richer job behavior remain later `6.5` work.
 
 Non-goals:
 - No full Ansible compatibility.

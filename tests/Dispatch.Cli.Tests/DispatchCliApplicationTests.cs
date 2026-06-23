@@ -2433,18 +2433,16 @@ credentials:
         }
     }
 
-    [Theory]
-    [InlineData("apply")]
-    [InlineData("push")]
-    public async Task PlannedTopLevelCommandsRouteThroughSpectreCli(string command)
+    [Fact]
+    public async Task PlannedTopLevelCommandRoutesThroughSpectreCli()
     {
         var application = CreateApplication(new CapturingPlanner());
 
-        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync([command], CancellationToken.None));
+        var (exitCode, _, error) = await CaptureConsoleAsync(() => application.RunAsync(["push"], CancellationToken.None));
 
         Assert.Equal(1, exitCode);
         Assert.Contains("Planned Dispatch command", error);
-        Assert.Contains(command, error);
+        Assert.Contains("push", error);
     }
 
     [Fact]
@@ -2490,6 +2488,103 @@ credentials:
 
             using var json = JsonDocument.Parse(output);
             Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyRouteExecutesScriptFirstYamlJobThroughSharedExecutor()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            name: Fix endpoints
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.False(planner.LastRequest.DryRun);
+            Assert.Equal(TransportKind.Psrp, planner.LastRequest.Transport);
+            Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(scriptPath, payload.ScriptPath);
+            Assert.NotNull(executor.LastPlan);
+            Assert.False(executor.LastPlan!.DryRun);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+            Assert.Equal(1, json.RootElement.GetProperty("successCount").GetInt32());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyRouteResolvesJobCredentialBeforePsrpExecution()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            credential: prod-admin
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var provider = new CapturingCredentialProvider(available: true);
+        using var credential = CreateResolvedCredential("prod-admin");
+        var runtimeResolver = new RecordingRuntimeCredentialResolver(
+            new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["prod-admin"] = credential
+            });
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            executor: executor,
+            credentialProvider: provider,
+            runtimeCredentialResolver: runtimeResolver);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Equal(["prod-admin"], Assert.Single(runtimeResolver.Requests));
+            Assert.NotNull(executor.LastPlan);
+            Assert.Same(credential, executor.LastPlan!.RuntimeCredentials["prod-admin"]);
+            Assert.DoesNotContain("secret-value", output + error, StringComparison.OrdinalIgnoreCase);
         }
         finally
         {

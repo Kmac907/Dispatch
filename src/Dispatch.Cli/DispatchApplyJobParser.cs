@@ -88,7 +88,7 @@ internal static class DispatchApplyJobParser
         }
 
         command = new DispatchRunCommand(
-            DryRun: true,
+            DryRun: options.Plan,
             Payload: new ScriptPayload(job.PowerShellScriptPath, []),
             Targets: targetResolution.Targets,
             Transport: transport,
@@ -102,7 +102,7 @@ internal static class DispatchApplyJobParser
             ArtifactPaths: [],
             CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
             RunAsSystem: false,
-            NoDashboard: true,
+            NoDashboard: options.Plan,
             OutputMode: options.OutputMode,
             NoColor: options.NoColor,
             Quiet: false,

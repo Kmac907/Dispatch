@@ -102,14 +102,21 @@ public sealed class DispatchCliApplication(
             return 1;
         }
 
+        return await RunParsedCommandAsync(command!, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> RunParsedCommandAsync(
+        DispatchRunCommand command,
+        CancellationToken cancellationToken)
+    {
         try
         {
-            if (!await TryValidateCredentialReferenceAsync(command!, cancellationToken).ConfigureAwait(false))
+            if (!await TryValidateCredentialReferenceAsync(command, cancellationToken).ConfigureAwait(false))
             {
                 return 1;
             }
 
-            var request = command!.ToRequest();
+            var request = command.ToRequest();
             if (command.DryRun)
             {
                 if (command.OutputMode == DispatchOutputMode.Ndjson)
@@ -379,11 +386,6 @@ public sealed class DispatchCliApplication(
         bool noColor,
         CancellationToken cancellationToken)
     {
-        if (!plan)
-        {
-            return RenderPlannedCommand("apply execution", "6.5 YAML Apply And Job Model");
-        }
-
         if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
         {
             SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
@@ -412,28 +414,7 @@ public sealed class DispatchCliApplication(
             return 1;
         }
 
-        try
-        {
-            if (!await TryValidateCredentialReferenceAsync(command!, cancellationToken).ConfigureAwait(false))
-            {
-                return 1;
-            }
-
-            var request = command!.ToRequest();
-            var dryRunPlan = outputMode == DispatchOutputMode.Rich
-                ? await CreatePlanWithDryRunProgressAsync(request, noColor, cancellationToken).ConfigureAwait(false)
-                : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-            DispatchStructuredOutputRenderer.RenderPlan(Console.Out, dryRunPlan, outputMode);
-            return 0;
-        }
-        catch (DispatchPlanningException exception)
-        {
-            var message = string.Join(
-                Environment.NewLine,
-                exception.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
-            SpectreConsoleRenderer.RenderError(Console.Error, "Dispatch Planning Failed", message);
-            return 1;
-        }
+        return await RunParsedCommandAsync(command!, cancellationToken).ConfigureAwait(false);
     }
 
     internal int RunLogsListCommand(string? outputValue)

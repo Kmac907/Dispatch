@@ -2,7 +2,7 @@
 
 This is the v1 YAML job contract for `dispatch apply`.
 
-Status: partial/current. `dispatch apply <job.yml> --plan` currently supports a script-first subset with one `ps` task.
+Status: partial/current. `dispatch apply <job.yml>` and `dispatch apply <job.yml> --plan` currently support a script-first subset with one `ps` task.
 
 ## Top-Level Fields
 
@@ -66,9 +66,9 @@ Validation must fail before endpoint work for:
 - unresolved hosts or inventory selectors
 - unsupported transport/payload combinations
 
-## Current Apply Plan Subset
+## Current Apply Subset
 
-The current `apply --plan` slice supports:
+The current `apply` slice supports plan and execution for:
 
 - one `tasks` entry using `ps`
 - `hosts`
@@ -77,7 +77,7 @@ The current `apply --plan` slice supports:
 - `defaults.expected_exit_codes`
 - `strategy.serial`
 
-Relative `ps` task paths resolve from the job file directory. Full job execution, multiple tasks, and other planned task types remain later `6.5` work.
+Relative `ps` task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`. Multiple tasks and other planned task types remain later `6.5` work.
 
 ## Secret Boundary
 
