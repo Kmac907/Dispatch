@@ -274,7 +274,6 @@ Unsupported task types must fail during validation before endpoint work starts.
 - Do not prompt while a live display is active.
 - Do not write directly to the console from worker threads.
 - Do not make automatic transport changes without logging the final transport per host.
-- Require confirmation above configurable host-count thresholds unless `--yes` is supplied.
 - Keep JSON and NDJSON non-decorative and stable.
 
 ## Exit Codes

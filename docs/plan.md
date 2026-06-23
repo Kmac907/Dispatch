@@ -1310,7 +1310,7 @@ Scope:
   - runtime task/input variables come from inline `job.vars` in v1; inventory vars do not participate in that runtime-variable bag
 - Initial task vocabulary: `ps`, `cmd`, `exe`, `copy`, `fetch`, `wait`, and `reboot`, with only supported task types enabled by implementation slices.
 - Implement `--plan` and `--check` as distinct behaviors.
-- Implement `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--yes`, `--diff`, and common output/log options as planned settings.
+- Implement `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--diff`, and common output/log options as planned settings.
 - Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
 
 Current implementation boundary:
@@ -1324,7 +1324,7 @@ Current implementation boundary:
 - `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, and `--no-color` are accepted on the current apply plan, check, and execution paths.
 - For the current one-`ps`-task apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
 - Unsupported task types, multiple tasks, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
-- Multi-task jobs, non-`ps` task execution, `--yes`, `--diff`, remaining common output/log options, and richer job behavior remain later `6.5` work.
+- Multi-task jobs, non-`ps` task execution, `--diff`, remaining common output/log options, and richer job behavior remain later `6.5` work.
 
 Non-goals:
 - No full Ansible compatibility.
@@ -1378,12 +1378,12 @@ Scope:
 - Implement stable exit codes: `0` success, `1` usage/config/inventory/YAML validation error, `2` host failure, `3` unreachable host, `4` authentication/authorization failure, `5` transport initialization failure, `6` canceled, `7` plan/check policy failure, `10` internal error.
 - Require explicit `--system` for LocalSystem execution and policy approval when configured.
 - Require explicit PsExec fallback permission through CLI/config/inventory policy.
-- Require confirmation above configured host-count thresholds unless `--yes` is supplied.
 - Redact secrets from console output, logs, result JSON, CSV, dry-run/plan output, and traces.
 
 Non-goals:
 - No silent transport fallback.
 - No prompting during live rendering.
+- No host-count confirmation gate; Dispatch runs against the resolved inventory, host file, or command-line target set supplied by the operator.
 
 Dependencies:
 - 6.1.
