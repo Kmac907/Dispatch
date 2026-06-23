@@ -29,7 +29,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - Stable output modes: `rich`, `table`, `json`, `ndjson`, and `yaml`, where JSON/NDJSON are non-decorative automation contracts.
 - YAML configuration, inventory, and job file schema surfaces, with script-first execution implemented before richer task vocabulary.
 - PowerShell module that wraps the bundled EXE.
-- Private Azure Repos source install flow: `git clone`, build, install module, validate, and clean up source.
+- GitHub source install flow: execute `packaging/install-from-source.ps1` through `irm`, build, install module, validate, and clean up the temporary source checkout.
 - Local install script deployment for `CurrentUser` and `AllUsers` module scopes.
 
 ### v1 should ship if feasible
@@ -117,9 +117,9 @@ Dispatch/
       schemas/
       examples/
   packaging/
-    bootstrap-install.ps1
-    install.ps1
     install-from-source.ps1
+    install.ps1
+    bootstrap-install.ps1
   tests/
     Dispatch.Core.Tests/
     Dispatch.Cli.Tests/
@@ -668,45 +668,44 @@ Do not create a separate execution path for interactive mode.
 Initial release primary distribution:
 
 ```powershell
-git clone https://dev.azure.com/<org>/<project>/_git/Dispatch
-cd Dispatch
-.\packaging\bootstrap-install.ps1
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 Import-Module Dispatch
 dispatch --help
 ```
 
-The v1 source installer is designed for a private Azure DevOps repository. It relies on the operator's normal Git authentication, such as Git Credential Manager or an Azure DevOps browser sign-in, rather than passing a PAT on the command line.
+The v1 source installer is designed for the GitHub repository `https://github.com/Kmac907/Dispatch`. The normal operator path downloads the installer script with `Invoke-RestMethod` / `irm`; the script creates its own temporary source checkout, builds Dispatch, installs the module, validates the installation, and removes the temporary checkout after validation.
 
-`bootstrap-install.ps1` is the primary operator entry point. It must:
+`install-from-source.ps1` is the primary operator entry point. It must:
 
 1. Validate Windows, PowerShell, Git, .NET SDK, and build prerequisites.
-2. Call `install-from-source.ps1` to build and publish `dispatch.exe` as a single-file self-contained `win-x64` executable.
-3. Assemble and install the PowerShell module folder with the bundled EXE.
-4. Validate the module manifest, bundled EXE, import behavior, and exported commands.
-5. Report the installed module path and the installed `dispatch.exe` version.
-6. Copy or generate a cleanup helper under `$env:TEMP`.
-7. Change the current location outside the cloned source directory.
-8. Invoke the cleanup helper to remove the cloned source tree, including the original bootstrap script.
-9. Report cleanup success or cleanup failure without uninstalling the already validated module.
+2. Create a temporary source checkout from `https://github.com/Kmac907/Dispatch.git` when it is launched through `irm`.
+3. Build and publish `dispatch.exe` as a single-file self-contained `win-x64` executable.
+4. Assemble and install the PowerShell module folder with the bundled EXE.
+5. Validate the module manifest, bundled EXE, import behavior, and exported commands.
+6. Report the installed module path and the installed `dispatch.exe` version.
+7. Copy or generate a cleanup helper under `$env:TEMP`.
+8. Change the current location outside the temporary source directory.
+9. Invoke the cleanup helper to remove the temporary source checkout and downloaded installer copy.
+10. Report cleanup success or cleanup failure without uninstalling the already validated module.
 
 Bootstrap cleanup semantics:
 
-- The bootstrap script must not depend on deleting its own currently executing file from inside the source tree.
-- Cleanup must run from outside the clone, normally from `$env:TEMP`.
+- The installer must not depend on deleting its own currently executing file from inside the source tree.
+- Cleanup must run from outside the temporary checkout, normally from `$env:TEMP`.
 - `-NoCleanup` must be available for developers and troubleshooting.
 - Cleanup failure is a warning/final status detail, not a reason to remove the installed module after validation succeeds.
 
 Developer source install flow:
 
 ```powershell
-git clone https://dev.azure.com/<org>/<project>/_git/Dispatch
+git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
 .\packaging\install-from-source.ps1
 Import-Module Dispatch
 Test-Dispatch
 ```
 
-`install-from-source.ps1` is the reusable build/install helper for developers and CI jobs that intentionally keep the source checkout. After a successful bootstrap install, only the installed PowerShell module and bundled executable should remain.
+When launched from an existing checkout, `install-from-source.ps1` builds and installs from that checkout and may preserve it with `-NoCleanup`. After a successful `irm` install, only the installed PowerShell module and bundled executable should remain.
 
 Release convenience packaging:
 
@@ -1437,16 +1436,17 @@ Definition of done:
 #### 8. Source Install And Local Packaging
 
 Objective:
-Produce a tested source-install flow that builds Dispatch from a private Azure Repos clone, installs the PowerShell module locally, verifies the installation, and removes source artifacts after bootstrap installation.
+Produce a tested source-install flow that downloads the installer from GitHub through `irm`, builds Dispatch from source, installs the PowerShell module locally, verifies the installation, and removes temporary source artifacts after installation.
 
 Scope:
 - Build single-file self-contained `dispatch.exe`.
 - Assemble module package layout.
-- Add `install-from-source.ps1` for use inside an existing clone.
-- Add `bootstrap-install.ps1` as the primary operator flow for build/install/validate/cleanup from an existing private Azure Repos clone.
+- Add `install-from-source.ps1` as the primary operator flow for `irm`-launched build/install/validate/cleanup from the GitHub repository.
+- Support running `install-from-source.ps1` from an existing developer checkout.
+- Keep `bootstrap-install.ps1` only if it remains useful as a thin compatibility wrapper over `install-from-source.ps1`.
 - Add `install.ps1` for installing an already assembled module package into `CurrentUser` or `AllUsers` module scopes.
 - Validate the built executable, module manifest, module import, and exported commands before reporting success.
-- Use a cleanup helper outside the source tree to remove the temporary source clone and bootstrap script copy after successful bootstrap installation.
+- Use a cleanup helper outside the source tree to remove the temporary source checkout and downloaded installer copy after successful source installation.
 - Support `-NoCleanup` for developers and troubleshooting.
 - Create `Dispatch-<version>-win-x64.zip` as an optional release convenience artifact.
 
@@ -1459,8 +1459,8 @@ Dependencies:
 - 7.
 
 Definition of done:
-- A clean machine with Azure Repos access, Git, PowerShell, and the .NET SDK can clone the repo, run `bootstrap-install.ps1`, import the module, and run `dispatch --help` plus `Test-Dispatch`.
-- Bootstrap installation builds the project and module, validates the installation, changes out of the source directory, invokes an external cleanup helper, and cleans up the cloned source tree including the bootstrap script itself.
+- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, import the module, and run `dispatch --help` plus `Test-Dispatch`.
+- Source installation builds the project and module, validates the installation, changes out of the temporary source directory, invokes an external cleanup helper, and cleans up the temporary source tree plus downloaded installer copy.
 - Cleanup failure is reported without uninstalling an already validated module.
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.
 - Pipeline or build script can create the optional ZIP without manual assembly.

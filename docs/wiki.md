@@ -45,8 +45,9 @@ Purpose:
 
 Must include:
 - run from source
+- GitHub `irm` source install path
 - packaged install path when implemented
-- PowerShell module install path when implemented
+- PowerShell module install path
 - upgrade path
 - uninstall/removal basics
 
@@ -387,7 +388,7 @@ Purpose:
 ### 31. `docs/distribution.md`
 
 Purpose:
-- Packaging, source install, bootstrap install, ZIP install, and local installation guidance for the v1 distribution model.
+- Packaging, GitHub `irm` source install, ZIP install, and local installation guidance for the v1 distribution model.
 
 ## Docs only required if out-of-scope v1 features are later brought back into scope
 
