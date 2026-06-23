@@ -47,7 +47,7 @@
   <article class="doc-content">
 <h1>Jobs</h1>
 <p><code>dispatch apply &lt;job.yml&gt;</code> is the declared-job surface for v1.</p>
-<p>Status: partial/current. <code>dispatch apply &lt;job.yml&gt;</code> and <code>dispatch apply &lt;job.yml&gt; --plan</code> are implemented for one script-first <code>ps</code> task. Multi-task jobs and additional task types remain planned v1.</p>
+<p>Status: partial/current. <code>dispatch apply &lt;job.yml&gt;</code>, <code>dispatch apply &lt;job.yml&gt; --plan</code>, and <code>dispatch apply &lt;job.yml&gt; --check</code> are implemented for one script-first <code>ps</code> task. Multi-task jobs and additional task types remain planned v1.</p>
 <h2>Purpose</h2>
 <p>Use a job file when the work should be repeatable and checked into source control.</p>
 <h2>Example</h2>
@@ -67,10 +67,12 @@ tasks:
 <p>Run:</p>
 <pre><code>
 dispatch apply .\job.yml --plan --output json
+dispatch apply .\job.yml --check --output json
 dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 </code></pre>
 <p>The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by <code>dispatch run ps</code>.</p>
+<p><code>--check</code> validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.</p>
 <h2>Job Credential</h2>
 <p><code>credential</code> selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.</p>
 <h2>Job Variables</h2>

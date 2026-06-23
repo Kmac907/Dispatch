@@ -47,7 +47,7 @@
   <article class="doc-content">
 <h1>Job Schema</h1>
 <p>This is the v1 YAML job contract for <code>dispatch apply</code>.</p>
-<p>Status: partial/current. <code>dispatch apply &lt;job.yml&gt;</code> and <code>dispatch apply &lt;job.yml&gt; --plan</code> currently support a script-first subset with one <code>ps</code> task.</p>
+<p>Status: partial/current. <code>dispatch apply &lt;job.yml&gt;</code>, <code>dispatch apply &lt;job.yml&gt; --plan</code>, and <code>dispatch apply &lt;job.yml&gt; --check</code> currently support a script-first subset with one <code>ps</code> task.</p>
 <h2>Top-Level Fields</h2>
 <pre><code>
 name: Fix endpoints
@@ -118,7 +118,7 @@ tasks:
 <li><code>defaults.expected_exit_codes</code></li>
 <li><code>strategy.serial</code></li>
 </ul>
-<p>Relative <code>ps</code> task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as <code>dispatch run ps</code>. Multiple tasks and other planned task types remain later <code>6.5</code> work.</p>
+<p>Relative <code>ps</code> task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as <code>dispatch run ps</code>. <code>--check</code> validates the supported job subset and renders the resolved plan without endpoint work; it does not simulate script side effects. Multiple tasks and other planned task types remain later <code>6.5</code> work.</p>
 <p><code>job.vars</code> is only an inline runtime/task-input bag. Transport selection must use the top-level <code>transport</code> field, and separate vars-file concepts are rejected before endpoint work.</p>
 <h2>Secret Boundary</h2>
 <p>Job files may contain credential reference names, but must not contain passwords, tokens, SAS values, or secret material.</p>

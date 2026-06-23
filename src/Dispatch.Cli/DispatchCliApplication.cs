@@ -379,6 +379,7 @@ public sealed class DispatchCliApplication(
     internal async Task<int> RunApplyCommandAsync(
         string? jobPath,
         bool plan,
+        bool check,
         string? configPath,
         string? credentialReference,
         string? transport,
@@ -396,6 +397,7 @@ public sealed class DispatchCliApplication(
                 jobPath ?? string.Empty,
                 new DispatchApplyJobParser.ApplyCommandOptions(
                     Plan: plan,
+                    Check: check,
                     ConfigPath: configPath,
                     CredentialReference: credentialReference,
                     Transport: transport,

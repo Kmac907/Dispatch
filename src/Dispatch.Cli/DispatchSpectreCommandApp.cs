@@ -232,6 +232,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             return await application.RunApplyCommandAsync(
                     settings.JobPath,
                     settings.Plan,
+                    settings.Check,
                     settings.Config,
                     settings.Credential,
                     settings.Transport,
@@ -408,6 +409,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--plan")]
         public bool Plan { get; init; }
+
+        [CommandOption("--check")]
+        public bool Check { get; init; }
 
         [CommandOption("--config <path>")]
         public string? Config { get; init; }

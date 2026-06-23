@@ -2,7 +2,7 @@
 
 This is the v1 YAML job contract for `dispatch apply`.
 
-Status: partial/current. `dispatch apply <job.yml>` and `dispatch apply <job.yml> --plan` currently support a script-first subset with one `ps` task.
+Status: partial/current. `dispatch apply <job.yml>`, `dispatch apply <job.yml> --plan`, and `dispatch apply <job.yml> --check` currently support a script-first subset with one `ps` task.
 
 ## Top-Level Fields
 
@@ -79,7 +79,7 @@ The current `apply` slice supports plan and execution for:
 - `defaults.expected_exit_codes`
 - `strategy.serial`
 
-Relative `ps` task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`. Multiple tasks and other planned task types remain later `6.5` work.
+Relative `ps` task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`. `--check` validates the supported job subset and renders the resolved plan without endpoint work; it does not simulate script side effects. Multiple tasks and other planned task types remain later `6.5` work.
 
 `job.vars` is only an inline runtime/task-input bag. Transport selection must use the top-level `transport` field, and separate vars-file concepts are rejected before endpoint work.
 

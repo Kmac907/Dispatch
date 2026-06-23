@@ -2496,6 +2496,89 @@ credentials:
     }
 
     [Fact]
+    public async Task ApplyCheckParsesScriptFirstYamlJobAndRendersPlanWithoutExecution()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            name: Fix endpoints
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--check", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest.DryRun);
+            Assert.Equal(TransportKind.Psrp, planner.LastRequest.Transport);
+            Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(scriptPath, payload.ScriptPath);
+            Assert.Null(executor.LastPlan);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyRejectsPlanAndCheckTogetherBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--check"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("--plan and --check cannot be used together", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ApplyRouteExecutesScriptFirstYamlJobThroughSharedExecutor()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");

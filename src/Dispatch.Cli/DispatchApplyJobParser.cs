@@ -50,6 +50,12 @@ internal static class DispatchApplyJobParser
         command = null;
         error = string.Empty;
 
+        if (options.Plan && options.Check)
+        {
+            error = "--plan and --check cannot be used together.";
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(jobPath))
         {
             error = "apply requires <job.yml>.";
@@ -95,8 +101,9 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        var validateOnly = options.Plan || options.Check;
         command = new DispatchRunCommand(
-            DryRun: options.Plan,
+            DryRun: validateOnly,
             Payload: new ScriptPayload(job.PowerShellScriptPath, []),
             Targets: targetResolution.Targets,
             Transport: transport,
@@ -110,7 +117,7 @@ internal static class DispatchApplyJobParser
             ArtifactPaths: [],
             CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
             RunAsSystem: false,
-            NoDashboard: options.Plan,
+            NoDashboard: validateOnly,
             OutputMode: options.OutputMode,
             NoColor: options.NoColor,
             Quiet: false,
@@ -555,6 +562,7 @@ internal static class DispatchApplyJobParser
 
     internal sealed record ApplyCommandOptions(
         bool Plan,
+        bool Check,
         string? ConfigPath,
         string? CredentialReference,
         string? Transport,

@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: partial/current. `dispatch apply <job.yml>` and `dispatch apply <job.yml> --plan` are implemented for one script-first `ps` task. Multi-task jobs and additional task types remain planned v1.
+Status: partial/current. `dispatch apply <job.yml>`, `dispatch apply <job.yml> --plan`, and `dispatch apply <job.yml> --check` are implemented for one script-first `ps` task. Multi-task jobs and additional task types remain planned v1.
 
 ## Purpose
 
@@ -28,11 +28,14 @@ Run:
 
 ```powershell
 dispatch apply .\job.yml --plan --output json
+dispatch apply .\job.yml --check --output json
 dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 ```
 
 The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by `dispatch run ps`.
+
+`--check` validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.
 
 ## Job Credential
 
