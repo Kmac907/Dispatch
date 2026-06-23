@@ -13,8 +13,9 @@
     <nav class="nav" aria-label="Primary">
       <div class="brand-group">
         <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">D</span><span>Dispatch</span></a>
-        <a class="star-badge" href="https://github.com/Kmac907/Dispatch/stargazers" aria-label="View Dispatch stargazers on GitHub">
-          <img src="https://img.shields.io/github/stars/Kmac907/Dispatch?style=social" alt="GitHub Repo stars">
+        <a class="repo-stars" href="https://github.com/Kmac907/Dispatch/stargazers" aria-label="View Dispatch stargazers on GitHub">
+          <span aria-hidden="true">★</span>
+          <span id="repo-stars-count">Stars</span>
         </a>
       </div>
       <div class="nav-links">
@@ -137,5 +138,24 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help</code></pr
       </div>
     </div>
   </footer>
+  <script>
+    (() => {
+      const target = document.getElementById("repo-stars-count");
+      if (!target) {
+        return;
+      }
+
+      fetch("https://api.github.com/repos/Kmac907/Dispatch")
+        .then((response) => response.ok ? response.json() : null)
+        .then((repo) => {
+          if (repo && Number.isFinite(repo.stargazers_count)) {
+            target.textContent = new Intl.NumberFormat().format(repo.stargazers_count);
+          }
+        })
+        .catch(() => {
+          target.textContent = "Stars";
+        });
+    })();
+  </script>
 </body>
 </html>

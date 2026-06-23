@@ -128,20 +128,25 @@ summary:focus-visible {
   font-size: 17px;
 }
 
-.star-badge {
+.repo-stars {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: #33424f;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1;
 }
 
-.star-badge:hover {
+.repo-stars:hover {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
   text-decoration: none;
-}
-
-.star-badge img {
-  display: block;
-  max-width: 116px;
-  height: 20px;
 }
 
 .nav-links {
