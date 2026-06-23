@@ -52,17 +52,12 @@
 <li>Windows 10/11 or Windows Server.</li>
 <li>PowerShell 7 or Windows PowerShell 5.1.</li>
 <li>.NET SDK matching <code>global.json</code> when building from source.</li>
-<li>Git on <code>PATH</code> for source install.</li>
+<li>Git on <code>PATH</code> for source checkout workflows.</li>
 <li>At least one approved Windows endpoint for live validation when running remote commands.</li>
 <li>PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.</li>
 </ul>
-<h2>Install</h2>
-<p>The v1 source-install path downloads the installer from GitHub and builds Dispatch locally:</p>
-<pre><code>
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-</code></pre>
-<p>Use an elevated shell for all-users installation.</p>
-<h2>Run From Source</h2>
+<h2>Build And Run From Source</h2>
+<p>The current repository build path is direct source execution:</p>
 <pre><code>
 git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
@@ -70,11 +65,12 @@ dotnet build .\Dispatch.sln
 dotnet test .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 </code></pre>
-<h2>Validate Locally</h2>
+<p>The planned v1 source installer will add <code>packaging/install-from-source.ps1</code> for GitHub <code>irm</code> installation, module installation, validation, and cleanup. That script is not implemented in the current repository yet.</p>
+<h2>Validate Locally From Source</h2>
 <pre><code>
-dispatch --help
-dispatch version
-dispatch doctor
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- version
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 </code></pre>
 <p><code>dispatch doctor</code> checks local prerequisites and reports problems. It does not repair endpoint remoting, firewall, delegation, admin-share, or policy settings.</p>
 <h2>Create A Small Inventory</h2>

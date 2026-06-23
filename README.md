@@ -6,32 +6,36 @@ Dispatch is intentionally narrow: it is not an endpoint agent, package manager, 
 
 Project site: https://kmac907.github.io/Dispatch/
 
-## Features
+## Current And Planned V1 Surface
 
-- Ad-hoc execution: `dispatch run ps`, `dispatch run cmd`, and `dispatch run exe`.
-- Declared jobs: `dispatch apply <job.yml>`.
-- Host selection through direct targets, inventories, groups, and selectors.
+- Current ad-hoc execution: `dispatch run ps`, `dispatch run cmd`, and `dispatch run exe` where supported by the selected transport.
+- Planned declared jobs: `dispatch apply <job.yml>`.
+- Current host selection through direct targets, target files, inventories, groups, and selectors on implemented run paths.
 - Explicit transports: `psrp`, `winrm`, and `psexec`.
 - Live Spectre.Console run dashboard with honest phase/status reporting.
 - Durable run history under `C:\ProgramData\Dispatch\Runs`.
 - Canonical structured event log: `Admin\events.ndjson`.
 - Final run summary: `Admin\results.json`.
 - Per-target `stdout.txt`, `stderr.txt`, and collected script-created artifacts.
-- Credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers.
+- Current credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers on implemented PSRP paths.
 - Machine-wide YAML config at `C:\ProgramData\Dispatch\config.yml`.
-- Optional PowerShell module wrapper over the same `dispatch.exe` command surface.
+- Planned PowerShell module wrapper over the same `dispatch.exe` command surface.
 
 ## Get Started
 
-### Install From Source
+### Run From Source
 
-The v1 source-install path is a GitHub-hosted PowerShell bootstrap. Run it from an elevated PowerShell session when installing for all users.
+The current repository can be built and run directly from source:
 
 ```powershell
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+git clone https://github.com/Kmac907/Dispatch.git
+cd Dispatch
+dotnet build .\Dispatch.sln
+dotnet test .\Dispatch.sln
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 ```
 
-The installer builds Dispatch from source, publishes a single-file `dispatch.exe`, installs the PowerShell module wrapper, validates the install, and cleans up the temporary source checkout. Use the local developer flow below when you want to keep the repository checkout.
+The planned v1 packaging flow will add `packaging/install-from-source.ps1` for GitHub `irm` installation, module installation, validation, and cleanup. That script is not implemented yet.
 
 ### Verify
 
@@ -150,11 +154,7 @@ Run from source:
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\Fix.ps1 --target PC001 --transport psrp --plan
 ```
 
-Install from an existing checkout:
-
-```powershell
-.\packaging\install-from-source.ps1 -NoCleanup
-```
+The planned v1 source installer will also support running from an existing checkout with `-NoCleanup` after roadmap item `8` is implemented.
 
 ## Documentation
 

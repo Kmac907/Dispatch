@@ -88,21 +88,22 @@
     <section class="section compact">
       <div class="split">
         <div>
-          <h2>Install From Source</h2>
-          <p class="section-intro">The v1 install flow builds from the GitHub source, installs the module wrapper and bundled executable, validates the install, and cleans up the temporary checkout.</p>
+          <h2>Run From Source Today</h2>
+          <p class="section-intro">The current repo builds and runs directly with the .NET SDK. The GitHub `irm` source installer is planned under the v1 packaging roadmap and is not implemented yet.</p>
           <ul class="status-list">
-            <li>Use an elevated shell for all-users installation.</li>
-            <li>Run `dispatch doctor` after install to check local prerequisites.</li>
-            <li>Use the direct `dispatch` command as the canonical entry point.</li>
+            <li>Use `dotnet run` for current source execution.</li>
+            <li>Use `doctor` to check local prerequisites.</li>
+            <li>Use direct `dispatch` after the planned installer places it on the path.</li>
           </ul>
           <div class="hero-actions">
             <a class="button" href="installation.html">Installation Guide</a>
             <a class="button-secondary" href="command-reference.html">Command Reference</a>
           </div>
         </div>
-        <pre class="code-panel"><code>irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-dispatch doctor
-dispatch --help</code></pre>
+        <pre class="code-panel"><code>git clone https://github.com/Kmac907/Dispatch.git
+cd Dispatch
+dotnet test .\Dispatch.sln
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help</code></pre>
       </div>
     </section>
 

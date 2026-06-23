@@ -1,6 +1,6 @@
 # Installation
 
-Dispatch v1 installs from source and packages the resulting `dispatch.exe` with the PowerShell module wrapper.
+Dispatch can currently be built and run from the repository source. The v1 source installer and package installer are planned under roadmap item `8` and are not implemented yet.
 
 ## Prerequisites
 
@@ -9,15 +9,35 @@ Dispatch v1 installs from source and packages the resulting `dispatch.exe` with 
 - .NET SDK matching `global.json`.
 - Git available on `PATH`.
 - Network access to `https://github.com/Kmac907/Dispatch`.
-- Administrator shell for all-users installation.
+- Administrator shell for future all-users installation.
 
-## Source Install
+## Current Source Workflow
 
-The primary v1 operator path downloads and runs the source installer from GitHub:
+Use this flow today:
+
+```powershell
+git clone https://github.com/Kmac907/Dispatch.git
+cd Dispatch
+dotnet build .\Dispatch.sln
+dotnet test .\Dispatch.sln
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+```
+
+Run a plan from source:
+
+```powershell
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\Fix.ps1 --target PC001 --transport psrp --plan
+```
+
+## Planned Source Install
+
+The planned v1 operator path will download and run the source installer from GitHub:
 
 ```powershell
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
+
+This command is not available until `packaging/install-from-source.ps1` is implemented.
 
 The installer is responsible for:
 
@@ -36,9 +56,9 @@ Security notes:
 - Use an elevated shell only when installing for all users.
 - The installer should not write endpoint passwords or credential secrets to the command line, logs, or repository checkout.
 
-## Developer Install From Existing Checkout
+## Planned Developer Install From Existing Checkout
 
-Use this when you intentionally want to keep the source tree:
+After `packaging/install-from-source.ps1` exists, this mode will build and install from an existing checkout while preserving the source tree:
 
 ```powershell
 git clone https://github.com/Kmac907/Dispatch.git
@@ -49,23 +69,19 @@ cd Dispatch
 ## Verify Installation
 
 ```powershell
-dispatch --help
-dispatch version
-dispatch doctor
-Import-Module Dispatch
-Get-Command -Module Dispatch
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- version
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 ```
 
 Expected result:
 
-- `dispatch --help` prints the canonical CLI command tree.
-- `dispatch version` prints the installed version.
-- `dispatch doctor` reports local prerequisite status.
-- `Get-Command -Module Dispatch` shows wrapper commands after the module is implemented and installed.
+- The source-run commands print the canonical CLI command tree, version, and local prerequisite status.
+- After the module wrapper and installer are implemented, `Import-Module Dispatch` and `Get-Command -Module Dispatch` should validate the installed wrapper commands.
 
 ## Upgrade
 
-Run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.
+After the source installer is implemented, run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.
 
 ## Uninstall
 

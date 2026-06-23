@@ -7,21 +7,13 @@ This guide is the shortest path from a clean checkout or install to a verified D
 - Windows 10/11 or Windows Server.
 - PowerShell 7 or Windows PowerShell 5.1.
 - .NET SDK matching `global.json` when building from source.
-- Git on `PATH` for source install.
+- Git on `PATH` for source checkout workflows.
 - At least one approved Windows endpoint for live validation when running remote commands.
 - PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.
 
-## Install
+## Build And Run From Source
 
-The v1 source-install path downloads the installer from GitHub and builds Dispatch locally:
-
-```powershell
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-```
-
-Use an elevated shell for all-users installation.
-
-## Run From Source
+The current repository build path is direct source execution:
 
 ```powershell
 git clone https://github.com/Kmac907/Dispatch.git
@@ -31,12 +23,14 @@ dotnet test .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 ```
 
-## Validate Locally
+The planned v1 source installer will add `packaging/install-from-source.ps1` for GitHub `irm` installation, module installation, validation, and cleanup. That script is not implemented in the current repository yet.
+
+## Validate Locally From Source
 
 ```powershell
-dispatch --help
-dispatch version
-dispatch doctor
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- version
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 ```
 
 `dispatch doctor` checks local prerequisites and reports problems. It does not repair endpoint remoting, firewall, delegation, admin-share, or policy settings.

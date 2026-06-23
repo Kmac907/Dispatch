@@ -1,12 +1,14 @@
 # Distribution
 
-Distribution describes how operators install Dispatch once the v1 package surfaces are implemented.
+Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.
 
 Status: planned v1.
 
+The current `packaging/` directory is a placeholder. `install-from-source.ps1`, `install.ps1`, and ZIP packaging are not implemented yet.
+
 ## Source Install
 
-Primary v1 flow:
+Planned primary v1 flow:
 
 ```powershell
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
@@ -23,13 +25,15 @@ The installer should:
 
 ## Existing Checkout
 
+Planned developer/troubleshooting mode:
+
 ```powershell
 .\packaging\install-from-source.ps1 -NoCleanup
 ```
 
 ## Packaged Install
 
-Planned v1 local package install:
+Planned v1 local package install from an already assembled package:
 
 ```powershell
 .\packaging\install.ps1 -Scope CurrentUser

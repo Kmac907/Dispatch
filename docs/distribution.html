@@ -46,10 +46,11 @@
 </aside>
   <article class="doc-content">
 <h1>Distribution</h1>
-<p>Distribution describes how operators install Dispatch once the v1 package surfaces are implemented.</p>
+<p>Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.</p>
 <p>Status: planned v1.</p>
+<p>The current <code>packaging/</code> directory is a placeholder. <code>install-from-source.ps1</code>, <code>install.ps1</code>, and ZIP packaging are not implemented yet.</p>
 <h2>Source Install</h2>
-<p>Primary v1 flow:</p>
+<p>Planned primary v1 flow:</p>
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
@@ -63,11 +64,12 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <li>Clean up temporary source files after successful validation.</li>
 </ol>
 <h2>Existing Checkout</h2>
+<p>Planned developer/troubleshooting mode:</p>
 <pre><code>
 .\packaging\install-from-source.ps1 -NoCleanup
 </code></pre>
 <h2>Packaged Install</h2>
-<p>Planned v1 local package install:</p>
+<p>Planned v1 local package install from an already assembled package:</p>
 <pre><code>
 .\packaging\install.ps1 -Scope CurrentUser
 .\packaging\install.ps1 -Scope AllUsers

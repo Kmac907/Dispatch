@@ -46,7 +46,7 @@
 </aside>
   <article class="doc-content">
 <h1>Installation</h1>
-<p>Dispatch v1 installs from source and packages the resulting <code>dispatch.exe</code> with the PowerShell module wrapper.</p>
+<p>Dispatch can currently be built and run from the repository source. The v1 source installer and package installer are planned under roadmap item <code>8</code> and are not implemented yet.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
@@ -54,13 +54,27 @@
 <li>.NET SDK matching <code>global.json</code>.</li>
 <li>Git available on <code>PATH</code>.</li>
 <li>Network access to <code>https://github.com/Kmac907/Dispatch</code>.</li>
-<li>Administrator shell for all-users installation.</li>
+<li>Administrator shell for future all-users installation.</li>
 </ul>
-<h2>Source Install</h2>
-<p>The primary v1 operator path downloads and runs the source installer from GitHub:</p>
+<h2>Current Source Workflow</h2>
+<p>Use this flow today:</p>
+<pre><code>
+git clone https://github.com/Kmac907/Dispatch.git
+cd Dispatch
+dotnet build .\Dispatch.sln
+dotnet test .\Dispatch.sln
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+</code></pre>
+<p>Run a plan from source:</p>
+<pre><code>
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\Fix.ps1 --target PC001 --transport psrp --plan
+</code></pre>
+<h2>Planned Source Install</h2>
+<p>The planned v1 operator path will download and run the source installer from GitHub:</p>
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
+<p>This command is not available until <code>packaging/install-from-source.ps1</code> is implemented.</p>
 <p>The installer is responsible for:</p>
 <ol>
 <li>Creating a temporary source checkout.</li>
@@ -77,8 +91,8 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <li>Use an elevated shell only when installing for all users.</li>
 <li>The installer should not write endpoint passwords or credential secrets to the command line, logs, or repository checkout.</li>
 </ul>
-<h2>Developer Install From Existing Checkout</h2>
-<p>Use this when you intentionally want to keep the source tree:</p>
+<h2>Planned Developer Install From Existing Checkout</h2>
+<p>After <code>packaging/install-from-source.ps1</code> exists, this mode will build and install from an existing checkout while preserving the source tree:</p>
 <pre><code>
 git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
@@ -86,21 +100,17 @@ cd Dispatch
 </code></pre>
 <h2>Verify Installation</h2>
 <pre><code>
-dispatch --help
-dispatch version
-dispatch doctor
-Import-Module Dispatch
-Get-Command -Module Dispatch
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- version
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 </code></pre>
 <p>Expected result:</p>
 <ul>
-<li><code>dispatch --help</code> prints the canonical CLI command tree.</li>
-<li><code>dispatch version</code> prints the installed version.</li>
-<li><code>dispatch doctor</code> reports local prerequisite status.</li>
-<li><code>Get-Command -Module Dispatch</code> shows wrapper commands after the module is implemented and installed.</li>
+<li>The source-run commands print the canonical CLI command tree, version, and local prerequisite status.</li>
+<li>After the module wrapper and installer are implemented, <code>Import-Module Dispatch</code> and <code>Get-Command -Module Dispatch</code> should validate the installed wrapper commands.</li>
 </ul>
 <h2>Upgrade</h2>
-<p>Run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.</p>
+<p>After the source installer is implemented, run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.</p>
 <h2>Uninstall</h2>
 <p>Remove the installed Dispatch module folder from the selected PowerShell module path and remove any machine-wide config or run history only when that data is no longer needed:</p>
 <pre><code>

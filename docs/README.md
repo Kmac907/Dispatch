@@ -7,7 +7,7 @@ Dispatch is not an endpoint agent, package manager, or full configuration-manage
 ## Start Here
 
 - [Getting Started](getting-started.html) - first install, validation, and run.
-- [Installation](installation.html) - source install, module install, upgrade, and uninstall.
+- [Installation](installation.html) - current source execution plus planned source/package install behavior.
 - [Concepts](concepts.html) - jobs, targets, inventories, transports, plans, runs, results, logs, and artifacts.
 - [Command Reference](command-reference.html) - command tree, options, examples, and implementation status.
 - [Running Scripts](running-scripts.html) - day-to-day `dispatch run ps` workflows.
