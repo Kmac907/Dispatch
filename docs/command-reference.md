@@ -51,6 +51,17 @@ Common options:
 - `--output`
 - `--no-progress`
 
+Examples:
+
+```powershell
+dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp --credential prod-admin
+dispatch run cmd whoami --target PC001 --transport winrm --output json
+dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
+```
+
+Use `--plan` to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.
+
 ## Push
 
 ```powershell
@@ -98,6 +109,17 @@ dispatch creds remove <name>
 
 Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP credential resolution. PowerShell-wrapper `PSCredential` handoff and non-PSRP credential handoff are planned v1.
 
+Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.
+
+Examples:
+
+```powershell
+dispatch creds list
+dispatch creds add helpdesk-local
+dispatch creds test kv-prod-admin
+dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --credential prod-admin
+```
+
 ## Doctor
 
 ```powershell
@@ -130,3 +152,7 @@ Scaffolds starter YAML files.
 - `yaml` - stable YAML document where supported.
 
 Automation should prefer result files or structured output modes instead of parsing rich terminal output.
+
+## Exit Behavior
+
+Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. Transport, authentication, authorization, probe, timeout, and script failures are mapped to stable result fields and failure categories; automation should read `Admin\results.json` for per-target detail.

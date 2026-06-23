@@ -2,8 +2,8 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Command Reference - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
-<main class="docs-layout">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="topbar"><nav class="nav" aria-label="Primary"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="installation.html">Install</a><a href="command-reference.html">Commands</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header><main id="main" class="docs-layout">
   <aside class="sidebar"><h2>Docs</h2>
 <div class="sidebar-group">Start</div>
 <a href="readme.html">Documentation Home</a>
@@ -86,6 +86,14 @@ dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm|
 <li><code>--output</code></li>
 <li><code>--no-progress</code></li>
 </ul>
+<p>Examples:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp --credential prod-admin
+dispatch run cmd whoami --target PC001 --transport winrm --output json
+dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
+</code></pre>
+<p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
 <h2>Push</h2>
 <pre><code>
 dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--target &lt;selector&gt;] [--recurse] [--checksum] [--overwrite] [--backup] [--execute] [--cleanup]
@@ -119,6 +127,14 @@ dispatch creds test &lt;name&gt;
 dispatch creds remove &lt;name&gt;
 </code></pre>
 <p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff and non-PSRP credential handoff are planned v1.</p>
+<p>Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.</p>
+<p>Examples:</p>
+<pre><code>
+dispatch creds list
+dispatch creds add helpdesk-local
+dispatch creds test kv-prod-admin
+dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --credential prod-admin
+</code></pre>
 <h2>Doctor</h2>
 <pre><code>
 dispatch doctor [--transport psexec|psrp|winrm|auto] [--output rich|json|table]
@@ -143,8 +159,10 @@ dispatch init all
 <li><code>yaml</code> - stable YAML document where supported.</li>
 </ul>
 <p>Automation should prefer result files or structured output modes instead of parsing rich terminal output.</p>
+<h2>Exit Behavior</h2>
+<p>Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. Transport, authentication, authorization, probe, timeout, and script failures are mapped to stable result fields and failure categories; automation should read <code>Admin\results.json</code> for per-target detail.</p>
   </article>
 </main>
-<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>
 </body>
 </html>

@@ -41,6 +41,30 @@ dispatch doctor
 
 `dispatch doctor` checks local prerequisites and reports problems. It does not repair endpoint remoting, firewall, delegation, admin-share, or policy settings.
 
+## Create A Small Inventory
+
+Use a text file for the simplest target list:
+
+```text
+PC001
+PC002
+```
+
+Use YAML when you need defaults, groups, credentials, or transport metadata:
+
+```yaml
+defaults:
+  transport: psrp
+groups:
+  kiosks:
+    hosts: [KIOSK01, KIOSK02]
+hosts:
+  SERVER01:
+    transport: winrm
+```
+
+Inventory files only select host metadata and credential references. Credential provider details live in the global Dispatch config.
+
 ## Preview A Run
 
 ```powershell
@@ -56,6 +80,18 @@ dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
 ```
 
 Use `--transport winrm` for raw WS-Management shell execution or `--transport psexec` where admin-share staging and PsExec policy are available.
+
+Run against an inventory group:
+
+```powershell
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp
+```
+
+Pass ordinary script arguments after the script path:
+
+```powershell
+dispatch run ps .\Fix.ps1 -Mode Repair -Verbose --target PC001 --transport psrp
+```
 
 ## Find Results
 
@@ -80,3 +116,11 @@ dispatch logs list
 dispatch logs show latest
 dispatch logs tail latest --count 50
 ```
+
+## If The First Remote Run Fails
+
+- Confirm the target resolves from the admin workstation.
+- Confirm the selected transport is enabled and reachable.
+- Use PSRP or raw WinRM when SMB/admin-share staging is not available.
+- Use `--plan --output json` to verify target, credential, and transport selection before retrying endpoint work.
+- If one approved live endpoint passes and another is offline, treat the offline endpoint as an environment availability issue, not a product validation failure.

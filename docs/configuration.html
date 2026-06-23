@@ -2,8 +2,8 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Configuration - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
-<main class="docs-layout">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="topbar"><nav class="nav" aria-label="Primary"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="installation.html">Install</a><a href="command-reference.html">Commands</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header><main id="main" class="docs-layout">
   <aside class="sidebar"><h2>Docs</h2>
 <div class="sidebar-group">Start</div>
 <a href="readme.html">Documentation Home</a>
@@ -60,6 +60,7 @@ C:\ProgramData\Dispatch\config.yml
 </ol>
 <h2>Runtime Option Precedence</h2>
 <p>Explicit CLI options override job, inventory, config, and built-in defaults for the current command.</p>
+<p>For credentials, the CLI selects a reference; the loaded config defines the provider metadata for that reference. The CLI should not accept endpoint passwords as command-line arguments.</p>
 <h2>Example</h2>
 <pre><code>
 dispatch:
@@ -77,6 +78,18 @@ credentials:
     provider: dpapi_file
     username: .\helpdesk-admin
     path: C:\ProgramData\Dispatch\Credentials\helpdesk-local.cred
+
+  domain-admin:
+    provider: windows_credential_manager
+    username: CONTOSO\domain.admin
+    target: Dispatch/domain-admin
+
+  kv-prod-admin:
+    provider: azure_keyvault
+    username: CONTOSO\prod.admin
+    vault_uri: https://contoso-dispatch-kv.vault.azure.net/
+    secret_name: prod-admin-password
+    auth: default_azure_credential
 </code></pre>
 <h2>Supported Keys</h2>
 <p><code>dispatch</code> keys:</p>
@@ -98,11 +111,37 @@ credentials:
 <li><code>secret_name</code></li>
 <li><code>auth</code></li>
 </ul>
+<h2>Example With Inventory</h2>
+<p><code>C:\ProgramData\Dispatch\config.yml</code>:</p>
+<pre><code>
+dispatch:
+  default_transport: psrp
+
+credentials:
+  prod-admin:
+    provider: prompt
+    username: CONTOSO\prod.admin
+</code></pre>
+<p><code>hosts.yml</code>:</p>
+<pre><code>
+defaults:
+  transport: psrp
+  credential: prod-admin
+hosts:
+  PC001:
+  PC002:
+</code></pre>
+<p>Command:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target PC001
+</code></pre>
+<p>Dispatch loads the global config, resolves <code>prod-admin</code>, prompts for the configured username at runtime, and keeps the password in memory only.</p>
 <h2>Credential Rule</h2>
 <p><code>job.yml</code>, <code>hosts.yml</code>, and <code>--credential &lt;name&gt;</code> select a credential reference. The global config defines what that reference means and how it is resolved.</p>
 <p>No passwords in YAML.</p>
+<p>Secret-like keys such as <code>password</code>, <code>secret</code>, <code>token</code>, and <code>sas</code> are rejected in Dispatch YAML inputs even when the value appears to be placeholder text.</p>
   </article>
 </main>
-<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>
 </body>
 </html>

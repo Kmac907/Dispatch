@@ -30,6 +30,12 @@ The installer is responsible for:
 
 Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.
 
+Security notes:
+
+- Review the installer source before running an `irm | iex` command in controlled environments.
+- Use an elevated shell only when installing for all users.
+- The installer should not write endpoint passwords or credential secrets to the command line, logs, or repository checkout.
+
 ## Developer Install From Existing Checkout
 
 Use this when you intentionally want to keep the source tree:
@@ -50,6 +56,13 @@ Import-Module Dispatch
 Get-Command -Module Dispatch
 ```
 
+Expected result:
+
+- `dispatch --help` prints the canonical CLI command tree.
+- `dispatch version` prints the installed version.
+- `dispatch doctor` reports local prerequisite status.
+- `Get-Command -Module Dispatch` shows wrapper commands after the module is implemented and installed.
+
 ## Upgrade
 
 Run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.
@@ -69,3 +82,5 @@ C:\ProgramData\Dispatch\config.yml
 C:\ProgramData\Dispatch\Runs\
 C:\ProgramData\Dispatch\Credentials\
 ```
+
+Do not remove `C:\ProgramData\Dispatch\Runs\` if you still need prior run evidence. Do not remove `C:\ProgramData\Dispatch\Credentials\` unless the local DPAPI file credentials are no longer needed or have been re-enrolled elsewhere.

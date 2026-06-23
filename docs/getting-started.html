@@ -2,8 +2,8 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Getting Started - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
-<main class="docs-layout">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="topbar"><nav class="nav" aria-label="Primary"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="installation.html">Install</a><a href="command-reference.html">Commands</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header><main id="main" class="docs-layout">
   <aside class="sidebar"><h2>Docs</h2>
 <div class="sidebar-group">Start</div>
 <a href="readme.html">Documentation Home</a>
@@ -77,6 +77,24 @@ dispatch version
 dispatch doctor
 </code></pre>
 <p><code>dispatch doctor</code> checks local prerequisites and reports problems. It does not repair endpoint remoting, firewall, delegation, admin-share, or policy settings.</p>
+<h2>Create A Small Inventory</h2>
+<p>Use a text file for the simplest target list:</p>
+<pre><code>
+PC001
+PC002
+</code></pre>
+<p>Use YAML when you need defaults, groups, credentials, or transport metadata:</p>
+<pre><code>
+defaults:
+  transport: psrp
+groups:
+  kiosks:
+    hosts: [KIOSK01, KIOSK02]
+hosts:
+  SERVER01:
+    transport: winrm
+</code></pre>
+<p>Inventory files only select host metadata and credential references. Credential provider details live in the global Dispatch config.</p>
 <h2>Preview A Run</h2>
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json
@@ -87,6 +105,14 @@ dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json
 dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
 </code></pre>
 <p>Use <code>--transport winrm</code> for raw WS-Management shell execution or <code>--transport psexec</code> where admin-share staging and PsExec policy are available.</p>
+<p>Run against an inventory group:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp
+</code></pre>
+<p>Pass ordinary script arguments after the script path:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 -Mode Repair -Verbose --target PC001 --transport psrp
+</code></pre>
 <h2>Find Results</h2>
 <p>Runs are written under:</p>
 <pre><code>
@@ -106,8 +132,16 @@ dispatch logs list
 dispatch logs show latest
 dispatch logs tail latest --count 50
 </code></pre>
+<h2>If The First Remote Run Fails</h2>
+<ul>
+<li>Confirm the target resolves from the admin workstation.</li>
+<li>Confirm the selected transport is enabled and reachable.</li>
+<li>Use PSRP or raw WinRM when SMB/admin-share staging is not available.</li>
+<li>Use <code>--plan --output json</code> to verify target, credential, and transport selection before retrying endpoint work.</li>
+<li>If one approved live endpoint passes and another is offline, treat the offline endpoint as an environment availability issue, not a product validation failure.</li>
+</ul>
   </article>
 </main>
-<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>
 </body>
 </html>

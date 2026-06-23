@@ -4,73 +4,98 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dispatch Docs</title>
+  <meta name="description" content="Operator and maintainer documentation for Dispatch.">
   <link rel="stylesheet" href="site.css">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
   <header class="topbar">
     <nav class="nav" aria-label="Primary">
-      <a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a>
+      <a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">D</span><span>Dispatch</span></a>
       <div class="nav-links">
         <a href="docs.html">Docs</a>
-        <a href="installation.html">Install</a>
         <a href="getting-started.html">Get Started</a>
+        <a href="installation.html">Install</a>
+        <a href="command-reference.html">Commands</a>
         <a href="https://github.com/Kmac907/Dispatch">GitHub</a>
       </div>
     </nav>
   </header>
-  <main class="section">
+  <main id="main" class="section">
     <p class="eyebrow">Documentation</p>
     <h1>Dispatch Docs</h1>
-    <p class="lead">Complete operator, reference, and maintainer documentation for the v1 Dispatch command surface.</p>
-    <h2>Start</h2>
-    <div class="doc-grid" style="margin-top: 34px;">
-      <a class="doc-card" href="readme.html"><strong>Docs Home</strong><span>Primary documentation entry point.</span></a>
-      <a class="doc-card" href="getting-started.html"><strong>Getting Started</strong><span>Fastest path to first successful use.</span></a>
-      <a class="doc-card" href="installation.html"><strong>Installation</strong><span>GitHub source install, packaged install, upgrade, uninstall.</span></a>
-      <a class="doc-card" href="concepts.html"><strong>Concepts</strong><span>Jobs, targets, runs, results, logs, and artifacts.</span></a>
-      <a class="doc-card" href="command-reference.html"><strong>Command Reference</strong><span>Command tree, options, examples, and status.</span></a>
-    </div>
-    <h2>Operators</h2>
-    <div class="doc-grid">
-      <a class="doc-card" href="running-scripts.html"><strong>Running Scripts</strong><span>Primary ad-hoc PowerShell workflow.</span></a>
-      <a class="doc-card" href="inventory.html"><strong>Inventory</strong><span>Text inventories, YAML inventories, selectors, and excludes.</span></a>
-      <a class="doc-card" href="inventory-schema.html"><strong>Inventory Schema</strong><span>Exact supported YAML inventory contract.</span></a>
-      <a class="doc-card" href="transports.html"><strong>Transports</strong><span>Transport overview and selection guide.</span></a>
-      <a class="doc-card" href="transport-psexec.html"><strong>PsExec Transport</strong><span>Requirements, behavior, and common failures.</span></a>
-      <a class="doc-card" href="transport-winrm.html"><strong>Raw WinRM Transport</strong><span>Listener requirements and validation commands.</span></a>
-      <a class="doc-card" href="transport-psrp.html"><strong>PSRP Transport</strong><span>Remoting requirements, streams, and credentials.</span></a>
-      <a class="doc-card" href="configuration.html"><strong>Configuration</strong><span>Global YAML config, precedence, and defaults.</span></a>
-      <a class="doc-card" href="output-and-results.html"><strong>Output And Results</strong><span>Run folders, events, summaries, stdout/stderr.</span></a>
-      <a class="doc-card" href="logs.html"><strong>Logs</strong><span>Durable run history and logs commands.</span></a>
-      <a class="doc-card" href="troubleshooting.html"><strong>Troubleshooting</strong><span>Resolution, inventory, transport, config, and artifact failures.</span></a>
-      <a class="doc-card" href="security.html"><strong>Security</strong><span>No plaintext secrets, redaction, and endpoint policy.</span></a>
-      <a class="doc-card" href="script-owned-payloads.html"><strong>Script-Owned Payloads</strong><span>What Dispatch stages and what scripts own.</span></a>
-    </div>
-    <h2>Reference</h2>
-    <div class="doc-grid">
-      <a class="doc-card" href="credentials.html"><strong>Credentials</strong><span>Credential references, providers, and enrollment behavior.</span></a>
-      <a class="doc-card" href="error-codes.html"><strong>Error Codes</strong><span>CLI exit codes and target failure categories.</span></a>
-      <a class="doc-card" href="result-schema.html"><strong>Result Schema</strong><span>Machine-readable run and target result contract.</span></a>
-      <a class="doc-card" href="examples.html"><strong>Examples</strong><span>Copy/paste examples for common operations.</span></a>
-      <a class="doc-card" href="faq.html"><strong>FAQ</strong><span>Short answers to common questions.</span></a>
-      <a class="doc-card" href="jobs.html"><strong>Jobs</strong><span>Declared job operator guide.</span></a>
-      <a class="doc-card" href="job-schema.html"><strong>Job Schema</strong><span>Exact YAML job contract.</span></a>
-    </div>
-    <h2>Maintainers</h2>
-    <div class="doc-grid">
-      <a class="doc-card" href="architecture.html"><strong>Architecture</strong><span>Project layout and dependency boundaries.</span></a>
-      <a class="doc-card" href="development.html"><strong>Development</strong><span>Build, test, validation, and contribution workflow.</span></a>
-      <a class="doc-card" href="testing-and-validation.html"><strong>Testing And Validation</strong><span>Automated and live validation policy.</span></a>
-      <a class="doc-card" href="roadmap-status.html"><strong>Roadmap Status</strong><span>What works, what is partial, and what is planned.</span></a>
-      <a class="doc-card" href="powershell-module.html"><strong>PowerShell Module</strong><span>Wrapper surface and PSCredential handoff model.</span></a>
-      <a class="doc-card" href="distribution.html"><strong>Distribution</strong><span>Source install, ZIP, and local package guidance.</span></a>
-    </div>
-    <h2>Deferred</h2>
-    <div class="doc-grid">
-      <a class="doc-card" href="managed-execution.html"><strong>Managed Execution</strong><span>Reserved doc for later managed execution mode.</span></a>
-      <a class="doc-card" href="enterprise-distribution.html"><strong>Enterprise Distribution</strong><span>Reserved doc for later enterprise package channels.</span></a>
-    </div>
+    <p class="lead">Operator, reference, and maintainer documentation for the v1 Dispatch command surface. Internal roadmap files remain in the repository but are not public site pages.</p>
+
+    <section class="section compact nested">
+      <h2>Start Here</h2>
+      <p class="section-intro">Use these pages first if you are installing Dispatch or running it for the first time.</p>
+      <div class="doc-grid">
+        <a class="doc-card" href="getting-started.html"><strong>Getting Started</strong><span>Shortest path from install to first verified run.</span></a>
+        <a class="doc-card" href="installation.html"><strong>Installation</strong><span>Source install, verification, upgrade, and uninstall.</span></a>
+        <a class="doc-card" href="command-reference.html"><strong>Command Reference</strong><span>Current, planned, and deferred command surfaces.</span></a>
+        <a class="doc-card" href="concepts.html"><strong>Concepts</strong><span>Jobs, targets, transports, runs, results, logs, and artifacts.</span></a>
+      </div>
+    </section>
+
+    <section class="section compact nested">
+      <h2>Operators</h2>
+      <p class="section-intro">Day-to-day guides for running scripts, targeting hosts, choosing transports, and reading results.</p>
+      <div class="doc-grid">
+        <a class="doc-card" href="running-scripts.html"><strong>Running Scripts</strong><span>Primary ad-hoc PowerShell workflow.</span></a>
+        <a class="doc-card" href="inventory.html"><strong>Inventory</strong><span>Text inventories, YAML inventories, selectors, and excludes.</span></a>
+        <a class="doc-card" href="inventory-schema.html"><strong>Inventory Schema</strong><span>Supported YAML inventory sections and precedence.</span></a>
+        <a class="doc-card" href="transports.html"><strong>Transports</strong><span>Transport overview and selection guide.</span></a>
+        <a class="doc-card" href="transport-psexec.html"><strong>PsExec Transport</strong><span>Requirements, behavior, and common failures.</span></a>
+        <a class="doc-card" href="transport-winrm.html"><strong>Raw WinRM Transport</strong><span>Listener requirements and validation commands.</span></a>
+        <a class="doc-card" href="transport-psrp.html"><strong>PSRP Transport</strong><span>Remoting requirements, streams, and credentials.</span></a>
+        <a class="doc-card" href="configuration.html"><strong>Configuration</strong><span>Global YAML config, precedence, and defaults.</span></a>
+        <a class="doc-card" href="output-and-results.html"><strong>Output And Results</strong><span>Run folders, events, summaries, stdout/stderr.</span></a>
+        <a class="doc-card" href="logs.html"><strong>Logs</strong><span>Durable run history and logs commands.</span></a>
+        <a class="doc-card" href="troubleshooting.html"><strong>Troubleshooting</strong><span>Resolution, inventory, transport, config, and artifact failures.</span></a>
+        <a class="doc-card" href="security.html"><strong>Security</strong><span>No plaintext secrets, redaction, and endpoint policy.</span></a>
+        <a class="doc-card" href="script-owned-payloads.html"><strong>Script-Owned Payloads</strong><span>What Dispatch stages and what scripts own.</span></a>
+      </div>
+    </section>
+
+    <section class="section compact nested">
+      <h2>Reference</h2>
+      <p class="section-intro">Stable contracts for automation, configuration, credentials, schemas, and examples.</p>
+      <div class="doc-grid">
+        <a class="doc-card" href="readme.html"><strong>Docs Home</strong><span>Primary documentation entry point.</span></a>
+        <a class="doc-card" href="credentials.html"><strong>Credentials</strong><span>Credential references, providers, and enrollment behavior.</span></a>
+        <a class="doc-card" href="error-codes.html"><strong>Error Codes</strong><span>CLI exit codes and target failure categories.</span></a>
+        <a class="doc-card" href="result-schema.html"><strong>Result Schema</strong><span>Machine-readable run and target result contract.</span></a>
+        <a class="doc-card" href="examples.html"><strong>Examples</strong><span>Copy/paste examples for common operations.</span></a>
+        <a class="doc-card" href="faq.html"><strong>FAQ</strong><span>Short answers to common questions.</span></a>
+        <a class="doc-card" href="jobs.html"><strong>Jobs</strong><span>Declared job operator guide.</span></a>
+        <a class="doc-card" href="job-schema.html"><strong>Job Schema</strong><span>Exact YAML job contract.</span></a>
+      </div>
+    </section>
+
+    <section class="section compact nested">
+      <h2>Maintainers</h2>
+      <p class="section-intro">Project structure, validation policy, release planning, and deferred feature documents.</p>
+      <div class="doc-grid">
+        <a class="doc-card" href="architecture.html"><strong>Architecture</strong><span>Project layout and dependency boundaries.</span></a>
+        <a class="doc-card" href="development.html"><strong>Development</strong><span>Build, test, validation, and contribution workflow.</span></a>
+        <a class="doc-card" href="testing-and-validation.html"><strong>Testing And Validation</strong><span>Automated and live validation policy.</span></a>
+        <a class="doc-card" href="roadmap-status.html"><strong>Roadmap Status</strong><span>What works, what is partial, and what is planned.</span></a>
+        <a class="doc-card" href="powershell-module.html"><strong>PowerShell Module</strong><span>Wrapper surface and PSCredential handoff model.</span></a>
+        <a class="doc-card" href="distribution.html"><strong>Distribution</strong><span>Source install, ZIP, and local package guidance.</span></a>
+        <a class="doc-card" href="managed-execution.html"><strong>Managed Execution</strong><span>Deferred managed execution mode.</span></a>
+        <a class="doc-card" href="enterprise-distribution.html"><strong>Enterprise Distribution</strong><span>Deferred enterprise package channels.</span></a>
+      </div>
+    </section>
   </main>
-  <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="index.html">Project Home</a></span></div></footer>
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>Dispatch Docs</span>
+      <div class="footer-links">
+        <a href="index.html">Project Home</a>
+        <a href="security.html">Security</a>
+        <a href="https://github.com/Kmac907/Dispatch">GitHub</a>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

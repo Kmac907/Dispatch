@@ -2,8 +2,8 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Installation - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
-<main class="docs-layout">
+<a class="skip-link" href="#main">Skip to content</a>
+<header class="topbar"><nav class="nav" aria-label="Primary"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="installation.html">Install</a><a href="command-reference.html">Commands</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header><main id="main" class="docs-layout">
   <aside class="sidebar"><h2>Docs</h2>
 <div class="sidebar-group">Start</div>
 <a href="readme.html">Documentation Home</a>
@@ -71,6 +71,12 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <li>Cleaning up the temporary source checkout after validation.</li>
 </ol>
 <p>Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.</p>
+<p>Security notes:</p>
+<ul>
+<li>Review the installer source before running an <code>irm | iex</code> command in controlled environments.</li>
+<li>Use an elevated shell only when installing for all users.</li>
+<li>The installer should not write endpoint passwords or credential secrets to the command line, logs, or repository checkout.</li>
+</ul>
 <h2>Developer Install From Existing Checkout</h2>
 <p>Use this when you intentionally want to keep the source tree:</p>
 <pre><code>
@@ -86,6 +92,13 @@ dispatch doctor
 Import-Module Dispatch
 Get-Command -Module Dispatch
 </code></pre>
+<p>Expected result:</p>
+<ul>
+<li><code>dispatch --help</code> prints the canonical CLI command tree.</li>
+<li><code>dispatch version</code> prints the installed version.</li>
+<li><code>dispatch doctor</code> reports local prerequisite status.</li>
+<li><code>Get-Command -Module Dispatch</code> shows wrapper commands after the module is implemented and installed.</li>
+</ul>
 <h2>Upgrade</h2>
 <p>Run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.</p>
 <h2>Uninstall</h2>
@@ -99,8 +112,9 @@ C:\ProgramData\Dispatch\config.yml
 C:\ProgramData\Dispatch\Runs\
 C:\ProgramData\Dispatch\Credentials\
 </code></pre>
+<p>Do not remove <code>C:\ProgramData\Dispatch\Runs\</code> if you still need prior run evidence. Do not remove <code>C:\ProgramData\Dispatch\Credentials\</code> unless the local DPAPI file credentials are no longer needed or have been re-enrolled elsewhere.</p>
   </article>
 </main>
-<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>
 </body>
 </html>
