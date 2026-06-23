@@ -105,6 +105,13 @@ summary:focus-visible {
   letter-spacing: 0;
 }
 
+.brand-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
 .brand:hover {
   color: var(--ink);
   text-decoration: none;
@@ -119,6 +126,22 @@ summary:focus-visible {
   color: #fff;
   background: var(--accent);
   font-size: 17px;
+}
+
+.star-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+
+.star-badge:hover {
+  text-decoration: none;
+}
+
+.star-badge img {
+  display: block;
+  max-width: 116px;
+  height: 20px;
 }
 
 .nav-links {
