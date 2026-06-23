@@ -85,7 +85,7 @@ These options should be consistent across host-targeting commands as implementat
 Transport selection precedence:
 
 ```text
-CLI --transport (except auto) > job.transport > inventory transport policy > explicit --config > ambient bound Dispatch config > application defaults
+CLI --transport (except auto) > job.transport (except auto) > inventory transport policy > explicit --config > ambient bound Dispatch config > application defaults
 ```
 
 Runtime variable precedence:

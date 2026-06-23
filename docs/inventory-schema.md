@@ -82,7 +82,7 @@ hosts: [SERVER01, SERVER02]
 Transport selection:
 
 1. Explicit CLI `--transport` when not `auto`.
-2. Job transport when running `apply`.
+2. Job transport when running `apply`, when not `auto`.
 3. Host inventory transport.
 4. Inherited group transport.
 5. Inventory defaults transport.

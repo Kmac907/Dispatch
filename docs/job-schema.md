@@ -53,7 +53,7 @@ Inventory:
 Transport:
 
 1. Explicit CLI `--transport` when not `auto`.
-2. `job.transport`.
+2. `job.transport` when not `auto`.
 3. Inventory transport policy.
 4. Explicit `--config`.
 5. Ambient global config.
@@ -94,7 +94,7 @@ The current `apply` slice supports plan and check for:
 - `strategy.serial`
 - task-level `tags` on supported `ps` tasks
 
-Relative `ps` task paths resolve from the job file directory. `--plan` and `--check` can render plans for multiple selected `ps` tasks without endpoint work; `--check` does not simulate script side effects. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`, and currently requires tag filters to leave exactly one selected `ps` task. `--tags <tags>` and `--skip-tags <tags>` filter supported tasks by comma-separated task tags before planning or endpoint work. `--serial <n>` or `--concurrency <n>` overrides `strategy.serial` for the supported apply subset. `--no-progress`, `--quiet`, `--verbose`, and `--trace` follow the same current output/log behavior as `dispatch run ps`; `--diff` is recognized but fails before planning until the diff behavior slice is implemented. Multi-task execution and other planned task types remain later `6.5` work.
+Relative `ps` task paths resolve from the job file directory. `--plan` and `--check` can render plans for multiple selected `ps` tasks without endpoint work; `--check` does not simulate script side effects. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`, and currently requires tag filters to leave exactly one selected `ps` task. `--tags <tags>` and `--skip-tags <tags>` filter supported tasks by comma-separated task tags before planning or endpoint work. `--serial <n>` or `--concurrency <n>` overrides `strategy.serial` for the supported apply subset. Apply transport resolution honors explicit non-`auto` CLI transport, non-`auto` job transport, inventory transport policy, and then config/default transport; mixed selected inventory transport policies fail before planning unless the operator supplies an explicit concrete transport. `--no-progress`, `--quiet`, `--verbose`, and `--trace` follow the same current output/log behavior as `dispatch run ps`; `--diff` is recognized but fails before planning until the diff behavior slice is implemented. Multi-task execution and other planned task types remain later `6.5` work.
 
 `job.vars` is only an inline runtime/task-input bag. Transport selection must use the top-level `transport` field, and separate vars-file concepts are rejected before endpoint work.
 

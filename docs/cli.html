@@ -24,7 +24,7 @@ dispatch init job|hosts|config|all
 dispatch version</code></pre>
     <h2>Common Options</h2>
     <p>Use <code>--target</code>, <code>--inventory</code>, <code>--transport</code>, <code>--credential</code>, <code>--config</code>, <code>--plan</code>, <code>--output</code>, and <code>--no-progress</code> where supported by the command.</p>
-    <p>The current <code>apply</code> path supports planning and checking selected multi-task script-first <code>ps</code> jobs, and execution for one selected <code>ps</code> task. Multi-task execution and non-<code>ps</code> task types remain planned v1 work.</p>
+    <p>The current <code>apply</code> path supports planning and checking selected multi-task script-first <code>ps</code> jobs, execution for one selected <code>ps</code> task, and transport precedence across explicit CLI values, job transport, inventory transport policy, and config/default transport. Multi-task execution and non-<code>ps</code> task types remain planned v1 work.</p>
     <h2>Output Modes</h2>
     <p><code>rich</code> is for humans. <code>json</code>, <code>ndjson</code>, <code>yaml</code>, and table output are for automation and stable parsing.</p>
   </article>

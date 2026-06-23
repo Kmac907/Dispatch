@@ -117,11 +117,6 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (!TryResolveTransport(job.Transport, options.Transport, config.DefaultTransport ?? ambientConfig.DefaultTransport, out var transport, out error))
-        {
-            return false;
-        }
-
         var targetSelectors = new[] { NormalizeOptional(options.Target) ?? job.Hosts };
         IReadOnlyList<string> excludeSelectors = NormalizeOptional(options.Exclude) is { } exclude
             ? new[] { exclude }
@@ -137,6 +132,17 @@ internal static class DispatchApplyJobParser
         if (!targetResolution.IsValid)
         {
             error = string.Join(Environment.NewLine, targetResolution.Errors.Select(static item => $"{item.Code}: {item.Message}"));
+            return false;
+        }
+
+        if (!TryResolveTransport(
+                targetResolution,
+                job.Transport,
+                options.Transport,
+                config.DefaultTransport ?? ambientConfig.DefaultTransport,
+                out var transport,
+                out error))
+        {
             return false;
         }
 
@@ -610,6 +616,7 @@ internal static class DispatchApplyJobParser
     }
 
     private static bool TryResolveTransport(
+        TargetResolutionResult targetResolution,
         string? jobTransport,
         string? optionTransport,
         TransportKind defaultTransport,
@@ -621,28 +628,61 @@ internal static class DispatchApplyJobParser
 
         if (!string.IsNullOrWhiteSpace(optionTransport))
         {
-            if (!TryParseTransport(optionTransport, out var parsed) || parsed is null)
+            if (!TryParseTransport(optionTransport, out var parsed))
             {
                 error = $"Unsupported transport '{optionTransport}'.";
                 return false;
             }
 
-            transport = parsed.Value;
-            return true;
+            if (parsed is not null)
+            {
+                transport = parsed.Value;
+                return true;
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(jobTransport))
         {
-            if (!TryParseTransport(jobTransport, out var parsed) || parsed is null)
+            if (!TryParseTransport(jobTransport, out var parsed))
             {
                 error = $"Unsupported transport '{jobTransport}'.";
                 return false;
             }
 
-            transport = parsed.Value;
+            if (parsed is not null)
+            {
+                transport = parsed.Value;
+                return true;
+            }
         }
 
-        return true;
+        var effectiveTargetsByTransport = new Dictionary<TransportKind, List<string>>();
+        foreach (var target in targetResolution.Targets)
+        {
+            var effectiveTransport = targetResolution.InventoryTransportPolicies?.TryGetValue(target.Name, out var inventoryTransport) == true
+                                     && inventoryTransport is not null
+                ? inventoryTransport.Value
+                : defaultTransport;
+            if (!effectiveTargetsByTransport.TryGetValue(effectiveTransport, out var targets))
+            {
+                targets = [];
+                effectiveTargetsByTransport[effectiveTransport] = targets;
+            }
+
+            targets.Add(target.Name);
+        }
+
+        if (effectiveTargetsByTransport.Count <= 1)
+        {
+            transport = effectiveTargetsByTransport.Keys.SingleOrDefault(defaultTransport);
+            return true;
+        }
+
+        var transports = effectiveTargetsByTransport
+            .OrderBy(static entry => entry.Key.ToDispatchString(), StringComparer.Ordinal)
+            .Select(static entry => $"'{entry.Key.ToDispatchString()}' for [{string.Join(", ", entry.Value)}]");
+        error = $"InventoryTransportConflict: Selected targets resolved conflicting transport policies {string.Join(" and ", transports)}. Use --transport to override or align the inventory transport settings.";
+        return false;
     }
 
     private static bool TryParseTransport(string value, out TransportKind? transport)

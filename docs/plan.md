@@ -1306,7 +1306,7 @@ Scope:
 - Define precedence explicitly:
   - explicit CLI flags win
   - explicit CLI `--transport` values other than `auto` win over lower-precedence transport sources
-  - omitted or `--transport auto` falls through to `job.transport`, then inventory transport policy, then explicit `--config`, then ambient bound `Dispatch` config, then application defaults
+  - omitted or `--transport auto` falls through to non-`auto` `job.transport`, then inventory transport policy, then explicit `--config`, then ambient bound `Dispatch` config, then application defaults
   - runtime task/input variables come from inline `job.vars` in v1; inventory vars do not participate in that runtime-variable bag
 - Initial task vocabulary: `ps`, `cmd`, `exe`, `copy`, `fetch`, `wait`, and `reboot`, with only supported task types enabled by implementation slices.
 - Implement `--plan` and `--check` as distinct behaviors.
@@ -1324,6 +1324,7 @@ Current implementation boundary:
 - `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
 - `--diff` is accepted as an explicit apply setting but fails before planning until the diff behavior slice is implemented.
 - For the current apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
+- For the current apply subset, explicit non-`auto` CLI transport overrides job and inventory transport policy; omitted or `auto` CLI transport falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. Mixed selected inventory transport policies fail before planning unless a concrete CLI/job transport resolves the conflict.
 - Unsupported task types, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
 - Multi-task execution, non-`ps` task execution, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
 
