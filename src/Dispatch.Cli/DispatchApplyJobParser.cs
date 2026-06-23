@@ -91,6 +91,18 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        if (!TryParseTagFilter(options.Tags, "--tags", out var requiredTags, out error)
+            || !TryParseTagFilter(options.SkipTags, "--skip-tags", out var skippedTags, out error))
+        {
+            return false;
+        }
+
+        if (!IsTaskSelected(job.Tags, requiredTags, skippedTags))
+        {
+            error = "No apply tasks match the selected tag filters.";
+            return false;
+        }
+
         if (!TryLoadConfig(options.ConfigPath, ambientConfig, out var config, out error))
         {
             return false;
@@ -158,6 +170,7 @@ internal static class DispatchApplyJobParser
         var sectionStack = new List<YamlPathPart>();
         var lineNumber = 0;
         var taskCount = 0;
+        int? currentTaskIndent = null;
         foreach (var rawLine in File.ReadLines(jobPath))
         {
             lineNumber++;
@@ -177,9 +190,23 @@ internal static class DispatchApplyJobParser
 
             if (sectionStack.Count > 0
                 && sectionStack[^1].Key.Equals("tasks", StringComparison.OrdinalIgnoreCase)
+                && currentTaskIndent.HasValue
+                && indent > currentTaskIndent.Value)
+            {
+                if (!TryApplyTaskMetadata(jobPath, lineNumber, trimmed, ref job, out error))
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (sectionStack.Count > 0
+                && sectionStack[^1].Key.Equals("tasks", StringComparison.OrdinalIgnoreCase)
                 && trimmed.StartsWith("- ", StringComparison.Ordinal))
             {
                 taskCount++;
+                currentTaskIndent = indent;
                 if (!TryReadTask(jobPath, lineNumber, trimmed[2..].Trim(), Path.GetDirectoryName(Path.GetFullPath(jobPath))!, ref job, out error))
                 {
                     return false;
@@ -254,6 +281,50 @@ internal static class DispatchApplyJobParser
         return true;
     }
 
+    private static bool TryApplyTaskMetadata(
+        string jobPath,
+        int lineNumber,
+        string taskField,
+        ref ParsedApplyJob job,
+        out string error)
+    {
+        error = string.Empty;
+        if (taskField.StartsWith("- ", StringComparison.Ordinal))
+        {
+            error = $"{jobPath}:{lineNumber}: task tags must use inline syntax such as 'tags: [prod, fix]' in this apply slice.";
+            return false;
+        }
+
+        var separator = taskField.IndexOf(':', StringComparison.Ordinal);
+        if (separator <= 0)
+        {
+            error = $"{jobPath}:{lineNumber}: expected task metadata syntax 'tags: [name]'.";
+            return false;
+        }
+
+        var key = taskField[..separator].Trim();
+        var value = taskField[(separator + 1)..].Trim();
+        if (!TryValidateKey(jobPath, lineNumber, [key], out error))
+        {
+            return false;
+        }
+
+        if (!key.Equals("tags", StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"{jobPath}:{lineNumber}: task field '{key}' is not supported in this apply slice.";
+            return false;
+        }
+
+        if (!TryParseTagList(value, out var tags))
+        {
+            error = $"{jobPath}:{lineNumber}: task tags must contain one or more names.";
+            return false;
+        }
+
+        job = job with { Tags = tags };
+        return true;
+    }
+
     private static bool TryReadTask(
         string jobPath,
         int lineNumber,
@@ -303,6 +374,68 @@ internal static class DispatchApplyJobParser
                 : Path.GetFullPath(Path.Combine(jobDirectory, value))
         };
         return true;
+    }
+
+    private static bool TryParseTagFilter(
+        string? value,
+        string optionName,
+        out IReadOnlyList<string> tags,
+        out string error)
+    {
+        tags = [];
+        error = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        if (!TryParseTagList(value, out tags))
+        {
+            error = $"{optionName} requires one or more tag names.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseTagList(string value, out IReadOnlyList<string> tags)
+    {
+        var normalized = value.Trim();
+        if (normalized.StartsWith("[", StringComparison.Ordinal) && normalized.EndsWith("]", StringComparison.Ordinal))
+        {
+            normalized = normalized[1..^1];
+        }
+
+        var parsed = new List<string>();
+        foreach (var item in normalized.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var tag = NormalizeScalar(item);
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                tags = [];
+                return false;
+            }
+
+            parsed.Add(tag);
+        }
+
+        tags = parsed;
+        return parsed.Count > 0;
+    }
+
+    private static bool IsTaskSelected(
+        IReadOnlyList<string> taskTags,
+        IReadOnlyList<string> requiredTags,
+        IReadOnlyList<string> skippedTags)
+    {
+        if (requiredTags.Count > 0
+            && !taskTags.Any(taskTag => requiredTags.Contains(taskTag, StringComparer.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        return skippedTags.Count == 0
+            || !taskTags.Any(taskTag => skippedTags.Contains(taskTag, StringComparer.OrdinalIgnoreCase));
     }
 
     private static bool TryApplyScalar(
@@ -593,6 +726,8 @@ internal static class DispatchApplyJobParser
         string? Inventory,
         string? Target,
         string? Exclude,
+        string? Tags,
+        string? SkipTags,
         int? Serial,
         int? Concurrency,
         DispatchOutputMode OutputMode,
@@ -607,6 +742,8 @@ internal static class DispatchApplyJobParser
         public string? CredentialReference { get; init; }
 
         public string PowerShellScriptPath { get; init; } = string.Empty;
+
+        public IReadOnlyList<string> Tags { get; init; } = [];
 
         public IReadOnlyList<int> ExpectedExitCodes { get; init; } = [];
 

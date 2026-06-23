@@ -2495,6 +2495,127 @@ credentials:
         }
     }
 
+    [Fact]
+    public async Task ApplyPlanSelectsTaggedScriptTaskWhenIncludeTagMatches()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+                tags: [prod, fix]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--tags", "audit,prod", "--skip-tags", "staging", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest.DryRun);
+            Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(scriptPath, payload.ScriptPath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyExecutionSelectsTaggedScriptTaskWhenSkipTagDoesNotMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+                tags: [prod, fix]
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--tags", "prod", "--skip-tags", "staging", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.False(planner.LastRequest.DryRun);
+            Assert.NotNull(executor.LastPlan);
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(scriptPath, payload.ScriptPath);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("--tags", "audit")]
+    [InlineData("--skip-tags", "fix")]
+    public async Task ApplyPlanRejectsWhenTagFiltersRemoveOnlySupportedTask(string optionName, string optionValue)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+                tags: [prod, fix]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", optionName, optionValue],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("No apply tasks match", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("--plan")]
     [InlineData("--check")]
@@ -2899,6 +3020,44 @@ credentials:
             Assert.Contains("Invalid Dispatch Job", error);
             Assert.Contains("reboot", error);
             Assert.Contains("planned but not implemented", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRejectsMultiTaskJobsBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+                tags: [prod]
+              - ps: .\Fix2.ps1
+                tags: [prod]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--tags", "prod"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("supports exactly one ps task", error);
         }
         finally
         {

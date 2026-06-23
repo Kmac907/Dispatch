@@ -239,6 +239,8 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     settings.Inventory,
                     settings.Target,
                     settings.Exclude,
+                    settings.Tags,
+                    settings.SkipTags,
                     settings.Serial,
                     settings.Concurrency,
                     settings.Output,
@@ -435,6 +437,12 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--exclude <selector>")]
         public string? Exclude { get; init; }
+
+        [CommandOption("--tags <tags>")]
+        public string? Tags { get; init; }
+
+        [CommandOption("--skip-tags <tags>")]
+        public string? SkipTags { get; init; }
 
         [CommandOption("--serial <n>")]
         public int? Serial { get; init; }
