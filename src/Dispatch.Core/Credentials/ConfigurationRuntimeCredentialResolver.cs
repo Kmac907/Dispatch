@@ -8,13 +8,15 @@ namespace Dispatch.Core.Credentials;
 public sealed class ConfigurationRuntimeCredentialResolver(
     IConfiguration configuration,
     IOptions<DispatchOptions> options,
-    IRuntimeCredentialPrompt prompt) : IRuntimeCredentialResolver
+    IRuntimeCredentialPrompt prompt,
+    IAzureKeyVaultCredentialSecretResolver? azureKeyVaultSecrets = null) : IRuntimeCredentialResolver
 {
     private const string CredentialsSectionName = "Credentials";
     private const string PromptProviderName = "prompt";
     private const string PsCredentialProviderName = "pscredential";
     private const string DpapiFileProviderName = "dpapi_file";
     private const string WindowsCredentialManagerProviderName = "windows_credential_manager";
+    private const string AzureKeyVaultProviderName = "azure_keyvault";
 
     public async Task<RuntimeCredentialResolutionResult> ResolveAsync(
         IEnumerable<string> credentialReferences,
@@ -88,11 +90,58 @@ public sealed class ConfigurationRuntimeCredentialResolver(
                     continue;
                 }
 
+                if (providerName.Equals(AzureKeyVaultProviderName, StringComparison.OrdinalIgnoreCase))
+                {
+                    var azureUsername = NormalizeOptionalValue(credential["Username"]);
+                    var vaultUri = NormalizeOptionalValue(credential["VaultUri"]);
+                    var secretName = NormalizeOptionalValue(credential["SecretName"]);
+                    var auth = NormalizeOptionalValue(credential["Auth"]);
+                    if (string.IsNullOrWhiteSpace(azureUsername)
+                        || string.IsNullOrWhiteSpace(vaultUri)
+                        || string.IsNullOrWhiteSpace(secretName)
+                        || string.IsNullOrWhiteSpace(auth))
+                    {
+                        return FailAndDispose(
+                            resolved,
+                            $"Credential reference '{reference}' is missing required field(s) for provider 'azure_keyvault': username, vault_uri, secret_name, auth.");
+                    }
+
+                    if (!Uri.TryCreate(vaultUri, UriKind.Absolute, out var parsedVaultUri)
+                        || !parsedVaultUri.Scheme.Equals(Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return FailAndDispose(
+                            resolved,
+                            $"Credential reference '{reference}' has invalid azure_keyvault vault_uri. Use an absolute https:// URI.");
+                    }
+
+                    var secretResult = await (azureKeyVaultSecrets ?? new AzureKeyVaultCredentialSecretResolver())
+                        .ResolveSecretAsync(
+                            new AzureKeyVaultSecretRequest(
+                                reference,
+                                azureUsername,
+                                parsedVaultUri,
+                                secretName,
+                                auth,
+                                NormalizeOptionalValue(credential["ManagedIdentityClientId"])),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (!secretResult.Succeeded || secretResult.Secret is null)
+                    {
+                        secretResult.Secret?.Dispose();
+                        return FailAndDispose(
+                            resolved,
+                            $"Azure Key Vault credential reference '{reference}' is not usable. {secretResult.Message}");
+                    }
+
+                    resolved[reference] = new DispatchResolvedCredential(reference, azureUsername, providerName, secretResult.Secret);
+                    continue;
+                }
+
                 if (!providerName.Equals(PromptProviderName, StringComparison.OrdinalIgnoreCase))
                 {
                     return FailAndDispose(
                         resolved,
-                        $"Credential provider '{providerName}' runtime resolution is not implemented in this build. Prompt, DPAPI-file, and Windows Credential Manager PSRP handoff are the current supported slices.");
+                        $"Credential provider '{providerName}' runtime resolution is not implemented in this build. Prompt, DPAPI-file, Windows Credential Manager, and Azure Key Vault PSRP handoff are the current supported slices.");
                 }
 
                 var username = NormalizeOptionalValue(credential["Username"]);

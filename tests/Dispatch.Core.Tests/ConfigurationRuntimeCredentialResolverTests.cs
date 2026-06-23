@@ -52,29 +52,36 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsyncRejectsAzureKeyVaultUntilRuntimeSlice()
+    public async Task ResolveAsyncResolvesAzureKeyVaultCredential()
     {
+        var secretResolver = new RecordingAzureKeyVaultSecretResolver("secret-value");
         var resolver = CreateResolver(
             new Dictionary<string, string?>
             {
                 ["Credentials:kv-prod-admin:Provider"] = "azure_keyvault",
-                ["Credentials:kv-prod-admin:Username"] = @"SCF\prod.admin",
-                ["Credentials:kv-prod-admin:VaultUri"] = "https://scf-dispatch-kv.vault.azure.net/",
+                ["Credentials:kv-prod-admin:Username"] = @"CONTOSO\prod.admin",
+                ["Credentials:kv-prod-admin:VaultUri"] = "https://contoso-dispatch-kv.vault.azure.net/",
                 ["Credentials:kv-prod-admin:SecretName"] = "prod-admin-password",
                 ["Credentials:kv-prod-admin:Auth"] = "default_azure_credential"
             },
-            new RecordingRuntimeCredentialPrompt("secret-value"));
+            new RecordingRuntimeCredentialPrompt("unused"),
+            secretResolver);
 
         var result = await resolver.ResolveAsync(["kv-prod-admin"], CancellationToken.None);
 
-        Assert.False(result.Succeeded);
-        Assert.Contains("runtime resolution is not implemented", result.FailureMessage);
-        Assert.Empty(result.Credentials);
+        Assert.True(result.Succeeded, result.FailureMessage);
+        var credential = Assert.Single(result.Credentials.Values);
+        Assert.Equal("kv-prod-admin", credential.ReferenceName);
+        Assert.Equal(@"CONTOSO\prod.admin", credential.UserName);
+        Assert.Equal("azure_keyvault", credential.ProviderName);
+        var request = Assert.Single(secretResolver.Requests);
+        Assert.Equal("prod-admin-password", request.SecretName);
     }
 
     private static ConfigurationRuntimeCredentialResolver CreateResolver(
         IReadOnlyDictionary<string, string?> values,
-        IRuntimeCredentialPrompt prompt)
+        IRuntimeCredentialPrompt prompt,
+        IAzureKeyVaultCredentialSecretResolver? azureKeyVaultSecrets = null)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(values)
@@ -86,7 +93,8 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
             {
                 CredentialProvider = configuration["Dispatch:CredentialProvider"] ?? "prompt"
             }),
-            prompt);
+            prompt,
+            azureKeyVaultSecrets);
     }
 
     private sealed class RecordingRuntimeCredentialPrompt(string password) : IRuntimeCredentialPrompt
@@ -105,6 +113,26 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
             }
 
             return Task.FromResult(secureString);
+        }
+    }
+
+    private sealed class RecordingAzureKeyVaultSecretResolver(string secret) : IAzureKeyVaultCredentialSecretResolver
+    {
+        public List<AzureKeyVaultSecretRequest> Requests { get; } = [];
+
+        public Task<AzureKeyVaultSecretResult> ResolveSecretAsync(
+            AzureKeyVaultSecretRequest request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            var secureString = new SecureString();
+            foreach (var character in secret)
+            {
+                secureString.AppendChar(character);
+            }
+
+            secureString.MakeReadOnly();
+            return Task.FromResult(AzureKeyVaultSecretResult.Success(secureString));
         }
     }
 }

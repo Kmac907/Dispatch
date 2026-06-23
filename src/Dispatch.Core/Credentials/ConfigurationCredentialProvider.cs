@@ -8,7 +8,8 @@ namespace Dispatch.Core.Credentials;
 public sealed class ConfigurationCredentialProvider(
     IConfiguration configuration,
     IOptions<DispatchOptions> options,
-    IRuntimeCredentialPrompt? prompt = null) : ICredentialProvider
+    IRuntimeCredentialPrompt? prompt = null,
+    IAzureKeyVaultCredentialSecretResolver? azureKeyVaultSecrets = null) : ICredentialProvider
 {
     public const string ProviderName = "config";
 
@@ -67,6 +68,12 @@ public sealed class ConfigurationCredentialProvider(
         if (provider.Equals(WindowsCredentialManagerProviderName, StringComparison.OrdinalIgnoreCase))
         {
             return await EnrollWindowsCredentialManagerAsync(normalizedName, credential, request.Force, references, cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        if (provider.Equals(AzureKeyVaultProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return await ValidateAzureKeyVaultReferenceAsync(normalizedName, credential, references, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -133,6 +140,11 @@ public sealed class ConfigurationCredentialProvider(
             }
         }
 
+        if (provider.Equals(AzureKeyVaultProviderName, StringComparison.OrdinalIgnoreCase))
+        {
+            return ValidateAzureKeyVaultReferenceAsync(normalizedName, credential, references, cancellationToken);
+        }
+
         if (!provider.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))
         {
             return Task.FromResult(Success($"Credential reference '{normalizedName}' is defined with provider '{provider}'.", references));
@@ -192,6 +204,22 @@ public sealed class ConfigurationCredentialProvider(
         {
             return Task.FromResult(Failure($"DPAPI credential file for '{normalizedName}' could not be removed. {exception.Message}", references));
         }
+    }
+
+    private async Task<CredentialProviderOperationResult> ValidateAzureKeyVaultReferenceAsync(
+        string name,
+        IConfigurationSection credential,
+        IReadOnlyList<CredentialReference> references,
+        CancellationToken cancellationToken)
+    {
+        var result = await (azureKeyVaultSecrets ?? new AzureKeyVaultCredentialSecretResolver())
+            .ResolveSecretAsync(CreateAzureKeyVaultRequest(name, credential), cancellationToken)
+            .ConfigureAwait(false);
+        result.Secret?.Dispose();
+
+        return result.Succeeded
+            ? Success($"Azure Key Vault credential reference '{name}' is reachable and the configured secret can be read. No local secret was stored.", references)
+            : Failure($"Azure Key Vault credential reference '{name}' is not usable. {result.Message}", references);
     }
 
     private async Task<CredentialProviderOperationResult> EnrollWindowsCredentialManagerAsync(
@@ -402,6 +430,17 @@ public sealed class ConfigurationCredentialProvider(
         auth.Equals("default_azure_credential", StringComparison.OrdinalIgnoreCase)
         || auth.Equals("managed_identity", StringComparison.OrdinalIgnoreCase)
         || auth.Equals("azure_cli", StringComparison.OrdinalIgnoreCase);
+
+    private static AzureKeyVaultSecretRequest CreateAzureKeyVaultRequest(
+        string name,
+        IConfigurationSection credential) =>
+        new(
+            name,
+            credential["Username"]!,
+            new Uri(credential["VaultUri"]!),
+            credential["SecretName"]!,
+            credential["Auth"]!,
+            NormalizeOptionalValue(credential["ManagedIdentityClientId"]));
 
     private static string ToYamlKey(string key) =>
         key switch

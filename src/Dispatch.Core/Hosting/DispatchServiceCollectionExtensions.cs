@@ -36,6 +36,7 @@ public static class DispatchServiceCollectionExtensions
         services.AddSingleton<IDispatchPlanner, DispatchPlanner>();
         services.AddSingleton<IDispatchExecutor, DispatchExecutor>();
         services.AddSingleton<IRuntimeCredentialPrompt, UnavailableRuntimeCredentialPrompt>();
+        services.AddSingleton<IAzureKeyVaultCredentialSecretResolver, AzureKeyVaultCredentialSecretResolver>();
         services.AddSingleton<IRuntimeCredentialResolver, ConfigurationRuntimeCredentialResolver>();
         services.AddSingleton<ICredentialProvider>(services =>
         {
@@ -45,7 +46,8 @@ public static class DispatchServiceCollectionExtensions
                 return new ConfigurationCredentialProvider(
                     configuration,
                     options,
-                    services.GetRequiredService<IRuntimeCredentialPrompt>());
+                    services.GetRequiredService<IRuntimeCredentialPrompt>(),
+                    services.GetRequiredService<IAzureKeyVaultCredentialSecretResolver>());
             }
 
             var providerName = options.Value.CredentialProvider;

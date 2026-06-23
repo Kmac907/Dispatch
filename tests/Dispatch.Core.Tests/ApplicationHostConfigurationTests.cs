@@ -104,7 +104,7 @@ public sealed class ApplicationHostConfigurationTests
     [InlineData("dpapi_file", @"CONTOSO\prod.admin", null, null, null, null, "path")]
     [InlineData("windows_credential_manager", @"CONTOSO\prod.admin", null, null, null, null, "target")]
     [InlineData("azure_keyvault", @"CONTOSO\prod.admin", null, null, "prod-admin-password", "default_azure_credential", "vault_uri")]
-    [InlineData("azure_keyvault", @"CONTOSO\prod.admin", null, "https://scf-dispatch-kv.vault.azure.net/", "prod-admin-password", "bad_auth", "unsupported azure_keyvault auth")]
+    [InlineData("azure_keyvault", @"CONTOSO\prod.admin", null, "https://contoso-dispatch-kv.vault.azure.net/", "prod-admin-password", "bad_auth", "unsupported azure_keyvault auth")]
     public async Task ConfigCredentialCatalogValidatesProviderMetadata(
         string providerName,
         string? username,
@@ -166,6 +166,14 @@ public sealed class ApplicationHostConfigurationTests
             return;
         }
 
+        if (providerName == "azure_keyvault")
+        {
+            Assert.True(result.Succeeded);
+            Assert.Contains("Azure Key Vault", result.Message);
+            Assert.DoesNotContain("missing required field", result.Message, StringComparison.OrdinalIgnoreCase);
+            return;
+        }
+
         Assert.True(result.Succeeded);
         Assert.Contains(providerName, result.Message, StringComparison.OrdinalIgnoreCase);
     }
@@ -204,6 +212,8 @@ public sealed class ApplicationHostConfigurationTests
         return new ServiceCollection()
             .AddLogging()
             .AddDispatchCore(configuration)
+            .AddSingleton<IAzureKeyVaultCredentialSecretResolver>(
+                new RecordingAzureKeyVaultSecretResolver("secret-value"))
             .BuildServiceProvider(validateScopes: true);
     }
 
@@ -233,12 +243,29 @@ public sealed class ApplicationHostConfigurationTests
                 values["Credentials:prod-admin:Target"] = "Dispatch/prod-admin";
                 break;
             case "azure_keyvault":
-                values["Credentials:prod-admin:VaultUri"] = "https://scf-dispatch-kv.vault.azure.net/";
+                values["Credentials:prod-admin:VaultUri"] = "https://contoso-dispatch-kv.vault.azure.net/";
                 values["Credentials:prod-admin:SecretName"] = "prod-admin-password";
                 values["Credentials:prod-admin:Auth"] = "default_azure_credential";
                 break;
         }
 
         return values;
+    }
+
+    private sealed class RecordingAzureKeyVaultSecretResolver(string secret) : IAzureKeyVaultCredentialSecretResolver
+    {
+        public Task<AzureKeyVaultSecretResult> ResolveSecretAsync(
+            AzureKeyVaultSecretRequest request,
+            CancellationToken cancellationToken)
+        {
+            var secureString = new System.Security.SecureString();
+            foreach (var character in secret)
+            {
+                secureString.AppendChar(character);
+            }
+
+            secureString.MakeReadOnly();
+            return Task.FromResult(AzureKeyVaultSecretResult.Success(secureString));
+        }
     }
 }

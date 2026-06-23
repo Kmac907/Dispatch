@@ -368,7 +368,7 @@ Current implementation:
 - The prompt happens after planning and before live rendering or endpoint work starts.
 - `--plan` / dry-run paths validate and carry the reference name but do not prompt.
 - The resolved password is converted to an in-memory PSRP `PSCredential` for command, script, and artifact sessions.
-- Raw WinRM, PsExec, YAML `apply`, and non-prompt providers remain later slices.
+- Raw WinRM, PsExec, YAML `apply`, and non-PSRP transport handoff remain later slices.
 
 ## PSCredential Provider
 
@@ -465,7 +465,7 @@ Current implementation:
 - `dispatch creds test <name>` verifies that the target exists, matches the configured username, and can be read by the current Windows user.
 - `dispatch creds remove <name>` deletes the configured Windows Credential Manager target but leaves the reference in `C:\ProgramData\Dispatch\config.yml`.
 - Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured Windows Credential Manager target into an in-memory PSRP `PSCredential`.
-- Raw WinRM, PsExec, YAML `apply`, and Azure Key Vault remain later slices.
+- Raw WinRM, PsExec, YAML `apply`, and non-PSRP transport handoff remain later slices.
 
 ## Azure Key Vault Provider
 
@@ -494,6 +494,15 @@ https://contoso-dispatch-kv.vault.azure.net/secrets/prod-admin-password
 ```
 
 Then builds an in-memory credential object for the transport.
+
+Current implementation:
+
+- Implemented for direct `dispatch.exe` config-defined `azure_keyvault` references.
+- `dispatch creds add <name>` does not prompt for or store an endpoint password locally; it authenticates to Azure using the configured `auth` mode and validates that the configured secret can be read.
+- `dispatch creds test <name>` performs the same readability validation.
+- `dispatch creds remove <name>` does not remove Azure Key Vault secrets; the config reference must be removed from `C:\ProgramData\Dispatch\config.yml`, and any vault secret changes must be made through Azure tooling or a future explicit command.
+- Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured Key Vault secret into an in-memory PSRP `PSCredential`.
+- Raw WinRM, PsExec, YAML `apply`, and creating/updating Key Vault secrets through Dispatch remain later slices.
 
 ## dispatch creds Behavior
 
@@ -717,6 +726,9 @@ windows_credential_manager:
 
 azure_keyvault:
   add = validate Azure secret reference, no local storage
+  test = validate Azure secret reference readability
+  remove = invalid from dispatch.exe; remove the config reference or manage the vault secret outside Dispatch
+  runtime = implemented for PSRP handoff
 ```
 
 ## Validation Rules
@@ -763,11 +775,11 @@ These are references, locations, auth mode names, or usernames, not secret value
 7. Implement credential metadata lookup from loaded Dispatch config.
 8. Implement `prompt` provider.
 9. Add `--credential` to `run` and `apply`.
-10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider, DPAPI-file, and Windows Credential Manager runtime resolution for `run ps|cmd|exe --transport psrp`.
+10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider, DPAPI-file, Windows Credential Manager, and Azure Key Vault runtime resolution for `run ps|cmd|exe --transport psrp`.
 11. Add PowerShell wrapper `pscredential` handoff.
 12. Add `dpapi_file`. Current implementation covers enrollment, test, remove, and PSRP runtime resolution; restrictive file ACL hardening remains a later security-hardening slice.
 13. Add `windows_credential_manager`. Current implementation covers enrollment, test, remove, and PSRP runtime resolution.
-14. Add `azure_keyvault`.
+14. Add `azure_keyvault`. Current implementation covers `creds add` / `creds test` reference validation and PSRP runtime resolution; creating or updating Key Vault secrets through Dispatch remains out of scope for the first Key Vault slice.
 
 ## Final Mental Model
 
