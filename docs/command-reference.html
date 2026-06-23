@@ -61,9 +61,9 @@ dispatch version
 <p><code>version</code> is current.</p>
 <h2>Apply</h2>
 <pre><code>
-dispatch apply &lt;job.yml&gt; [--config &lt;path&gt;] [--credential &lt;name&gt;] [--plan] [--check] [--output rich|table|json|ndjson|yaml]
+dispatch apply &lt;job.yml&gt; [--config &lt;path&gt;] [--credential &lt;name&gt;] [--transport psrp|winrm|psexec] [--plan] [--output rich|table|json|ndjson|yaml]
 </code></pre>
-<p>Status: planned v1.</p>
+<p>Status: partial/current. <code>--plan</code> is implemented for one script-first <code>ps</code> task. Full job execution and additional task types remain planned v1.</p>
 <p>Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.</p>
 <h2>Run</h2>
 <pre><code>
@@ -127,7 +127,7 @@ dispatch creds add &lt;name&gt; [--force]
 dispatch creds test &lt;name&gt;
 dispatch creds remove &lt;name&gt;
 </code></pre>
-<p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff and PsExec credential handoff are planned v1.</p>
+<p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff remains planned for the wrapper slice. PsExec explicit password handoff remains intentionally unsupported while the v1 PsExec boundary forbids plaintext <code>psexec -u/-p</code> password passing.</p>
 <p>Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.</p>
 <p>Examples:</p>
 <pre><code>

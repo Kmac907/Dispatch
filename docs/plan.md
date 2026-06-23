@@ -1282,7 +1282,9 @@ Current implementation boundary:
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
 - The target model is the global YAML `C:\ProgramData\Dispatch\config.yml` credential catalog described in `docs/credential-store-plan.md`; the current `references.json` catalog is not the long-term canonical credential catalog.
-- PSCredential PowerShell-wrapper handoff, PsExec credential handoff, and job-file credential validation remain in later slices. Job-file validation depends on Roadmap `6.5` introducing the YAML job parser.
+- PSCredential PowerShell-wrapper handoff remains tied to Roadmap `7` because Dispatch does not yet have the wrapper entry point.
+- PsExec explicit credential handoff remains intentionally blocked by the current no-plaintext `psexec -u/-p` boundary and is not the next valid `6.4` slice.
+- Job-file credential validation depends on Roadmap `6.5` introducing the YAML job parser.
 
 #### 6.5 YAML Apply And Job Model
 
@@ -1310,6 +1312,14 @@ Scope:
 - Implement `--plan` and `--check` as distinct behaviors.
 - Implement `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--yes`, `--diff`, and common output/log options as planned settings.
 - Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
+
+Current implementation boundary:
+- `dispatch apply <job.yml> --plan` parses a script-first YAML job with one `ps` task.
+- The current apply parser supports `hosts`, `transport`, `credential`, `defaults.expected_exit_codes`, and `strategy.serial` for plan creation.
+- Relative `ps` task paths resolve relative to the job file.
+- `--config`, `--credential`, `--transport`, `--output`, and `--no-color` are accepted on the current `apply --plan` path.
+- Unsupported task types, multiple tasks, unsupported fields, and plaintext secret-like fields fail before planning or endpoint work.
+- Normal `dispatch apply <job.yml>` execution remains planned until the next `6.5` execution slice.
 
 Non-goals:
 - No full Ansible compatibility.

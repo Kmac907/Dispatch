@@ -2,7 +2,7 @@
 
 This is the v1 YAML job contract for `dispatch apply`.
 
-Status: planned v1.
+Status: partial/current. `dispatch apply <job.yml> --plan` currently supports a script-first subset with one `ps` task.
 
 ## Top-Level Fields
 
@@ -65,6 +65,19 @@ Validation must fail before endpoint work for:
 - plaintext secret-like keys
 - unresolved hosts or inventory selectors
 - unsupported transport/payload combinations
+
+## Current Apply Plan Subset
+
+The current `apply --plan` slice supports:
+
+- one `tasks` entry using `ps`
+- `hosts`
+- `transport`
+- `credential`
+- `defaults.expected_exit_codes`
+- `strategy.serial`
+
+Relative `ps` task paths resolve from the job file directory. Full job execution, multiple tasks, and other planned task types remain later `6.5` work.
 
 ## Secret Boundary
 

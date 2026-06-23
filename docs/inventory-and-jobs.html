@@ -36,8 +36,9 @@ tasks:
   - ps: .\Fix.ps1</code></pre>
     <h2>Run Examples</h2>
     <pre><code>dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks
-dispatch apply .\job.yml
-dispatch apply .\job.yml --credential breakglass-admin</code></pre>
+dispatch apply .\job.yml --plan
+dispatch apply .\job.yml --plan --credential breakglass-admin</code></pre>
+    <p>The current <code>apply</code> implementation plans one script-first <code>ps</code> task. Full job execution remains planned v1 work.</p>
     <h2>Credential Precedence</h2>
     <ol><li>CLI <code>--credential</code>.</li><li><code>job.yml</code> credential.</li><li>Host credential.</li><li>Group credential.</li><li>Inventory defaults credential.</li><li>No credential.</li></ol>
     <h2>Secret Rule</h2>

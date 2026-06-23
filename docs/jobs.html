@@ -47,7 +47,7 @@
   <article class="doc-content">
 <h1>Jobs</h1>
 <p><code>dispatch apply &lt;job.yml&gt;</code> is the declared-job surface for v1.</p>
-<p>Status: planned v1. This document describes the v1 target behavior.</p>
+<p>Status: partial/current. <code>dispatch apply &lt;job.yml&gt; --plan</code> is implemented for one script-first <code>ps</code> task. Full job execution and additional task types remain planned v1.</p>
 <h2>Purpose</h2>
 <p>Use a job file when the work should be repeatable and checked into source control.</p>
 <h2>Example</h2>
@@ -66,10 +66,11 @@ tasks:
 </code></pre>
 <p>Run:</p>
 <pre><code>
-dispatch apply .\job.yml
 dispatch apply .\job.yml --plan --output json
+dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 </code></pre>
+<p>The current implementation plans jobs only. <code>dispatch apply .\job.yml</code> without <code>--plan</code> remains a planned execution command until the next job execution slice lands.</p>
 <h2>Job Credential</h2>
 <p><code>credential</code> selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.</p>
 <h2>Job Variables</h2>
@@ -85,7 +86,7 @@ dispatch apply .\job.yml --credential breakglass-admin
 <li><code>wait</code></li>
 <li><code>reboot</code></li>
 </ul>
-<p>Only task types that have landed in implementation should execute; unsupported tasks must fail validation before endpoint work.</p>
+<p>The current implementation accepts exactly one <code>ps</code> task for <code>--plan</code>. Unsupported task types and multiple tasks fail validation before endpoint work.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>

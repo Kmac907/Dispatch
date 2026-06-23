@@ -2447,6 +2447,128 @@ credentials:
         Assert.Contains(command, error);
     }
 
+    [Fact]
+    public async Task ApplyPlanParsesScriptFirstYamlJobAndRendersPlan()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            name: Fix endpoints
+            hosts: PC001,PC002
+            transport: psrp
+            defaults:
+              expected_exit_codes: [0, 3010]
+            strategy:
+              serial: 2
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest.DryRun);
+            Assert.Equal(TransportKind.Psrp, planner.LastRequest.Transport);
+            Assert.Equal(2, planner.LastRequest.Throttle);
+            Assert.Equal([0, 3010], planner.LastRequest.ExpectedExitCodes);
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(scriptPath, payload.ScriptPath);
+            Assert.Equal(["PC001", "PC002"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRejectsUnsupportedTaskBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - reboot: now
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("reboot", error);
+            Assert.Contains("planned but not implemented", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRejectsPlaintextSecretFieldsBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            vars:
+              admin_password: unsafe
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("plaintext secret field", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("hosts", "list")]
     [InlineData("init", "job")]

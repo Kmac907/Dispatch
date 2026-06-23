@@ -118,7 +118,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
             if (type == typeof(ApplyCommand))
             {
-                return new ApplyCommand();
+                return new ApplyCommand(application);
             }
 
             if (type == typeof(PushCommand))
@@ -217,10 +217,29 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             application.RunDoctorCommand();
     }
 
-    private sealed class ApplyCommand : Command<ApplySettings>
+    private sealed class ApplyCommand(DispatchCliApplication application) : AsyncCommand<ApplySettings>
     {
-        protected override int Execute(CommandContext context, ApplySettings settings, CancellationToken cancellationToken) =>
-            DispatchCliApplication.RenderPlannedCommand("apply", "6.5 YAML Apply And Job Model");
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            ApplySettings settings,
+            CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return await application.RunApplyCommandAsync(
+                    settings.JobPath,
+                    settings.Plan,
+                    settings.Config,
+                    settings.Credential,
+                    settings.Transport,
+                    settings.Output,
+                    settings.NoColor,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private sealed class PushCommand : Command<PushSettings>
@@ -386,6 +405,24 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         [CommandArgument(0, "[job.yml]")]
         public string? JobPath { get; init; }
+
+        [CommandOption("--plan")]
+        public bool Plan { get; init; }
+
+        [CommandOption("--config <path>")]
+        public string? Config { get; init; }
+
+        [CommandOption("--credential <name>")]
+        public string? Credential { get; init; }
+
+        [CommandOption("--transport <name>")]
+        public string? Transport { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+
+        [CommandOption("--no-color")]
+        public bool NoColor { get; init; }
     }
 
     private sealed class PushSettings : CommandSettings

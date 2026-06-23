@@ -63,6 +63,7 @@
 <li>Live dashboard rendering model.</li>
 <li>Structured output modes on current paths.</li>
 <li>Inventory subset for current run paths.</li>
+<li><code>dispatch apply &lt;job.yml&gt; --plan</code> for one script-first <code>ps</code> task.</li>
 <li>Logs commands over local run history.</li>
 <li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
 </ul>
@@ -71,12 +72,12 @@
 <li><code>doctor</code> exists but the full v1 transport-aware diagnostics surface is still expanding.</li>
 <li><code>hosts</code>, <code>push</code>, and <code>init</code> command groups are registered/planned but not fully implemented.</li>
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
-<li>Credential handoff is not complete for every transport/provider combination; PsExec, PSCredential wrapper handoff, and YAML job credential validation remain planned.</li>
+<li>Full YAML job execution and non-<code>ps</code> task types remain planned.</li>
+<li>Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>
-<li>Finish remaining <code>6.4</code> credential-reference gaps.</li>
-<li>Implement <code>6.5</code> YAML apply/job model.</li>
+<li>Continue <code>6.5</code> YAML apply/job model.</li>
 <li>Implement <code>6.6</code> push, hosts, doctor, and init command surfaces.</li>
 <li>Implement <code>6.7</code> CLI safety, policy, and stable exit codes.</li>
 <li>Implement <code>6.8</code> diagnostics migration.</li>

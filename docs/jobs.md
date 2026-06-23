@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: planned v1. This document describes the v1 target behavior.
+Status: partial/current. `dispatch apply <job.yml> --plan` is implemented for one script-first `ps` task. Full job execution and additional task types remain planned v1.
 
 ## Purpose
 
@@ -27,10 +27,12 @@ tasks:
 Run:
 
 ```powershell
-dispatch apply .\job.yml
 dispatch apply .\job.yml --plan --output json
+dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 ```
+
+The current implementation plans jobs only. `dispatch apply .\job.yml` without `--plan` remains a planned execution command until the next job execution slice lands.
 
 ## Job Credential
 
@@ -52,4 +54,4 @@ Planned v1 task vocabulary:
 - `wait`
 - `reboot`
 
-Only task types that have landed in implementation should execute; unsupported tasks must fail validation before endpoint work.
+The current implementation accepts exactly one `ps` task for `--plan`. Unsupported task types and multiple tasks fail validation before endpoint work.

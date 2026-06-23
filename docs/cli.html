@@ -10,7 +10,7 @@
     <h1>CLI Reference</h1>
     <p><code>dispatch.exe</code> is the canonical command surface. The PowerShell module wrapper maps to these commands rather than introducing a separate engine.</p>
     <h2>Command Tree</h2>
-    <pre><code>dispatch apply &lt;job.yml&gt;
+    <pre><code>dispatch apply &lt;job.yml&gt; --plan
 dispatch run ps &lt;script.ps1&gt;
 dispatch run cmd &lt;command&gt;
 dispatch run exe &lt;path&gt;
@@ -23,6 +23,7 @@ dispatch init job|hosts|config|all
 dispatch version</code></pre>
     <h2>Common Options</h2>
     <p>Use <code>--target</code>, <code>--inventory</code>, <code>--transport</code>, <code>--credential</code>, <code>--config</code>, <code>--plan</code>, <code>--output</code>, and <code>--no-progress</code> where supported by the command.</p>
+    <p>The current <code>apply</code> path supports planning one script-first <code>ps</code> task. Full job execution remains planned v1 work.</p>
     <h2>Output Modes</h2>
     <p><code>rich</code> is for humans. <code>json</code>, <code>ndjson</code>, <code>yaml</code>, and table output are for automation and stable parsing.</p>
   </article>
