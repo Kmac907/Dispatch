@@ -208,7 +208,6 @@ Advanced selector expressions such as `web:&prod` and `web:!canary` are not part
 Initial documented job schema direction:
 
 ```text
-schemaVersion
 name
 description
 hosts
