@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="cli.html">CLI</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="powershell-module.html">PowerShell Module</a><a href="cli.html">CLI Reference</a><a href="installation.html">Installation</a><a href="credentials.html">Credentials</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Wrapper Surface</p>
+    <h1>PowerShell Module</h1>
+    <p>The PowerShell module is a thin wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
+    <h2>Expected Commands</h2>
+    <pre><code>Invoke-DispatchPowerShell
+Invoke-DispatchCommand
+Invoke-DispatchExecutable
+Invoke-DispatchJob
+Test-Dispatch
+Get-DispatchVersion</code></pre>
+    <h2>Example</h2>
+    <pre><code>Import-Module Dispatch
+Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp</code></pre>
+    <h2>Credential Handoff</h2>
+    <p>The module may supply a PowerShell <code>PSCredential</code> for references configured with <code>provider: pscredential</code>. That provider is valid only through the wrapper because the password must not become a command-line argument.</p>
+    <h2>Automation Rule</h2>
+    <p>Wrapper commands should consume structured output or explicit result files. They should not parse rich terminal rendering.</p>
+  </article>
+</main>
+</body>
+</html>

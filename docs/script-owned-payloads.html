@@ -4,7 +4,7 @@
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="script-owned-payloads.html">Script-Owned Payloads</a><a href="outputs.html">Outputs</a><a href="security.html">Security</a><a href="script-owned-payloads.md">Source Markdown</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="script-owned-payloads.html">Script-Owned Payloads</a><a href="outputs.html">Outputs</a><a href="security.html">Security</a><a href="credentials.html">Credentials</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Boundary</p>
     <h1>Script-Owned Payloads</h1>
@@ -13,8 +13,8 @@
     <p>Pass ordinary non-secret inputs to the script. The script downloads or copies any package payload it needs and writes its own logs/artifacts under the Dispatch run folder.</p>
     <h2>Do Not</h2>
     <ul><li>Pass SAS tokens or passwords on the command line.</li><li>Assume Dispatch downloads installer media.</li><li>Write secret values to stdout, stderr, logs, or artifacts.</li></ul>
-    <h2>Source Document</h2>
-    <p>See <a href="script-owned-payloads.md">docs/script-owned-payloads.md</a>.</p>
+    <h2>Artifacts</h2>
+    <p>When a script creates logs or artifacts under the expected run folder locations, Dispatch copies them back and reports collection status separately from script execution.</p>
   </article>
 </main>
 </body>

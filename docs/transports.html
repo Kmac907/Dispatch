@@ -4,12 +4,12 @@
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="validation.html">Validation</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="transports.html">Transports</a><a href="security.html">Security</a><a href="validation.html">Validation</a><a href="roadmap.html">Roadmap</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="transports.html">Transports</a><a href="security.html">Security</a><a href="validation.html">Validation</a><a href="credentials.html">Credentials</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Execution</p>
     <h1>Transports</h1>
     <p>Dispatch makes transport choice explicit. Each transport maps into the same run/result model.</p>
-    <table><tr><th>Transport</th><th>Use When</th><th>Primary Requirements</th></tr><tr><td>`psrp`</td><td>You want PowerShell remoting semantics and stream capture.</td><td>PowerShell remoting enabled, WSMan reachable, session config permits caller.</td></tr><tr><td>`winrm`</td><td>You want raw WS-Management shell/command execution without SMB staging.</td><td>WinRM listener reachable and shell access permitted.</td></tr><tr><td>`psexec`</td><td>You need PsExec behavior in environments where admin shares are available.</td><td>Admin rights, SMB/admin shares, PsExec allowed by policy.</td></tr></table>
+    <table><tr><th>Transport</th><th>Use When</th><th>Primary Requirements</th></tr><tr><td><code>psrp</code></td><td>You want PowerShell remoting semantics and stream capture.</td><td>PowerShell remoting enabled, WSMan reachable, session config permits caller.</td></tr><tr><td><code>winrm</code></td><td>You want raw WS-Management shell/command execution without SMB staging.</td><td>WinRM listener reachable and shell access permitted.</td></tr><tr><td><code>psexec</code></td><td>You need PsExec behavior in environments where admin shares are available.</td><td>Admin rights, SMB/admin shares, PsExec allowed by policy.</td></tr></table>
     <h2>Examples</h2>
     <pre><code>dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
 dispatch run cmd whoami --target PC001 --transport winrm

@@ -4,16 +4,16 @@
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="getting-started.html">Getting Started</a><a href="installation.html">Installation</a><a href="configuration.html">Configuration</a><a href="outputs.html">Outputs</a><a href="development.html">Development</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="getting-started.html">Getting Started</a><a href="installation.html">Installation</a><a href="powershell-module.html">PowerShell Module</a><a href="configuration.html">Configuration</a><a href="outputs.html">Outputs</a><a href="development.html">Development</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Setup</p>
     <h1>Installation</h1>
     <p>Dispatch v1 installs from source and packages the resulting executable with the PowerShell module wrapper.</p>
     <h2>Prerequisites</h2>
-    <ul><li>Windows 10/11 or Windows Server.</li><li>PowerShell 7 or Windows PowerShell 5.1.</li><li>.NET SDK matching `global.json`.</li><li>Git on `PATH`.</li><li>Network access to GitHub.</li></ul>
+    <ul><li>Windows 10/11 or Windows Server.</li><li>PowerShell 7 or Windows PowerShell 5.1.</li><li>.NET SDK matching <code>global.json</code>.</li><li>Git on <code>PATH</code>.</li><li>Network access to GitHub.</li></ul>
     <h2>Source Install</h2>
     <pre><code>irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex</code></pre>
-    <p>The installer creates a temporary checkout, builds `dispatch.exe`, assembles the module, validates the installed command surface, and cleans up temporary source files.</p>
+    <p>The installer creates a temporary checkout, builds <code>dispatch.exe</code>, assembles the module, validates the installed command surface, and cleans up temporary source files.</p>
     <h2>Developer Checkout</h2>
     <pre><code>git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
@@ -24,8 +24,8 @@ dispatch version
 dispatch doctor
 Import-Module Dispatch
 Get-Command -Module Dispatch</code></pre>
-    <h2>Source Document</h2>
-    <p>The editable installation source is <a href="installation.md">docs/installation.md</a>.</p>
+    <h2>Installed Surface</h2>
+    <p>The source install validates the <code>dispatch</code> command and the PowerShell module wrapper before reporting success.</p>
   </article>
 </main>
 </body>

@@ -4,7 +4,7 @@
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="outputs.html">Outputs</a><a href="script-owned-payloads.html">Payloads</a><a href="validation.html">Validation</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="outputs.html">Outputs</a><a href="script-owned-payloads.html">Payloads</a><a href="validation.html">Validation</a><a href="cli.html">CLI Reference</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Run History</p>
     <h1>Outputs And Logs</h1>
@@ -26,8 +26,8 @@ dispatch logs show latest
 dispatch logs tail latest --count 50
 dispatch logs export latest --dest .\exports
 dispatch logs retry latest</code></pre>
-    <h2>Source Document</h2>
-    <p>See <a href="output-and-results.md">docs/output-and-results.md</a>.</p>
+    <h2>Automation Contract</h2>
+    <p><code>Admin\results.json</code> is the final reduced result. <code>Admin\events.ndjson</code> is the canonical event stream for replay, live rendering, and ingestion. Per-target <code>stdout.txt</code> and <code>stderr.txt</code> are raw execution output.</p>
   </article>
 </main>
 </body>

@@ -82,7 +82,7 @@ credentials:
 
 Credential references may appear in `job.yml`, `hosts.yml`, or `--credential <name>`. Provider details, usernames, store paths, Key Vault URIs, and secret names live in `config.yml`. Passwords and secret values do not belong in YAML.
 
-See [Credential Store Plan](docs/credential-store-plan.md) and [Credentials](docs/credentials.md).
+See [Credentials](docs/credentials.md) for the operator-facing credential model.
 
 ## Outputs
 
@@ -158,11 +158,14 @@ Install from an existing checkout:
 
 ## Documentation
 
-- [Roadmap](docs/plan.md)
-- [CLI Design](docs/cli-design.md)
+- [Project Site](https://kmac907.github.io/Dispatch/)
+- [Getting Started](docs/getting-started.html)
 - [Installation](docs/installation.md)
+- [CLI Reference](docs/cli.html)
+- [Configuration](docs/configuration.html)
+- [Inventories And Jobs](docs/inventory-and-jobs.html)
 - [Credentials](docs/credentials.md)
-- [Credential Store Plan](docs/credential-store-plan.md)
+- [PowerShell Module](docs/powershell-module.html)
 - [Output And Results](docs/output-and-results.md)
 - [Script-Owned Payloads](docs/script-owned-payloads.md)
 - [Testing And Validation](docs/testing-and-validation.md)

@@ -1,14 +1,14 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CLI Design - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CLI Reference - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="cli.html">CLI Design</a><a href="roadmap.html">Roadmap</a><a href="outputs.html">Outputs</a><a href="cli-design.md">Source Markdown</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="cli.html">CLI Reference</a><a href="getting-started.html">Getting Started</a><a href="outputs.html">Outputs</a><a href="powershell-module.html">PowerShell Module</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Command Surface</p>
-    <h1>CLI Design</h1>
-    <p>`dispatch.exe` is the canonical command surface. The PowerShell module wrapper maps to these commands rather than introducing a separate engine.</p>
+    <h1>CLI Reference</h1>
+    <p><code>dispatch.exe</code> is the canonical command surface. The PowerShell module wrapper maps to these commands rather than introducing a separate engine.</p>
     <h2>Command Tree</h2>
     <pre><code>dispatch apply &lt;job.yml&gt;
 dispatch run ps &lt;script.ps1&gt;
@@ -21,10 +21,10 @@ dispatch creds add|list|test|remove
 dispatch doctor
 dispatch init job|hosts|config|all
 dispatch version</code></pre>
+    <h2>Common Options</h2>
+    <p>Use <code>--target</code>, <code>--inventory</code>, <code>--transport</code>, <code>--credential</code>, <code>--config</code>, <code>--plan</code>, <code>--output</code>, and <code>--no-progress</code> where supported by the command.</p>
     <h2>Output Modes</h2>
-    <p>Rich output is for operators. JSON, NDJSON, and YAML are automation contracts.</p>
-    <h2>Source Document</h2>
-    <p>See <a href="cli-design.md">docs/cli-design.md</a>.</p>
+    <p><code>rich</code> is for humans. <code>json</code>, <code>ndjson</code>, <code>yaml</code>, and table output are for automation and stable parsing.</p>
   </article>
 </main>
 </body>

@@ -4,11 +4,11 @@
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="credentials.html">Credentials</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="configuration.html">Configuration</a><a href="credentials.html">Credentials</a><a href="getting-started.html">Getting Started</a><a href="roadmap.html">Roadmap</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="configuration.html">Configuration</a><a href="inventory-and-jobs.html">Inventories And Jobs</a><a href="credentials.html">Credentials</a><a href="getting-started.html">Getting Started</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Config</p>
     <h1>Configuration</h1>
-    <p>Dispatch uses one global machine-wide YAML config and optional command-level overrides.</p>
+    <p>Dispatch uses one global machine-wide YAML config and optional command-level overrides. This config is the single catalog for Dispatch defaults and credential provider metadata.</p>
     <h2>Default Location</h2>
     <pre><code>C:\ProgramData\Dispatch\config.yml</code></pre>
     <h2>Example</h2>
@@ -20,10 +20,12 @@ credentials:
   prod-admin:
     provider: prompt
     username: CONTOSO\prod.admin</code></pre>
-    <h2>Precedence</h2>
-    <ol><li>Explicit CLI options.</li><li>Explicit `--config &lt;path&gt;`.</li><li>`C:\ProgramData\Dispatch\config.yml`.</li><li>Built-in defaults.</li></ol>
-    <h2>Credential Rule</h2>
-    <p>`job.yml`, `hosts.yml`, and `--credential` select a credential reference. `config.yml` defines what that reference means and how it is resolved.</p>
+    <h2>Config Loading</h2>
+    <ol><li>Explicit <code>--config &lt;path&gt;</code>.</li><li><code>C:\ProgramData\Dispatch\config.yml</code>.</li><li>Built-in defaults.</li></ol>
+    <h2>Runtime Precedence</h2>
+    <p>Explicit CLI options override job, inventory, global config, and built-in defaults for the current command.</p>
+    <h2>Credential Catalog</h2>
+    <p><code>job.yml</code>, <code>hosts.yml</code>, and <code>--credential</code> only select a credential reference. The loaded global config defines what that reference means and how it is resolved.</p>
     <h2>Security</h2>
     <p>Do not store passwords, tokens, SAS values, or secret material in YAML. Only store references, usernames, provider locations, Key Vault URIs, and secret names.</p>
   </article>

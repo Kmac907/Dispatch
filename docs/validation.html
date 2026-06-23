@@ -4,7 +4,7 @@
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="development.html">Development</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="validation.html">Validation</a><a href="development.html">Development</a><a href="transports.html">Transports</a><a href="testing-and-validation.md">Source Markdown</a></aside>
+  <aside class="sidebar"><h2>Docs</h2><a href="validation.html">Validation</a><a href="development.html">Development</a><a href="transports.html">Transports</a><a href="security.html">Security</a></aside>
   <article class="doc-content">
     <p class="eyebrow">Quality</p>
     <h1>Testing And Validation</h1>
@@ -14,9 +14,9 @@
     <h2>Live Endpoint Policy</h2>
     <p>Live endpoint validation requires one user-approved reachable Windows endpoint. Additional supplied devices that are offline or unreachable are environment availability issues, not product failures, when one approved endpoint passes.</p>
     <h2>Host Names</h2>
-    <p>Keep lab host names in ignored local files such as `workflow/build/test-hosts.yml`, never in public docs or tracked files.</p>
-    <h2>Source Document</h2>
-    <p>See <a href="testing-and-validation.md">docs/testing-and-validation.md</a>.</p>
+    <p>Keep lab host names in ignored local files such as <code>workflow/build/test-hosts.yml</code>, never in public docs or tracked files.</p>
+    <h2>Endpoint Tests</h2>
+    <p>Use least-invasive live checks, preferably stdout-only commands or temporary files under the Dispatch run folder. Do not make unrelated endpoint changes during validation.</p>
   </article>
 </main>
 </body>
