@@ -101,12 +101,18 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        var targetSelectors = new[] { NormalizeOptional(options.Target) ?? job.Hosts };
+        IReadOnlyList<string> excludeSelectors = NormalizeOptional(options.Exclude) is { } exclude
+            ? new[] { exclude }
+            : Array.Empty<string>();
+        var inventoryPath = NormalizeOptional(options.Inventory) ?? config.Inventory;
+
         var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(
             ComputerNameValues: [],
             TargetFile: null,
-            TargetSelectors: [job.Hosts],
-            InventoryPath: config.Inventory,
-            ExcludeSelectors: null));
+            TargetSelectors: targetSelectors,
+            InventoryPath: inventoryPath,
+            ExcludeSelectors: excludeSelectors));
         if (!targetResolution.IsValid)
         {
             error = string.Join(Environment.NewLine, targetResolution.Errors.Select(static item => $"{item.Code}: {item.Message}"));
@@ -584,6 +590,9 @@ internal static class DispatchApplyJobParser
         string? ConfigPath,
         string? CredentialReference,
         string? Transport,
+        string? Inventory,
+        string? Target,
+        string? Exclude,
         int? Serial,
         int? Concurrency,
         DispatchOutputMode OutputMode,

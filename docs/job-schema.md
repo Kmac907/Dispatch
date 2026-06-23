@@ -36,6 +36,19 @@ Supported top-level fields:
 
 ## Precedence
 
+Target selection:
+
+1. Explicit CLI `--target`.
+2. `job.hosts`.
+3. Explicit CLI `--exclude` filters the selected target set.
+
+Inventory:
+
+1. Explicit CLI `--inventory`.
+2. Explicit `--config`.
+3. Ambient global config.
+4. No inventory.
+
 Transport:
 
 1. Explicit CLI `--transport` when not `auto`.

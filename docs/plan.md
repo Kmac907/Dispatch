@@ -1320,7 +1320,8 @@ Current implementation boundary:
 - The current apply parser supports `hosts`, `transport`, `credential`, `defaults.expected_exit_codes`, and `strategy.serial` for plan, check, and execution paths.
 - `--serial <n>` and `--concurrency <n>` override `strategy.serial` for that same subset and cannot be used together.
 - Relative `ps` task paths resolve relative to the job file.
-- `--config`, `--credential`, `--transport`, `--serial`, `--concurrency`, `--output`, and `--no-color` are accepted on the current apply plan, check, and execution paths.
+- `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--serial`, `--concurrency`, `--output`, and `--no-color` are accepted on the current apply plan, check, and execution paths.
+- For the current one-`ps`-task apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
 - Unsupported task types, multiple tasks, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
 - Multi-task jobs, non-`ps` task execution, and richer job behavior remain later `6.5` work.
 

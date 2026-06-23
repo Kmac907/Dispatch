@@ -20,12 +20,14 @@ dispatch version
 ## Apply
 
 ```powershell
-dispatch apply <job.yml> [--config <path>] [--credential <name>] [--transport psrp|winrm|psexec] [--serial <n>|--concurrency <n>] [--plan|--check] [--output rich|table|json|ndjson|yaml]
+dispatch apply <job.yml> [--inventory <hosts.yml>] [--target <selector>] [--exclude <selector>] [--config <path>] [--credential <name>] [--transport psrp|winrm|psexec] [--serial <n>|--concurrency <n>] [--plan|--check] [--output rich|table|json|ndjson|yaml]
 ```
 
 Status: partial/current. Plan, check, and execution are implemented for one script-first `ps` task. Multi-task jobs and additional task types remain planned v1.
 
 Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.
+
+Use `--target <selector>` to override `hosts` from the job file for the current run. Use `--inventory <path>` to override the configured inventory path. Use `--exclude <selector>` to remove hosts from the selected set after the job or CLI target selector is resolved.
 
 Use `--plan` to inspect the resolved plan. Use `--check` to validate and render the supported job subset without endpoint work. The current check mode does not simulate script side effects.
 

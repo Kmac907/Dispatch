@@ -2496,6 +2496,122 @@ credentials:
     }
 
     [Theory]
+    [InlineData("--plan")]
+    [InlineData("--check")]
+    public async Task ApplyPlanAndCheckCliTargetOverridesJobHostsAndExcludeFiltersSelection(string validationMode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            inventoryPath,
+            """
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            hosts:
+              LEGACY01:
+            """);
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: LEGACY01
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, validationMode, "--inventory", inventoryPath, "--target", "web", "--exclude", "WEB02", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest.DryRun);
+            Assert.Equal(["WEB01"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyExecutionCliInventoryOverridesConfiguredInventory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var configuredInventoryPath = Path.Combine(root, "configured-hosts.yml");
+        var cliInventoryPath = Path.Combine(root, "cli-hosts.yml");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            configuredInventoryPath,
+            """
+            groups:
+              web:
+                hosts:
+                  - CONFIGURED01
+            """);
+        File.WriteAllText(
+            cliInventoryPath,
+            """
+            groups:
+              web:
+                hosts:
+                  - CLI01
+            """);
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: web
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(
+            planner,
+            executor: executor,
+            options: new DispatchOptions
+            {
+                Inventory = configuredInventoryPath,
+                ExpectedExitCodes = [0]
+            });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--inventory", cliInventoryPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.False(planner.LastRequest.DryRun);
+            Assert.Equal(["CLI01"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+            Assert.NotNull(executor.LastPlan);
+            Assert.Equal(["CLI01"], executor.LastPlan!.Targets.Select(static target => target.Target.Name).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("--serial")]
     [InlineData("--concurrency")]
     public async Task ApplyPlanCliBatchSizeOverridesJobSerial(string optionName)

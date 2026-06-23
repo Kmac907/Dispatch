@@ -236,6 +236,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     settings.Config,
                     settings.Credential,
                     settings.Transport,
+                    settings.Inventory,
+                    settings.Target,
+                    settings.Exclude,
                     settings.Serial,
                     settings.Concurrency,
                     settings.Output,
@@ -423,6 +426,15 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--transport <name>")]
         public string? Transport { get; init; }
+
+        [CommandOption("-i|--inventory <path>")]
+        public string? Inventory { get; init; }
+
+        [CommandOption("-t|--target <selector>")]
+        public string? Target { get; init; }
+
+        [CommandOption("--exclude <selector>")]
+        public string? Exclude { get; init; }
 
         [CommandOption("--serial <n>")]
         public int? Serial { get; init; }

@@ -30,6 +30,7 @@ Run:
 dispatch apply .\job.yml --plan --output json
 dispatch apply .\job.yml --check --output json
 dispatch apply .\job.yml --serial 10
+dispatch apply .\job.yml --inventory .\hosts.yml --target kiosks --exclude KIOSK03 --plan
 dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 ```
@@ -39,6 +40,8 @@ The current implementation converts the supported job subset into the same plann
 `--check` validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.
 
 `--serial <n>` or `--concurrency <n>` overrides `strategy.serial` for the supported apply subset. They are aliases for the same batch-size control and cannot be used together.
+
+`--target <selector>` overrides the job `hosts` selector for the current run. `--inventory <path>` overrides the configured inventory path. `--exclude <selector>` filters the selected targets after the job or CLI target selector is resolved.
 
 ## Job Credential
 
