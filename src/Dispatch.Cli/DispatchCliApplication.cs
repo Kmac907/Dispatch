@@ -433,14 +433,69 @@ public sealed class DispatchCliApplication(
                     options.Value.Exclude,
                     options.Value.DefaultTransport),
                 options.Value.ExpectedExitCodes,
-                out var command,
+                out var apply,
                 out var error))
         {
             SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Job", error);
             return 1;
         }
 
-        return await RunParsedCommandAsync(command!, cancellationToken).ConfigureAwait(false);
+        if (apply!.Tasks.Count == 1)
+        {
+            return await RunParsedCommandAsync(apply.Tasks[0].Command, cancellationToken).ConfigureAwait(false);
+        }
+
+        return await RunApplyPlanAsync(apply, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> RunApplyPlanAsync(
+        DispatchApplyJobParser.ApplyParseResult apply,
+        CancellationToken cancellationToken)
+    {
+        foreach (var task in apply.Tasks)
+        {
+            if (!await TryValidateCredentialReferenceAsync(task.Command, cancellationToken).ConfigureAwait(false))
+            {
+                return 1;
+            }
+        }
+
+        var plannedTasks = new List<DispatchApplyPlannedTask>();
+        try
+        {
+            foreach (var task in apply.Tasks)
+            {
+                var plan = await planner
+                    .CreatePlanAsync(task.Command.ToRequest(), cancellationToken)
+                    .ConfigureAwait(false);
+                plannedTasks.Add(new DispatchApplyPlannedTask(
+                    task.Index,
+                    "ps",
+                    ((ScriptPayload)task.Command.Payload).ScriptPath,
+                    task.Tags,
+                    plan));
+            }
+        }
+        catch (DispatchPlanningException exception)
+        {
+            var message = string.Join(
+                Environment.NewLine,
+                exception.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
+            SpectreConsoleRenderer.RenderError(Console.Error, "Dispatch Planning Failed", message);
+
+            return 1;
+        }
+
+        var firstCommand = apply.Tasks[0].Command;
+        if (!ShouldSuppressOutput(firstCommand))
+        {
+            DispatchStructuredOutputRenderer.RenderApplyPlan(
+                Console.Out,
+                new DispatchApplyPlan(apply.Mode, plannedTasks),
+                firstCommand.OutputMode);
+        }
+
+        return 0;
     }
 
     internal int RunLogsListCommand(string? outputValue)

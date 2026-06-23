@@ -63,7 +63,7 @@
 <li>Live dashboard rendering model.</li>
 <li>Structured output modes on current paths.</li>
 <li>Inventory subset for current run paths.</li>
-<li><code>dispatch apply &lt;job.yml&gt;</code> and <code>dispatch apply &lt;job.yml&gt; --plan</code> for one script-first <code>ps</code> task.</li>
+<li><code>dispatch apply &lt;job.yml&gt; --plan</code> and <code>dispatch apply &lt;job.yml&gt; --check</code> for selected multi-task script-first <code>ps</code> plans, plus execution for one selected <code>ps</code> task.</li>
 <li>Logs commands over local run history.</li>
 <li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
 </ul>
@@ -72,7 +72,7 @@
 <li><code>doctor</code> exists but the full v1 transport-aware diagnostics surface is still expanding.</li>
 <li><code>hosts</code>, <code>push</code>, and <code>init</code> command groups are registered/planned but not fully implemented.</li>
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
-<li>Multi-task YAML jobs and non-<code>ps</code> task types remain planned.</li>
+<li>Multi-task YAML execution and non-<code>ps</code> task types remain planned.</li>
 <li>Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
 </ul>
 <h2>Planned Next</h2>

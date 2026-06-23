@@ -1314,18 +1314,18 @@ Scope:
 - Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
 
 Current implementation boundary:
-- `dispatch apply <job.yml> --plan` parses a script-first YAML job with one `ps` task.
+- `dispatch apply <job.yml> --plan` parses selected script-first YAML job `ps` tasks and renders one planned task entry per selected task.
 - `dispatch apply <job.yml> --check` validates and renders a no-endpoint-work plan for that same script-first subset; it is mutually exclusive with `--plan` and does not simulate script side effects.
-- `dispatch apply <job.yml>` executes that same script-first subset through the shared planner/executor path used by `dispatch run ps`.
+- `dispatch apply <job.yml>` executes that same script-first subset through the shared planner/executor path used by `dispatch run ps` when the selected task set contains exactly one `ps` task.
 - The current apply parser supports `hosts`, `transport`, `credential`, `defaults.expected_exit_codes`, and `strategy.serial` for plan, check, and execution paths.
 - `--serial <n>` and `--concurrency <n>` override `strategy.serial` for that same subset and cannot be used together.
 - Relative `ps` task paths resolve relative to the job file.
-- Task-level `tags` are supported on the current single `ps` task, and `--tags <tags>` / `--skip-tags <tags>` filter that task before planning or endpoint work.
+- Task-level `tags` are supported on selected `ps` tasks, and `--tags <tags>` / `--skip-tags <tags>` filter those tasks before planning or endpoint work.
 - `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
 - `--diff` is accepted as an explicit apply setting but fails before planning until the diff behavior slice is implemented.
-- For the current one-`ps`-task apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
-- Unsupported task types, multiple tasks, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
-- Multi-task jobs, non-`ps` task execution, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
+- For the current apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
+- Unsupported task types, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
+- Multi-task execution, non-`ps` task execution, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
 
 Non-goals:
 - No full Ansible compatibility.

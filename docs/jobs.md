@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: partial/current. `dispatch apply <job.yml>`, `dispatch apply <job.yml> --plan`, and `dispatch apply <job.yml> --check` are implemented for one script-first `ps` task. Multi-task jobs and additional task types remain planned v1.
+Status: partial/current. `dispatch apply <job.yml> --plan` and `dispatch apply <job.yml> --check` support selected multi-task script-first `ps` plans. `dispatch apply <job.yml>` execution currently runs exactly one selected `ps` task. Multi-task execution and additional task types remain planned v1.
 
 ## Purpose
 
@@ -47,7 +47,7 @@ The current implementation converts the supported job subset into the same plann
 
 `--target <selector>` overrides the job `hosts` selector for the current run. `--inventory <path>` overrides the configured inventory path. `--exclude <selector>` filters the selected targets after the job or CLI target selector is resolved.
 
-Task tags are optional on the current single `ps` task. `--tags <tags>` selects the task only when at least one tag matches, and `--skip-tags <tags>` excludes it when any tag matches. If filters remove the only supported task, validation fails before endpoint work.
+Task tags are optional on `ps` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
 
 `--no-progress` disables live progress for apply execution, `--quiet` suppresses rich non-error output, and `--verbose` / `--trace` control NDJSON diagnostic detail. `--diff` is recognized but fails before planning until the diff behavior slice is implemented.
 
@@ -73,4 +73,4 @@ Planned v1 task vocabulary:
 - `wait`
 - `reboot`
 
-The current implementation accepts exactly one `ps` task for plan and execution. Unsupported task types and multiple tasks fail validation before endpoint work.
+The current implementation accepts multiple `ps` tasks for `--plan` and `--check`. Execution still requires the selected task set to resolve to exactly one `ps` task. Unsupported task types fail validation before endpoint work.

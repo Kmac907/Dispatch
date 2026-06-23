@@ -2,7 +2,7 @@
 
 This is the v1 YAML job contract for `dispatch apply`.
 
-Status: partial/current. `dispatch apply <job.yml>`, `dispatch apply <job.yml> --plan`, and `dispatch apply <job.yml> --check` currently support a script-first subset with one `ps` task.
+Status: partial/current. `dispatch apply <job.yml> --plan` and `dispatch apply <job.yml> --check` currently support selected multi-task script-first `ps` plans. `dispatch apply <job.yml>` execution currently runs exactly one selected `ps` task.
 
 ## Top-Level Fields
 
@@ -84,17 +84,17 @@ Validation must fail before endpoint work for:
 
 ## Current Apply Subset
 
-The current `apply` slice supports plan and execution for:
+The current `apply` slice supports plan and check for:
 
-- one `tasks` entry using `ps`
+- selected `tasks` entries using `ps`
 - `hosts`
 - `transport`
 - `credential`
 - `defaults.expected_exit_codes`
 - `strategy.serial`
-- task-level `tags` on the single supported `ps` task
+- task-level `tags` on supported `ps` tasks
 
-Relative `ps` task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`. `--check` validates the supported job subset and renders the resolved plan without endpoint work; it does not simulate script side effects. `--tags <tags>` and `--skip-tags <tags>` filter the single supported task by comma-separated task tags before planning or endpoint work. `--serial <n>` or `--concurrency <n>` overrides `strategy.serial` for the supported apply subset. `--no-progress`, `--quiet`, `--verbose`, and `--trace` follow the same current output/log behavior as `dispatch run ps`; `--diff` is recognized but fails before planning until the diff behavior slice is implemented. Multiple tasks and other planned task types remain later `6.5` work.
+Relative `ps` task paths resolve from the job file directory. `--plan` and `--check` can render plans for multiple selected `ps` tasks without endpoint work; `--check` does not simulate script side effects. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as `dispatch run ps`, and currently requires tag filters to leave exactly one selected `ps` task. `--tags <tags>` and `--skip-tags <tags>` filter supported tasks by comma-separated task tags before planning or endpoint work. `--serial <n>` or `--concurrency <n>` overrides `strategy.serial` for the supported apply subset. `--no-progress`, `--quiet`, `--verbose`, and `--trace` follow the same current output/log behavior as `dispatch run ps`; `--diff` is recognized but fails before planning until the diff behavior slice is implemented. Multi-task execution and other planned task types remain later `6.5` work.
 
 `job.vars` is only an inline runtime/task-input bag. Transport selection must use the top-level `transport` field, and separate vars-file concepts are rejected before endpoint work.
 

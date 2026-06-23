@@ -44,10 +44,10 @@ internal static class DispatchApplyJobParser
         ApplyCommandOptions options,
         DispatchRunCommandParser.DispatchRunAmbientConfig ambientConfig,
         IReadOnlyList<int> defaultExpectedExitCodes,
-        out DispatchRunCommand? command,
+        out ApplyParseResult? result,
         out string error)
     {
-        command = null;
+        result = null;
         error = string.Empty;
 
         if (options.Plan && options.Check)
@@ -103,7 +103,10 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (!IsTaskSelected(job.Tags, requiredTags, skippedTags))
+        var selectedTasks = job.Tasks
+            .Where(task => IsTaskSelected(task.Tags, requiredTags, skippedTags))
+            .ToArray();
+        if (selectedTasks.Length == 0)
         {
             error = "No apply tasks match the selected tag filters.";
             return false;
@@ -144,27 +147,40 @@ internal static class DispatchApplyJobParser
         }
 
         var validateOnly = options.Plan || options.Check;
-        command = new DispatchRunCommand(
-            DryRun: validateOnly,
-            Payload: new ScriptPayload(job.PowerShellScriptPath, []),
-            Targets: targetResolution.Targets,
-            Transport: transport,
-            ConfigPath: options.ConfigPath,
-            ExpectedExitCodes: job.ExpectedExitCodes.Count > 0
-                ? job.ExpectedExitCodes
-                : defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0],
-            Throttle: options.Serial ?? options.Concurrency ?? job.Serial,
-            LocalRunRoot: null,
-            RemoteRunRoot: null,
-            ArtifactPaths: [],
-            CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
-            RunAsSystem: false,
-            NoDashboard: validateOnly || options.NoProgress,
-            OutputMode: options.OutputMode,
-            NoColor: options.NoColor,
-            Quiet: options.Quiet,
-            Verbose: options.Verbose || options.Trace,
-            Trace: options.Trace);
+        if (!validateOnly && selectedTasks.Length != 1)
+        {
+            error = "This apply execution slice supports exactly one selected ps task. Use --plan or --check to validate multi-task jobs.";
+            return false;
+        }
+
+        var expectedExitCodes = job.ExpectedExitCodes.Count > 0
+            ? job.ExpectedExitCodes
+            : defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
+        var commands = selectedTasks
+            .Select(task => new ApplyTaskCommand(
+                task.Index,
+                task.Tags,
+                new DispatchRunCommand(
+                    DryRun: validateOnly,
+                    Payload: new ScriptPayload(task.PowerShellScriptPath, []),
+                    Targets: targetResolution.Targets,
+                    Transport: transport,
+                    ConfigPath: options.ConfigPath,
+                    ExpectedExitCodes: expectedExitCodes,
+                    Throttle: options.Serial ?? options.Concurrency ?? job.Serial,
+                    LocalRunRoot: null,
+                    RemoteRunRoot: null,
+                    ArtifactPaths: [],
+                    CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
+                    RunAsSystem: false,
+                    NoDashboard: validateOnly || options.NoProgress,
+                    OutputMode: options.OutputMode,
+                    NoColor: options.NoColor,
+                    Quiet: options.Quiet,
+                    Verbose: options.Verbose || options.Trace,
+                    Trace: options.Trace)))
+            .ToArray();
+        result = new ApplyParseResult(validateOnly ? options.Check ? "check" : "plan" : "execute", commands);
         return true;
     }
 
@@ -213,7 +229,7 @@ internal static class DispatchApplyJobParser
             {
                 taskCount++;
                 currentTaskIndent = indent;
-                if (!TryReadTask(jobPath, lineNumber, trimmed[2..].Trim(), Path.GetDirectoryName(Path.GetFullPath(jobPath))!, ref job, out error))
+                if (!TryReadTask(jobPath, lineNumber, taskCount, trimmed[2..].Trim(), Path.GetDirectoryName(Path.GetFullPath(jobPath))!, ref job, out error))
                 {
                     return false;
                 }
@@ -272,15 +288,9 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(job.PowerShellScriptPath))
+        if (job.Tasks.Count == 0)
         {
             error = "This apply slice requires exactly one tasks entry with 'ps: <script.ps1>'.";
-            return false;
-        }
-
-        if (taskCount != 1)
-        {
-            error = "This apply slice supports exactly one task.";
             return false;
         }
 
@@ -327,13 +337,22 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        job = job with { Tags = tags };
+        var tasks = job.Tasks.ToArray();
+        if (tasks.Length == 0)
+        {
+            error = $"{jobPath}:{lineNumber}: task metadata must follow a task entry.";
+            return false;
+        }
+
+        tasks[^1] = tasks[^1] with { Tags = tags };
+        job = job with { Tasks = tasks };
         return true;
     }
 
     private static bool TryReadTask(
         string jobPath,
         int lineNumber,
+        int taskIndex,
         string task,
         string jobDirectory,
         ref ParsedApplyJob job,
@@ -367,17 +386,12 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(job.PowerShellScriptPath))
-        {
-            error = $"{jobPath}:{lineNumber}: this apply slice supports exactly one ps task.";
-            return false;
-        }
-
+        var scriptPath = Path.IsPathRooted(value)
+            ? value
+            : Path.GetFullPath(Path.Combine(jobDirectory, value));
         job = job with
         {
-            PowerShellScriptPath = Path.IsPathRooted(value)
-                ? value
-                : Path.GetFullPath(Path.Combine(jobDirectory, value))
+            Tasks = [.. job.Tasks, new ParsedApplyTask(taskIndex, scriptPath, [])]
         };
         return true;
     }
@@ -744,6 +758,15 @@ internal static class DispatchApplyJobParser
         bool Verbose,
         bool Trace);
 
+    internal sealed record ApplyParseResult(
+        string Mode,
+        IReadOnlyList<ApplyTaskCommand> Tasks);
+
+    internal sealed record ApplyTaskCommand(
+        int Index,
+        IReadOnlyList<string> Tags,
+        DispatchRunCommand Command);
+
     private sealed record ParsedApplyJob
     {
         public string Hosts { get; init; } = string.Empty;
@@ -752,14 +775,17 @@ internal static class DispatchApplyJobParser
 
         public string? CredentialReference { get; init; }
 
-        public string PowerShellScriptPath { get; init; } = string.Empty;
-
-        public IReadOnlyList<string> Tags { get; init; } = [];
-
         public IReadOnlyList<int> ExpectedExitCodes { get; init; } = [];
 
         public int? Serial { get; init; }
+
+        public IReadOnlyList<ParsedApplyTask> Tasks { get; init; } = [];
     }
+
+    private sealed record ParsedApplyTask(
+        int Index,
+        string PowerShellScriptPath,
+        IReadOnlyList<string> Tags);
 
     private sealed record DispatchRunConfig
     {
