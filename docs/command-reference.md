@@ -20,7 +20,7 @@ dispatch version
 ## Apply
 
 ```powershell
-dispatch apply <job.yml> [--config <path>] [--credential <name>] [--transport psrp|winrm|psexec] [--plan|--check] [--output rich|table|json|ndjson|yaml]
+dispatch apply <job.yml> [--config <path>] [--credential <name>] [--transport psrp|winrm|psexec] [--serial <n>|--concurrency <n>] [--plan|--check] [--output rich|table|json|ndjson|yaml]
 ```
 
 Status: partial/current. Plan, check, and execution are implemented for one script-first `ps` task. Multi-task jobs and additional task types remain planned v1.
@@ -28,6 +28,8 @@ Status: partial/current. Plan, check, and execution are implemented for one scri
 Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.
 
 Use `--plan` to inspect the resolved plan. Use `--check` to validate and render the supported job subset without endpoint work. The current check mode does not simulate script side effects.
+
+Use `--serial <n>` or `--concurrency <n>` to override `strategy.serial` for the supported apply subset. These two options control the same batch-size setting and cannot be used together.
 
 ## Run
 

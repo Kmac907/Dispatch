@@ -2495,6 +2495,85 @@ credentials:
         }
     }
 
+    [Theory]
+    [InlineData("--serial")]
+    [InlineData("--concurrency")]
+    public async Task ApplyPlanCliBatchSizeOverridesJobSerial(string optionName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001,PC002,PC003,PC004
+            transport: psrp
+            strategy:
+              serial: 2
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", optionName, "4", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest.DryRun);
+            Assert.Equal(4, planner.LastRequest.Throttle);
+            Assert.Equal(["PC001", "PC002", "PC003", "PC004"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRejectsSerialAndConcurrencyTogetherBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--serial", "2", "--concurrency", "3"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("--serial and --concurrency cannot be used together", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ApplyCheckParsesScriptFirstYamlJobAndRendersPlanWithoutExecution()
     {

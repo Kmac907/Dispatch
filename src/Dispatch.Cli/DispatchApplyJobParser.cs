@@ -56,6 +56,24 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        if (options.Serial.HasValue && options.Concurrency.HasValue)
+        {
+            error = "--serial and --concurrency cannot be used together.";
+            return false;
+        }
+
+        if (options.Serial is <= 0)
+        {
+            error = "--serial must be a positive integer.";
+            return false;
+        }
+
+        if (options.Concurrency is <= 0)
+        {
+            error = "--concurrency must be a positive integer.";
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(jobPath))
         {
             error = "apply requires <job.yml>.";
@@ -111,7 +129,7 @@ internal static class DispatchApplyJobParser
             ExpectedExitCodes: job.ExpectedExitCodes.Count > 0
                 ? job.ExpectedExitCodes
                 : defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0],
-            Throttle: job.Serial,
+            Throttle: options.Serial ?? options.Concurrency ?? job.Serial,
             LocalRunRoot: null,
             RemoteRunRoot: null,
             ArtifactPaths: [],
@@ -566,6 +584,8 @@ internal static class DispatchApplyJobParser
         string? ConfigPath,
         string? CredentialReference,
         string? Transport,
+        int? Serial,
+        int? Concurrency,
         DispatchOutputMode OutputMode,
         bool NoColor);
 

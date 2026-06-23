@@ -383,6 +383,8 @@ public sealed class DispatchCliApplication(
         string? configPath,
         string? credentialReference,
         string? transport,
+        int? serial,
+        int? concurrency,
         string? outputValue,
         bool noColor,
         CancellationToken cancellationToken)
@@ -401,6 +403,8 @@ public sealed class DispatchCliApplication(
                     ConfigPath: configPath,
                     CredentialReference: credentialReference,
                     Transport: transport,
+                    Serial: serial,
+                    Concurrency: concurrency,
                     OutputMode: outputMode,
                     NoColor: noColor),
                 new DispatchRunCommandParser.DispatchRunAmbientConfig(

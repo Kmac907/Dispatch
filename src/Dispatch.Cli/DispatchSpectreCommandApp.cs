@@ -236,6 +236,8 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     settings.Config,
                     settings.Credential,
                     settings.Transport,
+                    settings.Serial,
+                    settings.Concurrency,
                     settings.Output,
                     settings.NoColor,
                     cancellationToken)
@@ -421,6 +423,12 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--transport <name>")]
         public string? Transport { get; init; }
+
+        [CommandOption("--serial <n>")]
+        public int? Serial { get; init; }
+
+        [CommandOption("--concurrency <n>")]
+        public int? Concurrency { get; init; }
 
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }

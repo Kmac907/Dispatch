@@ -68,11 +68,13 @@ tasks:
 <pre><code>
 dispatch apply .\job.yml --plan --output json
 dispatch apply .\job.yml --check --output json
+dispatch apply .\job.yml --serial 10
 dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 </code></pre>
 <p>The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by <code>dispatch run ps</code>.</p>
 <p><code>--check</code> validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.</p>
+<p><code>--serial &lt;n&gt;</code> or <code>--concurrency &lt;n&gt;</code> overrides <code>strategy.serial</code> for the supported apply subset. They are aliases for the same batch-size control and cannot be used together.</p>
 <h2>Job Credential</h2>
 <p><code>credential</code> selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.</p>
 <h2>Job Variables</h2>
