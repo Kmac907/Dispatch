@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: partial/current. `dispatch apply <job.yml> --plan` and `dispatch apply <job.yml> --check` support selected multi-task script-first `ps` plans. `dispatch apply <job.yml>` execution currently runs exactly one selected `ps` task. Multi-task execution and additional task types remain planned v1.
+Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps` jobs in YAML order. Additional task types remain planned v1.
 
 ## Purpose
 
@@ -75,4 +75,4 @@ Planned v1 task vocabulary:
 - `wait`
 - `reboot`
 
-The current implementation accepts multiple `ps` tasks for `--plan` and `--check`. Execution still requires the selected task set to resolve to exactly one `ps` task. Unsupported task types fail validation before endpoint work.
+The current implementation accepts multiple selected `ps` tasks for `--plan`, `--check`, and execution. Unsupported task types fail validation before endpoint work.

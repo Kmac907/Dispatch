@@ -3071,11 +3071,15 @@ credentials:
     }
 
     [Fact]
-    public async Task ApplyExecutionRejectsMultipleSelectedTasksBeforePlanning()
+    public async Task ApplyExecutionRunsMultipleSelectedTasksInYamlOrder()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
+        var firstScriptPath = Path.Combine(root, "First.ps1");
+        var secondScriptPath = Path.Combine(root, "Second.ps1");
         var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(firstScriptPath, "Write-Output 'first'");
+        File.WriteAllText(secondScriptPath, "Write-Output 'second'");
         File.WriteAllText(
             jobPath,
             """
@@ -3088,19 +3092,84 @@ credentials:
                 tags: [prod]
             """);
         var planner = new CapturingPlanner();
-        var application = CreateApplication(planner);
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
 
         try
         {
             var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
-                ["apply", jobPath, "--tags", "prod"],
+                ["apply", jobPath, "--tags", "prod", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Equal(2, planner.Requests.Count);
+            Assert.Equal(2, executor.Plans.Count);
+            Assert.Equal(
+                [firstScriptPath, secondScriptPath],
+                planner.Requests
+                    .Select(static request => Assert.IsType<ScriptPayload>(request.Payload).ScriptPath)
+                    .ToArray());
+            Assert.Equal(
+                [firstScriptPath, secondScriptPath],
+                executor.Plans
+                    .Select(static plan => Assert.IsType<ScriptPayload>(plan.Job.Payload).ScriptPath)
+                    .ToArray());
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal("execute", json.RootElement.GetProperty("mode").GetString());
+            var tasks = json.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
+            Assert.Equal([1, 2], tasks.Select(static task => task.GetProperty("index").GetInt32()).ToArray());
+            Assert.Equal(
+                [firstScriptPath, secondScriptPath],
+                tasks.Select(static task => task.GetProperty("scriptPath").GetString()).ToArray());
+            Assert.All(tasks, static task => Assert.Equal(1, task.GetProperty("result").GetProperty("successCount").GetInt32()));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyExecutionStopsAfterFirstFailedTaskRun()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var firstScriptPath = Path.Combine(root, "First.ps1");
+        var secondScriptPath = Path.Combine(root, "Second.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(firstScriptPath, "Write-Output 'first'");
+        File.WriteAllText(secondScriptPath, "Write-Output 'second'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\First.ps1
+              - ps: .\Second.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSequenceExecutor(false, true);
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--output", "json"],
                 CancellationToken.None));
 
             Assert.Equal(1, exitCode);
-            Assert.Empty(output);
-            Assert.Null(planner.LastRequest);
-            Assert.Contains("Invalid Dispatch Job", error);
-            Assert.Contains("exactly one selected ps task", error);
+            Assert.Empty(error);
+            Assert.Single(planner.Requests);
+            var executedPlan = Assert.Single(executor.Plans);
+            Assert.Equal(firstScriptPath, Assert.IsType<ScriptPayload>(executedPlan.Job.Payload).ScriptPath);
+
+            using var json = JsonDocument.Parse(output);
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(1, task.GetProperty("index").GetInt32());
+            Assert.Equal(1, task.GetProperty("result").GetProperty("failedCount").GetInt32());
         }
         finally
         {
@@ -3774,37 +3843,54 @@ credentials:
     }
 
     [Fact]
-    public async Task ApplyExecutionRejectsMultipleSelectedPowerShellTasksBeforePlanning()
+    public async Task ApplyExecutionAppliesTagFiltersAcrossMultiplePowerShellTasks()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
+        var firstScriptPath = Path.Combine(root, "First.ps1");
+        var auditScriptPath = Path.Combine(root, "Audit.ps1");
+        var stagingScriptPath = Path.Combine(root, "Staging.ps1");
         var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(firstScriptPath, "Write-Output 'first'");
+        File.WriteAllText(auditScriptPath, "Write-Output 'audit'");
+        File.WriteAllText(stagingScriptPath, "Write-Output 'staging'");
         File.WriteAllText(
             jobPath,
             """
             hosts: PC001
             transport: psrp
             tasks:
-              - ps: .\Fix.ps1
+              - ps: .\First.ps1
                 tags: [prod]
-              - ps: .\Fix2.ps1
-                tags: [prod]
+              - ps: .\Audit.ps1
+                tags: [audit]
+              - ps: .\Staging.ps1
+                tags: [prod, staging]
             """);
         var planner = new CapturingPlanner();
-        var application = CreateApplication(planner, executor: new ThrowingExecutor());
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
 
         try
         {
             var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
-                ["apply", jobPath, "--tags", "prod"],
+                ["apply", jobPath, "--tags", "prod,audit", "--skip-tags", "staging", "--output", "json"],
                 CancellationToken.None));
 
-            Assert.Equal(1, exitCode);
-            Assert.Empty(output);
-            Assert.Null(planner.LastRequest);
-            Assert.Empty(planner.Requests);
-            Assert.Contains("Invalid Dispatch Job", error);
-            Assert.Contains("supports exactly one selected ps task", error);
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Equal(2, planner.Requests.Count);
+            Assert.Equal(
+                [firstScriptPath, auditScriptPath],
+                executor.Plans
+                    .Select(static plan => Assert.IsType<ScriptPayload>(plan.Job.Payload).ScriptPath)
+                    .ToArray());
+
+            using var json = JsonDocument.Parse(output);
+            var tasks = json.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
+            Assert.Equal([1, 2], tasks.Select(static task => task.GetProperty("index").GetInt32()).ToArray());
+            Assert.Equal(["prod"], tasks[0].GetProperty("tags").EnumerateArray().Select(static tag => tag.GetString()).ToArray());
+            Assert.Equal(["audit"], tasks[1].GetProperty("tags").EnumerateArray().Select(static tag => tag.GetString()).ToArray());
         }
         finally
         {
@@ -5220,6 +5306,7 @@ credentials:
     private sealed class CapturingSucceedingExecutor : IDispatchExecutor
     {
         public ExecutionPlan? LastPlan { get; private set; }
+        public List<ExecutionPlan> Plans { get; } = [];
 
         public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
             ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken);
@@ -5230,6 +5317,7 @@ credentials:
             CancellationToken cancellationToken)
         {
             LastPlan = plan;
+            Plans.Add(plan);
             var target = Assert.Single(plan.Targets);
             await observer.OnProgressAsync(
                 new DispatchExecutionProgress(plan.RunId, target.Target.Name, TargetExecutionState.Succeeded, DateTimeOffset.UnixEpoch),
@@ -5258,6 +5346,57 @@ credentials:
                         EndedAt: DateTimeOffset.UnixEpoch,
                         FailureCategory: FailureCategory.None,
                         FailureMessage: null,
+                        ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty)
+                ],
+                ResultPath: plan.LocalResultsJsonPath);
+        }
+    }
+
+    private sealed class CapturingSequenceExecutor(params bool[] successfulRuns) : IDispatchExecutor
+    {
+        private readonly Queue<bool> successfulRuns = new(successfulRuns);
+
+        public List<ExecutionPlan> Plans { get; } = [];
+
+        public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
+            ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken);
+
+        public async Task<DispatchRunResult> ExecuteAsync(
+            ExecutionPlan plan,
+            IDispatchExecutionObserver observer,
+            CancellationToken cancellationToken)
+        {
+            Plans.Add(plan);
+            var target = Assert.Single(plan.Targets);
+            var succeeded = successfulRuns.Count == 0 || successfulRuns.Dequeue();
+            var state = succeeded ? TargetExecutionState.Succeeded : TargetExecutionState.Failed;
+            await observer.OnProgressAsync(
+                new DispatchExecutionProgress(plan.RunId, target.Target.Name, state, DateTimeOffset.UnixEpoch),
+                cancellationToken);
+
+            return new DispatchRunResult(
+                RunId: plan.RunId,
+                StartedAt: DateTimeOffset.UnixEpoch,
+                EndedAt: DateTimeOffset.UnixEpoch,
+                RequestedBy: "test",
+                Transport: plan.Job.Transport,
+                PayloadType: plan.Job.Payload.PayloadType,
+                PayloadName: plan.Job.Payload.DisplayName,
+                Targets:
+                [
+                    new TargetExecutionResult(
+                        RunId: plan.RunId,
+                        Target: target.Target.Name,
+                        Transport: plan.Job.Transport,
+                        PayloadType: plan.Job.Payload.PayloadType,
+                        PayloadName: plan.Job.Payload.DisplayName,
+                        State: state,
+                        ExitCode: succeeded ? 0 : 1,
+                        ExpectedExitCodes: plan.Job.ExpectedExitCodes,
+                        StartedAt: DateTimeOffset.UnixEpoch,
+                        EndedAt: DateTimeOffset.UnixEpoch,
+                        FailureCategory: succeeded ? FailureCategory.None : FailureCategory.ExecutionFailed,
+                        FailureMessage: succeeded ? null : "script failed",
                         ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty)
                 ],
                 ResultPath: plan.LocalResultsJsonPath);

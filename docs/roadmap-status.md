@@ -18,7 +18,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Live dashboard rendering model.
 - Structured output modes on current paths.
 - Inventory subset for current run paths.
-- `dispatch apply <job.yml> --plan` and `dispatch apply <job.yml> --check` for selected multi-task script-first `ps` plans, plus execution for one selected `ps` task.
+- `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` for selected multi-task script-first `ps` jobs.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
 

@@ -82,6 +82,35 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderApplyExecution(TextWriter writer, DispatchApplyExecution execution, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(execution));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    new { type = "apply.execute", apply = execution },
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, execution);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine($"Apply {execution.Mode}: {execution.Tasks.Count} executed tasks");
+                foreach (var task in execution.Tasks)
+                {
+                    writer.WriteLine($"Task {task.Index}: ps {task.ScriptPath}");
+                    SpectreConsoleRenderer.RenderRunResult(writer, task.Result);
+                }
+
+                break;
+        }
+    }
+
     public static void RenderRunHistory(TextWriter writer, string localRunRoot, IReadOnlyList<DispatchRunHistoryEntry> runs, DispatchOutputMode mode)
     {
         switch (mode)
@@ -310,3 +339,18 @@ internal sealed record DispatchApplyPlannedTask(
     string ScriptPath,
     IReadOnlyList<string> Tags,
     ExecutionPlan Plan);
+
+internal sealed record DispatchApplyExecution(
+    string Mode,
+    IReadOnlyList<DispatchApplyExecutedTask> Tasks);
+
+internal sealed record DispatchApplyExecutedTask(
+    int Index,
+    string Type,
+    string ScriptPath,
+    IReadOnlyList<string> Tags,
+    DispatchRunResult Result);
+
+internal sealed record DispatchRunCommandOutcome(
+    int ExitCode,
+    DispatchRunResult? Result);

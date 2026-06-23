@@ -109,11 +109,20 @@ public sealed class DispatchCliApplication(
         DispatchRunCommand command,
         CancellationToken cancellationToken)
     {
+        var outcome = await RunParsedCommandAsync(command, renderOutput: true, cancellationToken).ConfigureAwait(false);
+        return outcome.ExitCode;
+    }
+
+    private async Task<DispatchRunCommandOutcome> RunParsedCommandAsync(
+        DispatchRunCommand command,
+        bool renderOutput,
+        CancellationToken cancellationToken)
+    {
         try
         {
             if (!await TryValidateCredentialReferenceAsync(command, cancellationToken).ConfigureAwait(false))
             {
-                return 1;
+                return new DispatchRunCommandOutcome(1, null);
             }
 
             var request = command.ToRequest();
@@ -125,18 +134,18 @@ public sealed class DispatchCliApplication(
                     streamWriter.WritePlanningStarted();
                     var ndjsonPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
                     streamWriter.WritePlan(ndjsonPlan);
-                    return 0;
+                    return new DispatchRunCommandOutcome(0, null);
                 }
 
                 var dryRunPlan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
                     ? await CreatePlanWithDryRunProgressAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                     : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
-                if (!ShouldSuppressOutput(command))
+                if (renderOutput && !ShouldSuppressOutput(command))
                 {
                     DispatchStructuredOutputRenderer.RenderPlan(Console.Out, dryRunPlan, command.OutputMode);
                 }
 
-                return 0;
+                return new DispatchRunCommandOutcome(0, null);
             }
 
             if (command.OutputMode == DispatchOutputMode.Ndjson)
@@ -148,7 +157,7 @@ public sealed class DispatchCliApplication(
                 var resolvedStreamPlan = await ResolveRuntimeCredentialsAsync(streamPlan, command, cancellationToken).ConfigureAwait(false);
                 if (resolvedStreamPlan is null)
                 {
-                    return 1;
+                    return new DispatchRunCommandOutcome(1, null);
                 }
 
                 try
@@ -156,7 +165,7 @@ public sealed class DispatchCliApplication(
                     streamWriter.WriteExecutionStarted(resolvedStreamPlan);
                     var streamResult = await executor.ExecuteAsync(resolvedStreamPlan, streamWriter, cancellationToken).ConfigureAwait(false);
                     streamWriter.WriteResult(streamResult);
-                    return streamResult.FailedCount == 0 && streamResult.TimedOutCount == 0 && streamResult.CancelledCount == 0 ? 0 : 1;
+                    return new DispatchRunCommandOutcome(GetRunResultExitCode(streamResult), streamResult);
                 }
                 finally
                 {
@@ -170,7 +179,7 @@ public sealed class DispatchCliApplication(
             var resolvedPlan = await ResolveRuntimeCredentialsAsync(plan, command, cancellationToken).ConfigureAwait(false);
             if (resolvedPlan is null)
             {
-                return 1;
+                return new DispatchRunCommandOutcome(1, null);
             }
 
             try
@@ -178,12 +187,12 @@ public sealed class DispatchCliApplication(
                 var result = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
                     ? await RunWithSpectreProgressAsync(resolvedPlan, command.NoDashboard, command.NoColor, cancellationToken).ConfigureAwait(false)
                     : await executor.ExecuteAsync(resolvedPlan, NullDispatchExecutionObserver.Instance, cancellationToken).ConfigureAwait(false);
-                if (!ShouldSuppressOutput(command))
+                if (renderOutput && !ShouldSuppressOutput(command))
                 {
                     DispatchStructuredOutputRenderer.RenderRunResult(Console.Out, result, command.OutputMode);
                 }
 
-                return result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
+                return new DispatchRunCommandOutcome(GetRunResultExitCode(result), result);
             }
             finally
             {
@@ -197,9 +206,12 @@ public sealed class DispatchCliApplication(
                 exception.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
             SpectreConsoleRenderer.RenderError(Console.Error, "Dispatch Planning Failed", message);
 
-            return 1;
+            return new DispatchRunCommandOutcome(1, null);
         }
     }
+
+    private static int GetRunResultExitCode(DispatchRunResult result) =>
+        result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
 
     private async Task<DispatchRunResult> RunWithSpectreProgressAsync(
         ExecutionPlan plan,
@@ -445,7 +457,53 @@ public sealed class DispatchCliApplication(
             return await RunParsedCommandAsync(apply.Tasks[0].Command, cancellationToken).ConfigureAwait(false);
         }
 
+        if (apply.Mode == "execute")
+        {
+            return await RunApplyExecutionAsync(apply, cancellationToken).ConfigureAwait(false);
+        }
+
         return await RunApplyPlanAsync(apply, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<int> RunApplyExecutionAsync(
+        DispatchApplyJobParser.ApplyParseResult apply,
+        CancellationToken cancellationToken)
+    {
+        var executedTasks = new List<DispatchApplyExecutedTask>();
+        var exitCode = 0;
+        var firstCommand = apply.Tasks[0].Command;
+
+        foreach (var task in apply.Tasks)
+        {
+            var renderTaskOutput = firstCommand.OutputMode == DispatchOutputMode.Ndjson;
+            var outcome = await RunParsedCommandAsync(task.Command, renderTaskOutput, cancellationToken).ConfigureAwait(false);
+            if (outcome.Result is null)
+            {
+                return outcome.ExitCode;
+            }
+
+            executedTasks.Add(new DispatchApplyExecutedTask(
+                task.Index,
+                "ps",
+                ((ScriptPayload)task.Command.Payload).ScriptPath,
+                task.Tags,
+                outcome.Result));
+            if (outcome.ExitCode != 0)
+            {
+                exitCode = outcome.ExitCode;
+                break;
+            }
+        }
+
+        if (!ShouldSuppressOutput(firstCommand))
+        {
+            DispatchStructuredOutputRenderer.RenderApplyExecution(
+                Console.Out,
+                new DispatchApplyExecution("execute", executedTasks),
+                firstCommand.OutputMode);
+        }
+
+        return exitCode;
     }
 
     private async Task<int> RunApplyPlanAsync(

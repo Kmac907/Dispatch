@@ -153,11 +153,6 @@ internal static class DispatchApplyJobParser
         }
 
         var validateOnly = options.Plan || options.Check;
-        if (!validateOnly && selectedTasks.Length != 1)
-        {
-            error = "This apply execution slice supports exactly one selected ps task. Use --plan or --check to validate multi-task jobs.";
-            return false;
-        }
 
         var expectedExitCodes = job.ExpectedExitCodes.Count > 0
             ? job.ExpectedExitCodes
