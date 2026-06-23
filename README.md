@@ -4,6 +4,8 @@ Dispatch is a Windows-native automation runner for endpoint administrators. It r
 
 Dispatch is intentionally narrow: it is not an endpoint agent, package manager, or full configuration-management platform. Scripts own their payloads; Dispatch owns targeting, transport execution, credentials, logs, results, and operator visibility.
 
+Project site: https://kmac907.github.io/Dispatch/
+
 ## Features
 
 - Ad-hoc execution: `dispatch run ps`, `dispatch run cmd`, and `dispatch run exe`.
@@ -160,6 +162,7 @@ Install from an existing checkout:
 - [CLI Design](docs/cli-design.md)
 - [Installation](docs/installation.md)
 - [Credentials](docs/credentials.md)
+- [Credential Store Plan](docs/credential-store-plan.md)
 - [Output And Results](docs/output-and-results.md)
 - [Script-Owned Payloads](docs/script-owned-payloads.md)
 - [Testing And Validation](docs/testing-and-validation.md)

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Script-Owned Payloads - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="script-owned-payloads.html">Script-Owned Payloads</a><a href="outputs.html">Outputs</a><a href="security.html">Security</a><a href="script-owned-payloads.md">Source Markdown</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Boundary</p>
+    <h1>Script-Owned Payloads</h1>
+    <p>Dispatch v1 prepares and runs the selected script. It does not stage installer media, package payloads, Blob content, Azure Files content, or SMB/HTTPS payloads for the script.</p>
+    <h2>Pattern</h2>
+    <p>Pass ordinary non-secret inputs to the script. The script downloads or copies any package payload it needs and writes its own logs/artifacts under the Dispatch run folder.</p>
+    <h2>Do Not</h2>
+    <ul><li>Pass SAS tokens or passwords on the command line.</li><li>Assume Dispatch downloads installer media.</li><li>Write secret values to stdout, stderr, logs, or artifacts.</li></ul>
+    <h2>Source Document</h2>
+    <p>See <a href="script-owned-payloads.md">docs/script-owned-payloads.md</a>.</p>
+  </article>
+</main>
+</body>
+</html>

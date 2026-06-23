@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dispatch - Windows Endpoint Automation</title>
+  <meta name="description" content="Dispatch is a Windows-native automation runner for endpoint administrators.">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="topbar">
+    <nav class="nav" aria-label="Primary">
+      <a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a>
+      <div class="nav-links">
+        <a href="docs.html">Docs</a>
+        <a href="installation.html">Install</a>
+        <a href="getting-started.html">Get Started</a>
+        <a href="https://github.com/Kmac907/Dispatch">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-inner">
+        <div>
+          <p class="eyebrow">Windows endpoint automation</p>
+          <h1>Run scripts and commands across Windows endpoints with clear results.</h1>
+          <p class="lead">Dispatch gives endpoint administrators a focused command surface for remote execution, host targeting, credential references, live run status, and durable logs without deploying an agent.</p>
+          <div class="hero-actions">
+            <a class="button" href="getting-started.html">Get Started</a>
+            <a class="button-secondary" href="docs.html">Read The Docs</a>
+          </div>
+          <code class="terminal-line">dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp</code>
+        </div>
+        <div class="hero-scene" aria-label="Dispatch endpoint automation dashboard illustration">
+          <span class="network-line line-a"></span>
+          <span class="network-line line-b"></span>
+          <span class="network-line line-c"></span>
+          <span class="network-line line-d"></span>
+          <span class="network-line line-e"></span>
+          <span class="endpoint ep-a"></span>
+          <span class="endpoint ep-b"></span>
+          <span class="endpoint ep-c"></span>
+          <span class="endpoint ep-d"></span>
+          <div class="dashboard">
+            <div class="dash-title"><span>Dispatch Run</span><span class="dash-pill">Live</span></div>
+            <div class="dash-grid">
+              <div class="metric"><span>Targets</span><strong>248</strong></div>
+              <div class="metric"><span>Succeeded</span><strong>241</strong></div>
+              <div class="metric"><span>Running</span><strong>7</strong></div>
+            </div>
+            <div class="event-table" aria-hidden="true">
+              <div class="event-row"><span>Time</span><span>Event</span><span>State</span></div>
+              <div class="event-row"><span>00:02</span><span>PC041 prepared script</span><span>Ready</span></div>
+              <div class="event-row"><span>00:04</span><span>PC082 collected artifacts</span><span>Done</span></div>
+              <div class="event-row"><span>00:05</span><span>PC117 executing command</span><span>Run</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2>Built For Endpoint Operations</h2>
+      <p class="section-intro">Dispatch keeps the operating model simple: choose targets, choose a transport, execute the script or command, then read a stable result.</p>
+      <div class="grid">
+        <article class="card">
+          <h3>Explicit Transports</h3>
+          <p>Use PSRP, raw WinRM, or PsExec intentionally. Transport behavior is visible in the plan, logs, and per-target metadata.</p>
+        </article>
+        <article class="card">
+          <h3>Honest Run Visibility</h3>
+          <p>The live dashboard reports real target states, elapsed phase time, aggregate counts, and measurable transfer progress.</p>
+        </article>
+        <article class="card">
+          <h3>Durable Outputs</h3>
+          <p>Every run writes a canonical event stream, final summary, per-target stdout/stderr, and copied script-created artifacts.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section compact">
+      <div class="split">
+        <div>
+          <h2>Source Install For V1</h2>
+          <p class="section-intro">The v1 installer builds Dispatch from the GitHub source, installs the module wrapper and bundled executable, validates the result, and cleans up the temporary checkout.</p>
+          <a class="button" href="installation.html">Installation Guide</a>
+        </div>
+        <pre class="code-panel"><code>irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+dispatch doctor
+dispatch --help</code></pre>
+      </div>
+    </section>
+
+    <section class="section compact">
+      <h2>Documentation</h2>
+      <p class="section-intro">Start with the operational guides, then use the design documents when you need exact contracts and roadmap detail.</p>
+      <div class="doc-grid">
+        <a class="doc-card" href="getting-started.html"><strong>Getting Started</strong><span>Install, verify, and run the first script.</span></a>
+        <a class="doc-card" href="configuration.html"><strong>Configuration</strong><span>Global config, inventories, and credential references.</span></a>
+        <a class="doc-card" href="outputs.html"><strong>Outputs And Logs</strong><span>Run folders, event streams, summaries, and artifacts.</span></a>
+        <a class="doc-card" href="transports.html"><strong>Transports</strong><span>PSRP, raw WinRM, and PsExec requirements and tradeoffs.</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>Dispatch</span>
+      <span>Windows-native endpoint automation</span>
+    </div>
+  </footer>
+</body>
+</html>

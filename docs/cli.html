@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CLI Design - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="cli.html">CLI Design</a><a href="roadmap.html">Roadmap</a><a href="outputs.html">Outputs</a><a href="cli-design.md">Source Markdown</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Command Surface</p>
+    <h1>CLI Design</h1>
+    <p>`dispatch.exe` is the canonical command surface. The PowerShell module wrapper maps to these commands rather than introducing a separate engine.</p>
+    <h2>Command Tree</h2>
+    <pre><code>dispatch apply &lt;job.yml&gt;
+dispatch run ps &lt;script.ps1&gt;
+dispatch run cmd &lt;command&gt;
+dispatch run exe &lt;path&gt;
+dispatch push &lt;source&gt; --dest &lt;remote-path&gt;
+dispatch hosts list|test|validate|graph|vars
+dispatch logs list|show|tail|export|retry
+dispatch creds add|list|test|remove
+dispatch doctor
+dispatch init job|hosts|config|all
+dispatch version</code></pre>
+    <h2>Output Modes</h2>
+    <p>Rich output is for operators. JSON, NDJSON, and YAML are automation contracts.</p>
+    <h2>Source Document</h2>
+    <p>See <a href="cli-design.md">docs/cli-design.md</a>.</p>
+  </article>
+</main>
+</body>
+</html>

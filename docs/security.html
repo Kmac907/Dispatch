@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Security - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="credentials.html">Credentials</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="security.html">Security</a><a href="credentials.html">Credentials</a><a href="configuration.html">Configuration</a><a href="script-owned-payloads.html">Payloads</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Security Model</p>
+    <h1>Security</h1>
+    <h2>No Plaintext Secret Arguments</h2>
+    <p>Dispatch does not support password, SAS token, or secret values as command-line flags.</p>
+    <h2>Credential References</h2>
+    <p>Job files, host files, and CLI overrides name credential references. The global config defines provider metadata and store locations. Resolved passwords stay in memory and are not serialized.</p>
+    <h2>Script-Owned Payloads</h2>
+    <p>Scripts own Blob, HTTPS, SMB, Azure Files, and installer-media downloads. Dispatch does not stage package payloads in v1.</p>
+    <h2>Endpoint Policy</h2>
+    <p>Dispatch does not remediate endpoint services, firewall rules, delegation, WinRM listeners, TrustedHosts, admin shares, or EDR policy.</p>
+    <h2>Validation Hosts</h2>
+    <p>Real lab host names are environment-specific and must stay in ignored local files such as `workflow/build/test-hosts.yml`.</p>
+  </article>
+</main>
+</body>
+</html>

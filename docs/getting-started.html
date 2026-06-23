@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Getting Started - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="installation.html">Install</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="getting-started.html">Getting Started</a><a href="installation.html">Installation</a><a href="configuration.html">Configuration</a><a href="credentials.html">Credentials</a><a href="outputs.html">Outputs</a><a href="transports.html">Transports</a><a href="security.html">Security</a><a href="validation.html">Validation</a><a href="development.html">Development</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Operator Guide</p>
+    <h1>Getting Started</h1>
+    <p>Use this path to install Dispatch, verify the local environment, and run a first endpoint script.</p>
+    <h2>1. Install</h2>
+    <pre><code>irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex</code></pre>
+    <p>Use an elevated shell for all-users installation. Use the developer checkout flow in <a href="installation.html">Installation</a> when you want to keep source files locally.</p>
+    <h2>2. Verify Local Prerequisites</h2>
+    <pre><code>dispatch --help
+dispatch version
+dispatch doctor</code></pre>
+    <p>`doctor` checks local prerequisites and policy visibility. It does not remediate endpoint configuration.</p>
+    <h2>3. Preview A Run</h2>
+    <pre><code>dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json</code></pre>
+    <p>Planning validates local inputs and renders the execution plan before endpoint work starts.</p>
+    <h2>4. Execute</h2>
+    <pre><code>dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp</code></pre>
+    <p>Use `--transport winrm` for raw WinRM shell execution or `--transport psexec` where admin-share staging is available.</p>
+    <h2>5. Inspect Results</h2>
+    <pre><code>dispatch logs list
+dispatch logs show latest
+dispatch logs tail latest --count 50</code></pre>
+    <p>Every run writes `Admin\events.ndjson`, `Admin\results.json`, and per-target `stdout.txt` / `stderr.txt` files under `C:\ProgramData\Dispatch\Runs\&lt;run-id&gt;`.</p>
+  </article>
+</main>
+</body>
+</html>

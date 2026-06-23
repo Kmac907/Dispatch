@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Testing And Validation - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="development.html">Development</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="validation.html">Validation</a><a href="development.html">Development</a><a href="transports.html">Transports</a><a href="testing-and-validation.md">Source Markdown</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Quality</p>
+    <h1>Testing And Validation</h1>
+    <p>Dispatch uses automated tests plus least-invasive live validation when a slice touches endpoint execution.</p>
+    <h2>Automated Suite</h2>
+    <pre><code>dotnet test .\Dispatch.sln</code></pre>
+    <h2>Live Endpoint Policy</h2>
+    <p>Live endpoint validation requires one user-approved reachable Windows endpoint. Additional supplied devices that are offline or unreachable are environment availability issues, not product failures, when one approved endpoint passes.</p>
+    <h2>Host Names</h2>
+    <p>Keep lab host names in ignored local files such as `workflow/build/test-hosts.yml`, never in public docs or tracked files.</p>
+    <h2>Source Document</h2>
+    <p>See <a href="testing-and-validation.md">docs/testing-and-validation.md</a>.</p>
+  </article>
+</main>
+</body>
+</html>

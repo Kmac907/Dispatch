@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Outputs And Logs - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="outputs.html">Outputs</a><a href="script-owned-payloads.html">Payloads</a><a href="validation.html">Validation</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Run History</p>
+    <h1>Outputs And Logs</h1>
+    <p>Automation should read result files, not parse rich terminal output.</p>
+    <h2>Default Layout</h2>
+    <pre><code>C:\ProgramData\Dispatch\Runs\&lt;run-id&gt;\
+  Admin\
+    events.ndjson
+    results.json
+  Targets\
+    &lt;target&gt;\
+      stdout.txt
+      stderr.txt
+      logs\
+      artifacts\</code></pre>
+    <h2>Commands</h2>
+    <pre><code>dispatch logs list
+dispatch logs show latest
+dispatch logs tail latest --count 50
+dispatch logs export latest --dest .\exports
+dispatch logs retry latest</code></pre>
+    <h2>Source Document</h2>
+    <p>See <a href="output-and-results.md">docs/output-and-results.md</a>.</p>
+  </article>
+</main>
+</body>
+</html>

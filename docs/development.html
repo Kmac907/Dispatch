@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Development - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="validation.html">Validation</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2><a href="development.html">Development</a><a href="validation.html">Validation</a><a href="roadmap.html">Roadmap</a><a href="cli.html">CLI Design</a></aside>
+  <article class="doc-content">
+    <p class="eyebrow">Contributors</p>
+    <h1>Development</h1>
+    <h2>Clone And Build</h2>
+    <pre><code>git clone https://github.com/Kmac907/Dispatch.git
+cd Dispatch
+dotnet build .\Dispatch.sln
+dotnet test .\Dispatch.sln</code></pre>
+    <h2>Run From Source</h2>
+    <pre><code>dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor</code></pre>
+    <h2>Project Structure</h2>
+    <pre><code>src/       product code
+tests/     automated tests
+docs/      public docs and GitHub Pages site
+module/    PowerShell module package surface
+packaging/ source install and package scripts
+workflow/  ignored local planning and validation state</code></pre>
+  </article>
+</main>
+</body>
+</html>
