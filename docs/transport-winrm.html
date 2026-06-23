@@ -63,13 +63,16 @@
 <li>Chunked script upload without SMB/admin shares.</li>
 <li>Artifact collection over the WinRM channel.</li>
 <li>Process stdout/stderr and exit code capture.</li>
+<li>Credential references resolved from the global Dispatch config for upload, execution, and artifact download shells.</li>
 </ul>
+<p>Explicit credentials use the same credential reference model as PSRP. Dispatch resolves the configured provider locally, keeps the password in memory for the run, sets WSMan connection options for the raw WinRM shell session, and never accepts plaintext password command-line flags.</p>
 <h2>Differences From PSRP</h2>
 <p>Raw WinRM captures process stdout/stderr. It does not provide rich PowerShell streams such as warning, verbose, debug, and information as native stream records.</p>
 <h2>Validation Commands</h2>
 <pre><code>
 dispatch run cmd whoami --target PC001 --transport winrm --no-progress --output json
 dispatch run ps .\Smoke.ps1 --target PC001 --transport winrm --no-progress --output json
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin --no-progress --output json
 </code></pre>
 <h2>Common Failures</h2>
 <table><tbody>

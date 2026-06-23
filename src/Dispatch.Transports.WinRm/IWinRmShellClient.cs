@@ -1,3 +1,4 @@
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 
 namespace Dispatch.Transports.WinRm;
@@ -16,7 +17,8 @@ public sealed record WinRmShellCommandRequest(
     IReadOnlyList<byte[]> StandardInputFrames,
     bool CloseStandardInput = true,
     TimeSpan? ExecutionTimeout = null,
-    Action<WinRmShellTransferProgress>? ProgressReporter = null);
+    Action<WinRmShellTransferProgress>? ProgressReporter = null,
+    DispatchResolvedCredential? Credential = null);
 
 public sealed record WinRmShellTransferProgress(
     WinRmShellTransferKind Kind,

@@ -15,13 +15,13 @@ Each transport implements the same core model: probe, prepare, execute, collect 
 | Transport | Use when | Tradeoff |
 | --- | --- | --- |
 | `psrp` | You want PowerShell remoting semantics, streams, and credential handoff support. | Requires PowerShell remoting and permitted session configuration. |
-| `winrm` | You want raw WS-Management shell/command execution without SMB staging. | Process stdout/stderr only; no rich PowerShell stream model. |
+| `winrm` | You want raw WS-Management shell/command execution and credential handoff without SMB staging. | Process stdout/stderr only; no rich PowerShell stream model. |
 | `psexec` | You need PsExec behavior and SMB/admin shares are available. | Depends on admin shares, PsExec binary/policy, and endpoint security controls. |
 
 ## Current Implementation State
 
-- PSRP: implemented for command/script execution, stream records, artifacts, and current credential providers on PSRP.
-- Raw WinRM: implemented for command/script execution, remote upload, artifacts, and timeout/failure classification.
+- PSRP: implemented for command/script execution, stream records, artifacts, and current credential providers.
+- Raw WinRM: implemented for command/script execution, remote upload, artifacts, current credential providers, and timeout/failure classification.
 - PsExec: implemented for direct execution plumbing and probes, but further PsExec-first expansion depends on environments where admin-share staging is available.
 
 ## Shared Requirements

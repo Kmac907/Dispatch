@@ -57,13 +57,13 @@
 <table><tbody>
 <tr><th>Transport</th><th>Use when</th><th>Tradeoff</th></tr>
 <tr><td><code>psrp</code></td><td>You want PowerShell remoting semantics, streams, and credential handoff support.</td><td>Requires PowerShell remoting and permitted session configuration.</td></tr>
-<tr><td><code>winrm</code></td><td>You want raw WS-Management shell/command execution without SMB staging.</td><td>Process stdout/stderr only; no rich PowerShell stream model.</td></tr>
+<tr><td><code>winrm</code></td><td>You want raw WS-Management shell/command execution and credential handoff without SMB staging.</td><td>Process stdout/stderr only; no rich PowerShell stream model.</td></tr>
 <tr><td><code>psexec</code></td><td>You need PsExec behavior and SMB/admin shares are available.</td><td>Depends on admin shares, PsExec binary/policy, and endpoint security controls.</td></tr>
 </tbody></table>
 <h2>Current Implementation State</h2>
 <ul>
-<li>PSRP: implemented for command/script execution, stream records, artifacts, and current credential providers on PSRP.</li>
-<li>Raw WinRM: implemented for command/script execution, remote upload, artifacts, and timeout/failure classification.</li>
+<li>PSRP: implemented for command/script execution, stream records, artifacts, and current credential providers.</li>
+<li>Raw WinRM: implemented for command/script execution, remote upload, artifacts, current credential providers, and timeout/failure classification.</li>
 <li>PsExec: implemented for direct execution plumbing and probes, but further PsExec-first expansion depends on environments where admin-share staging is available.</li>
 </ul>
 <h2>Shared Requirements</h2>

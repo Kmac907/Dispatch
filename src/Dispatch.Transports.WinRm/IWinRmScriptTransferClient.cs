@@ -1,3 +1,4 @@
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 
@@ -14,7 +15,8 @@ public sealed record WinRmScriptTransferRequest(
     string Target,
     string RemoteScriptPath,
     ScriptTransferPlan TransferPlan,
-    Action<WinRmUploadProgress>? ProgressReporter = null);
+    Action<WinRmUploadProgress>? ProgressReporter = null,
+    DispatchResolvedCredential? Credential = null);
 
 public sealed record WinRmUploadProgress(
     string Target,

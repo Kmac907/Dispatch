@@ -91,7 +91,7 @@ public sealed class FoundationContractTests
         Assert.False(descriptor.Capabilities.SupportsNativeFileCopy);
         Assert.True(descriptor.Capabilities.SupportsStreamedFileTransfer);
         Assert.False(descriptor.Capabilities.SupportsRunAsSystem);
-        Assert.False(descriptor.Capabilities.SupportsExplicitCredential);
+        Assert.True(descriptor.Capabilities.SupportsExplicitCredential);
     }
 
     [Fact]

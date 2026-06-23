@@ -275,12 +275,12 @@ public sealed class DispatchCliApplication(
             return plan;
         }
 
-        if (plan.Job.Transport != TransportKind.Psrp)
+        if (plan.Job.Transport is not (TransportKind.Psrp or TransportKind.WinRm))
         {
             SpectreConsoleRenderer.RenderError(
                 Console.Error,
                 "Dispatch Credential Handoff Unsupported",
-                $"Runtime credential handoff is currently implemented for PSRP only. Transport '{plan.Job.Transport.ToDispatchString()}' cannot use credential reference '{credentialReferences[0]}'.");
+                $"Runtime credential handoff is currently implemented for PSRP and raw WinRM only. Transport '{plan.Job.Transport.ToDispatchString()}' cannot use credential reference '{credentialReferences[0]}'.");
             return null;
         }
 

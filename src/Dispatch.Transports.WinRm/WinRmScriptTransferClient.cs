@@ -39,10 +39,11 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
                             request.Target,
                             request.RemoteScriptPath,
                             progress.FramesTransferred ?? 0,
-                            progress.TotalFrames ?? request.TransferPlan.ChunkCount,
-                            progress.BytesTransferred,
-                            progress.TotalBytes ?? totalFrameBytes));
-                    }),
+                                progress.TotalFrames ?? request.TransferPlan.ChunkCount,
+                                progress.BytesTransferred,
+                                progress.TotalBytes ?? totalFrameBytes));
+                    },
+                    Credential: request.Credential),
                 cancellationToken)
             .ConfigureAwait(false);
 

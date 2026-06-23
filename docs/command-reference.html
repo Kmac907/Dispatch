@@ -91,6 +91,7 @@ dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm|
 dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
 dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp --credential prod-admin
 dispatch run cmd whoami --target PC001 --transport winrm --output json
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin --output json
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 </code></pre>
 <p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
@@ -126,7 +127,7 @@ dispatch creds add &lt;name&gt; [--force]
 dispatch creds test &lt;name&gt;
 dispatch creds remove &lt;name&gt;
 </code></pre>
-<p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff and non-PSRP credential handoff are planned v1.</p>
+<p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff and PsExec credential handoff are planned v1.</p>
 <p>Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.</p>
 <p>Examples:</p>
 <pre><code>
@@ -134,6 +135,7 @@ dispatch creds list
 dispatch creds add helpdesk-local
 dispatch creds test kv-prod-admin
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --credential prod-admin
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 </code></pre>
 <h2>Doctor</h2>
 <pre><code>

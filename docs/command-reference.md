@@ -57,6 +57,7 @@ Examples:
 dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
 dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp --credential prod-admin
 dispatch run cmd whoami --target PC001 --transport winrm --output json
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin --output json
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 ```
 
@@ -107,7 +108,7 @@ dispatch creds test <name>
 dispatch creds remove <name>
 ```
 
-Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP credential resolution. PowerShell-wrapper `PSCredential` handoff and non-PSRP credential handoff are planned v1.
+Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper `PSCredential` handoff and PsExec credential handoff are planned v1.
 
 Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.
 
@@ -118,6 +119,7 @@ dispatch creds list
 dispatch creds add helpdesk-local
 dispatch creds test kv-prod-admin
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --credential prod-admin
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 ```
 
 ## Doctor

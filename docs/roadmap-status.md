@@ -10,7 +10,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Deterministic target resolution.
 - Local run folder layout.
 - Direct PsExec execution plumbing and guardrails.
-- Raw WinRM transport for command/script execution.
+- Raw WinRM transport for command/script execution, remote upload, artifacts, and supported credential providers.
 - PSRP transport for command/script execution, streams, artifacts, and supported credential providers.
 - Canonical `Admin\events.ndjson` and reduced `Admin\results.json`.
 - Per-target `stdout.txt` / `stderr.txt`.
@@ -19,14 +19,14 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Structured output modes on current paths.
 - Inventory subset for current run paths.
 - Logs commands over local run history.
-- Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP.
+- Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
 
 ## Partial
 
 - `doctor` exists but the full v1 transport-aware diagnostics surface is still expanding.
 - `hosts`, `push`, and `init` command groups are registered/planned but not fully implemented.
 - Inventory support covers the v1 subset needed by current run paths.
-- Credential handoff is not complete for every transport/provider combination.
+- Credential handoff is not complete for every transport/provider combination; PsExec, PSCredential wrapper handoff, and YAML job credential validation remain planned.
 
 ## Planned Next
 

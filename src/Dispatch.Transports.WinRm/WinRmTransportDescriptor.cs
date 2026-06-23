@@ -19,7 +19,7 @@ public sealed class WinRmTransportDescriptor : ITransportDescriptor
         SupportsStreamedFileTransfer: true,
         SupportsPowerShellStreams: false,
         SupportsCurrentUser: true,
-        SupportsExplicitCredential: false,
+        SupportsExplicitCredential: true,
         SupportsRunAsSystem: false,
         SupportsCredentialDelegation: false);
 }

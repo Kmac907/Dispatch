@@ -1,6 +1,8 @@
 using System.Text;
 using System.Xml.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
 
 namespace Dispatch.Transports.WinRm;
@@ -34,15 +36,17 @@ public sealed class WinRmShellClient : IWinRmShellClient
 
         try
         {
-            var session = OpenShell(request.Target, request.ExecutionTimeout, out var shellId, out var scheme, out var port);
+            var session = OpenShell(request.Target, request.ExecutionTimeout, request.Credential, out var shellId, out var scheme, out var port);
             try
             {
                 metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["scheme"] = scheme,
                     ["port"] = port.ToString(),
-                    ["shellResourceUri"] = ShellResourceUri
+                    ["shellResourceUri"] = ShellResourceUri,
+                    ["credentialMode"] = request.Credential is null ? "implicit" : "explicit"
                 };
+                AddCredentialMetadata(metadata, request.Credential);
                 var commandId = CreateCommand(session.Automation, session.Session, shellId, request.Executable, request.Arguments);
                 SendStandardInput(session.Automation, session.Session, shellId, commandId, request.StandardInputFrames, request.CloseStandardInput, request.ProgressReporter);
                 var receive = ReceiveUntilDone(session.Automation, session.Session, shellId, commandId, effectiveCancellationToken, request.ProgressReporter);
@@ -100,7 +104,13 @@ public sealed class WinRmShellClient : IWinRmShellClient
         }
     }
 
-    private static OpenShellSession OpenShell(string target, TimeSpan? executionTimeout, out string shellId, out string scheme, out int port)
+    private static OpenShellSession OpenShell(
+        string target,
+        TimeSpan? executionTimeout,
+        DispatchResolvedCredential? credential,
+        out string shellId,
+        out string scheme,
+        out int port)
     {
         var failures = new List<string>();
         var failureCategories = new List<FailureCategory>();
@@ -114,14 +124,18 @@ public sealed class WinRmShellClient : IWinRmShellClient
                     ?? throw new InvalidOperationException("WSMan.Automation COM object is not available on this machine."))
                     ?? throw new InvalidOperationException("Failed to create WSMan.Automation COM object.");
                 var flags = (int)automation.SessionFlagUseNegotiate()
-                            | (int)automation.SessionFlagAllowNegotiateImplicitCredentials()
                             | (int)automation.SessionFlagUTF8();
+                if (credential is null)
+                {
+                    flags |= (int)automation.SessionFlagAllowNegotiateImplicitCredentials();
+                }
                 if (attempt.UseSsl)
                 {
                     flags |= (int)automation.SessionFlagUseSsl();
                 }
 
                 dynamic connectionOptions = automation.CreateConnectionOptions();
+                ApplyCredential(connectionOptions, credential);
                 dynamic session = automation.CreateSession(attempt.ConnectionUri, flags, connectionOptions);
                 session.Timeout = GetSessionTimeoutMilliseconds(executionTimeout);
                 shellId = CreateShell(session, attempt.ConnectionUri);
@@ -175,6 +189,48 @@ public sealed class WinRmShellClient : IWinRmShellClient
                 ["shellCreateResponseXml"] = WinRmShellResponseParser.GetDiagnosticPayload(response),
                 ["shellIdSource"] = source
             });
+    }
+
+    private static void ApplyCredential(dynamic connectionOptions, DispatchResolvedCredential? credential)
+    {
+        if (credential is null)
+        {
+            return;
+        }
+
+        connectionOptions.UserName = credential.UserName;
+        connectionOptions.Password = SecureStringToPlainText(credential.Password);
+    }
+
+    private static string SecureStringToPlainText(System.Security.SecureString password)
+    {
+        var pointer = IntPtr.Zero;
+        try
+        {
+            pointer = Marshal.SecureStringToBSTR(password);
+            return Marshal.PtrToStringBSTR(pointer) ?? string.Empty;
+        }
+        finally
+        {
+            if (pointer != IntPtr.Zero)
+            {
+                Marshal.ZeroFreeBSTR(pointer);
+            }
+        }
+    }
+
+    private static void AddCredentialMetadata(
+        IDictionary<string, string> metadata,
+        DispatchResolvedCredential? credential)
+    {
+        if (credential is null)
+        {
+            return;
+        }
+
+        metadata["credentialReference"] = credential.ReferenceName;
+        metadata["credentialProvider"] = credential.ProviderName;
+        metadata["credentialUserName"] = credential.UserName;
     }
 
     private static string CreateCommand(

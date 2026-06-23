@@ -37,6 +37,13 @@ public sealed class WinRmScriptExecutor(
             }
         }
 
+        if (request.Credential is not null)
+        {
+            metadata["credentialReference"] = request.Credential.ReferenceName;
+            metadata["credentialProvider"] = request.Credential.ProviderName;
+            metadata["credentialUserName"] = request.Credential.UserName;
+        }
+
         if (transferPlan is not null)
         {
             metadata["transferMode"] = transferPlan.Mode.ToString();
@@ -114,7 +121,8 @@ public sealed class WinRmScriptExecutor(
                                 UnitLabel: "chunks",
                                 CompletedBytes: progress.BytesUploaded,
                                 TotalBytes: progress.TotalBytes)));
-                    }),
+                    },
+                    request.Credential),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -158,7 +166,8 @@ public sealed class WinRmScriptExecutor(
                     command.Executable,
                     command.Arguments,
                     [],
-                    ExecutionTimeout: request.Plan.Job.TimeoutPolicy.ExecutionTimeout),
+                    ExecutionTimeout: request.Plan.Job.TimeoutPolicy.ExecutionTimeout,
+                    Credential: request.Credential),
                 cancellationToken)
             .ConfigureAwait(false);
 

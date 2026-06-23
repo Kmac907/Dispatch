@@ -19,6 +19,9 @@ Raw WinRM supports:
 - Chunked script upload without SMB/admin shares.
 - Artifact collection over the WinRM channel.
 - Process stdout/stderr and exit code capture.
+- Credential references resolved from the global Dispatch config for upload, execution, and artifact download shells.
+
+Explicit credentials use the same credential reference model as PSRP. Dispatch resolves the configured provider locally, keeps the password in memory for the run, sets WSMan connection options for the raw WinRM shell session, and never accepts plaintext password command-line flags.
 
 ## Differences From PSRP
 
@@ -29,6 +32,7 @@ Raw WinRM captures process stdout/stderr. It does not provide rich PowerShell st
 ```powershell
 dispatch run cmd whoami --target PC001 --transport winrm --no-progress --output json
 dispatch run ps .\Smoke.ps1 --target PC001 --transport winrm --no-progress --output json
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin --no-progress --output json
 ```
 
 ## Common Failures

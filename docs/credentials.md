@@ -94,11 +94,12 @@ DPAPI file enrollment disables inherited ACLs on the protected file. The file re
 
 ```powershell
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --credential prod-admin
+dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks
 dispatch apply .\job.yml --credential breakglass-admin
 ```
 
-Plan and dry-run paths validate references but do not prompt, decrypt DPAPI files, read Windows Credential Manager targets, or read Key Vault secrets.
+Runtime credential resolution is implemented for PSRP and raw WinRM execution. Plan and dry-run paths validate references but do not prompt, decrypt DPAPI files, read Windows Credential Manager targets, or read Key Vault secrets.
 
 ## Azure Key Vault Auth
 

@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Text;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 
@@ -89,6 +90,7 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
         long? totalArchiveBytes = null;
         var script = BuildArtifactDownloadScript(remoteFolder);
         var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+        var credential = ResolveTargetCredential(plan, target);
         var result = await shellClient.ExecuteAsync(
                 new WinRmShellCommandRequest(
                     target.Target.Name,
@@ -132,7 +134,8 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
                                     CompletedBytes: completedBytes,
                                     TotalBytes: archiveBytes)));
                         }
-                    }),
+                    },
+                    Credential: credential),
                 cancellationToken)
             .ConfigureAwait(false);
 
@@ -276,6 +279,16 @@ finally {
         policy.Paths is { Count: > 0 }
             ? policy.Paths
             : ["logs", "artifacts"];
+
+    private static DispatchResolvedCredential? ResolveTargetCredential(ExecutionPlan plan, TargetExecution target)
+    {
+        var reference = target.Target.CredentialReference;
+        return string.IsNullOrWhiteSpace(reference)
+            ? null
+            : plan.RuntimeCredentials.TryGetValue(reference.Trim(), out var credential)
+                ? credential
+                : null;
+    }
 
     private static string CombineWindowsPath(params string[] parts)
     {

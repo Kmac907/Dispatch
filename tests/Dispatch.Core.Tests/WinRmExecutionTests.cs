@@ -1,3 +1,4 @@
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Hosting;
 using Dispatch.Core.Models;
@@ -6,6 +7,7 @@ using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.IO.Compression;
@@ -586,6 +588,26 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ScriptExecutorPassesResolvedCredentialToUploadAndExecutionShells()
+    {
+        using var credential = CreateResolvedCredential("prod-admin");
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.SucceededResult());
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateScriptExecutionRequest(credential: credential),
+            CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Equal("prod-admin", result.Metadata?["credentialReference"]);
+        Assert.Equal("prompt", result.Metadata?["credentialProvider"]);
+        Assert.Equal(@"SCF\prod.admin", result.Metadata?["credentialUserName"]);
+        Assert.Same(credential, Assert.Single(transferClient.Requests).Credential);
+        Assert.Same(credential, Assert.Single(shellClient.Requests).Credential);
+    }
+
+    [Fact]
     public async Task ScriptExecutorExecutesCommandPayloadWithoutUploadPlan()
     {
         var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
@@ -613,6 +635,24 @@ public sealed class WinRmExecutionTests
         var shellRequest = Assert.Single(shellClient.Requests);
         Assert.Equal("cmd.exe", shellRequest.Executable);
         Assert.Equal(["/c", "whoami"], shellRequest.Arguments);
+    }
+
+    [Fact]
+    public async Task ScriptExecutorPassesResolvedCredentialToDirectCommandShell()
+    {
+        using var credential = CreateResolvedCredential("prod-admin");
+        var transferClient = new RecordingScriptTransferClient(WinRmScriptTransferResult.Success());
+        var shellClient = new RecordingShellClient(WinRmShellCommandResult.SucceededResult(stdout: "scf\\admin"));
+        var executor = new WinRmScriptExecutor(transferClient, shellClient);
+
+        var result = await executor.ExecuteScriptAsync(
+            CreateCommandExecutionRequest("whoami", "cmd", credential: credential),
+            CancellationToken.None);
+
+        Assert.Equal(FailureCategory.None, result.FailureCategory);
+        Assert.Equal("prod-admin", result.Metadata?["credentialReference"]);
+        Assert.Empty(transferClient.Requests);
+        Assert.Same(credential, Assert.Single(shellClient.Requests).Credential);
     }
 
     [Fact]
@@ -994,9 +1034,65 @@ public sealed class WinRmExecutionTests
         }
     }
 
+    [Fact]
+    public async Task WinRmArtifactCollectorPassesResolvedCredentialToDownloadShell()
+    {
+        using var credential = CreateResolvedCredential("prod-admin");
+        var remoteFolder = @"C:\ProgramData\Dispatch\Runs\run-001\logs";
+        var shellClient = new RecordingShellClient(
+            WinRmShellCommandResult.SucceededResult(stdout: CreateZipBase64(("install.log", "ok"))));
+        var collector = new WinRmArtifactCollector(shellClient);
+        var targetRoot = Path.Combine(Path.GetTempPath(), $"dispatch-artifacts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(targetRoot);
+        var target = new TargetExecution(
+            "run-001",
+            new TargetSpec("PC001", CredentialReference: "prod-admin"),
+            TargetExecutionState.Pending,
+            targetRoot,
+            null,
+            remoteFolder);
+        var plan = new ExecutionPlan(
+            RunId: "run-001",
+            CreatedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
+            Job: new DispatchJob(
+                "run-001",
+                [new TargetSpec("PC001", CredentialReference: "prod-admin")],
+                new ScriptPayload(@"C:\Scripts\Fix.ps1", []),
+                TransportKind.WinRm,
+                new ExecutionContextOptions(),
+                new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", true),
+                new TimeoutPolicy(),
+                new RetryPolicy(),
+                [0],
+                new ArtifactPolicy(["logs"]),
+                new ResultPolicy(targetRoot)),
+            Targets: [target],
+            DryRun: false,
+            RemoteRunRoot: @"C:\ProgramData\Dispatch\Runs\run-001")
+        {
+            RuntimeCredentials = new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["prod-admin"] = credential
+            }
+        };
+
+        try
+        {
+            var result = await collector.CollectAsync(plan, target, CancellationToken.None);
+
+            Assert.Equal("collected", result.Status);
+            Assert.Same(credential, Assert.Single(shellClient.Requests).Credential);
+        }
+        finally
+        {
+            Directory.Delete(targetRoot, recursive: true);
+        }
+    }
+
     private static TransportScriptExecutionRequest CreateScriptExecutionRequest(
         IReadOnlyList<string>? scriptArguments = null,
-        TimeSpan? executionTimeout = null)
+        TimeSpan? executionTimeout = null,
+        DispatchResolvedCredential? credential = null)
     {
         var arguments = scriptArguments ?? [];
         var target = new TargetExecution(
@@ -1042,13 +1138,14 @@ public sealed class WinRmExecutionTests
             Succeeded: true,
             TransferPlan: transferPlan);
 
-        return new TransportScriptExecutionRequest(plan, target, preparation);
+        return new TransportScriptExecutionRequest(plan, target, preparation, Credential: credential);
     }
 
     private static TransportScriptExecutionRequest CreateCommandExecutionRequest(
         string commandLine,
         string shell,
-        string? workingDirectory = null)
+        string? workingDirectory = null,
+        DispatchResolvedCredential? credential = null)
     {
         var target = new TargetExecution(
             RunId: "run-001",
@@ -1083,7 +1180,19 @@ public sealed class WinRmExecutionTests
             AdminShareScriptPath: null,
             Succeeded: true);
 
-        return new TransportScriptExecutionRequest(plan, target, preparation);
+        return new TransportScriptExecutionRequest(plan, target, preparation, Credential: credential);
+    }
+
+    private static DispatchResolvedCredential CreateResolvedCredential(string referenceName)
+    {
+        var password = new SecureString();
+        foreach (var character in "secret-value")
+        {
+            password.AppendChar(character);
+        }
+
+        password.MakeReadOnly();
+        return new DispatchResolvedCredential(referenceName, @"SCF\prod.admin", "prompt", password);
     }
 
     private static TransportEndpointProbeRequest CreateProbeRequest(string targetName)

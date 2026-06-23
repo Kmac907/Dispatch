@@ -2027,7 +2027,55 @@ hosts:
     }
 
     [Fact]
-    public async Task RunRouteRejectsRuntimeCredentialForNonPsrpTransport()
+    public async Task RunRouteResolvesRuntimeCredentialBeforeWinRmExecution()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var provider = new CapturingCredentialProvider(available: true);
+        using var credential = CreateResolvedCredential("prod-admin");
+        var runtimeResolver = new RecordingRuntimeCredentialResolver(
+            new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["prod-admin"] = credential
+            });
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            executor: executor,
+            displayMode: DispatchRunDisplayMode.AppendOnly,
+            credentialProvider: provider,
+            runtimeCredentialResolver: runtimeResolver);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--credential",
+                    "prod-admin",
+                    "--no-progress"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Exit {exitCode}. Stdout: {output}. Stderr: {error}");
+            Assert.Equal(["prod-admin"], Assert.Single(runtimeResolver.Requests));
+            Assert.NotNull(executor.LastPlan);
+            Assert.Same(credential, executor.LastPlan!.RuntimeCredentials["prod-admin"]);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunRouteRejectsRuntimeCredentialForUnsupportedTransport()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
@@ -2048,7 +2096,7 @@ hosts:
                     "--target",
                     "PC001",
                     "--transport",
-                    "winrm",
+                    "psexec",
                     "--credential",
                     "prod-admin",
                     "--no-progress"
@@ -2057,6 +2105,7 @@ hosts:
 
             Assert.Equal(1, exitCode);
             Assert.Contains("Dispatch Credential Handoff Unsupported", error);
+            Assert.Contains("PSRP and raw WinRM", error);
             Assert.Empty(runtimeResolver.Requests);
         }
         finally

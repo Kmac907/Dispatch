@@ -55,7 +55,7 @@
 <li>Deterministic target resolution.</li>
 <li>Local run folder layout.</li>
 <li>Direct PsExec execution plumbing and guardrails.</li>
-<li>Raw WinRM transport for command/script execution.</li>
+<li>Raw WinRM transport for command/script execution, remote upload, artifacts, and supported credential providers.</li>
 <li>PSRP transport for command/script execution, streams, artifacts, and supported credential providers.</li>
 <li>Canonical <code>Admin\events.ndjson</code> and reduced <code>Admin\results.json</code>.</li>
 <li>Per-target <code>stdout.txt</code> / <code>stderr.txt</code>.</li>
@@ -64,14 +64,14 @@
 <li>Structured output modes on current paths.</li>
 <li>Inventory subset for current run paths.</li>
 <li>Logs commands over local run history.</li>
-<li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP.</li>
+<li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
 </ul>
 <h2>Partial</h2>
 <ul>
 <li><code>doctor</code> exists but the full v1 transport-aware diagnostics surface is still expanding.</li>
 <li><code>hosts</code>, <code>push</code>, and <code>init</code> command groups are registered/planned but not fully implemented.</li>
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
-<li>Credential handoff is not complete for every transport/provider combination.</li>
+<li>Credential handoff is not complete for every transport/provider combination; PsExec, PSCredential wrapper handoff, and YAML job credential validation remain planned.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>
