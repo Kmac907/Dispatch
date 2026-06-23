@@ -243,8 +243,13 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     settings.SkipTags,
                     settings.Serial,
                     settings.Concurrency,
+                    settings.Diff,
                     settings.Output,
                     settings.NoColor,
+                    settings.NoProgress,
+                    settings.Quiet,
+                    settings.Verbose,
+                    settings.Trace,
                     cancellationToken)
                 .ConfigureAwait(false);
         }
@@ -450,11 +455,26 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         [CommandOption("--concurrency <n>")]
         public int? Concurrency { get; init; }
 
+        [CommandOption("--diff")]
+        public bool Diff { get; init; }
+
         [CommandOption("--output <mode>")]
         public string? Output { get; init; }
 
         [CommandOption("--no-color")]
         public bool NoColor { get; init; }
+
+        [CommandOption("--no-progress")]
+        public bool NoProgress { get; init; }
+
+        [CommandOption("--quiet")]
+        public bool Quiet { get; init; }
+
+        [CommandOption("-v|--verbose")]
+        public bool Verbose { get; init; }
+
+        [CommandOption("--trace")]
+        public bool Trace { get; init; }
     }
 
     private sealed class PushSettings : CommandSettings

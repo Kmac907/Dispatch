@@ -1321,10 +1321,11 @@ Current implementation boundary:
 - `--serial <n>` and `--concurrency <n>` override `strategy.serial` for that same subset and cannot be used together.
 - Relative `ps` task paths resolve relative to the job file.
 - Task-level `tags` are supported on the current single `ps` task, and `--tags <tags>` / `--skip-tags <tags>` filter that task before planning or endpoint work.
-- `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, and `--no-color` are accepted on the current apply plan, check, and execution paths.
+- `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
+- `--diff` is accepted as an explicit apply setting but fails before planning until the diff behavior slice is implemented.
 - For the current one-`ps`-task apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
 - Unsupported task types, multiple tasks, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
-- Multi-task jobs, non-`ps` task execution, `--diff`, remaining common output/log options, and richer job behavior remain later `6.5` work.
+- Multi-task jobs, non-`ps` task execution, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
 
 Non-goals:
 - No full Ansible compatibility.

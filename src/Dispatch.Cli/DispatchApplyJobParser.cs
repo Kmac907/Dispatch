@@ -74,6 +74,12 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        if (options.Diff)
+        {
+            error = "--diff is planned for apply but is not implemented in this apply slice.";
+            return false;
+        }
+
         if (string.IsNullOrWhiteSpace(jobPath))
         {
             error = "apply requires <job.yml>.";
@@ -153,12 +159,12 @@ internal static class DispatchApplyJobParser
             ArtifactPaths: [],
             CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
             RunAsSystem: false,
-            NoDashboard: validateOnly,
+            NoDashboard: validateOnly || options.NoProgress,
             OutputMode: options.OutputMode,
             NoColor: options.NoColor,
-            Quiet: false,
-            Verbose: false,
-            Trace: false);
+            Quiet: options.Quiet,
+            Verbose: options.Verbose || options.Trace,
+            Trace: options.Trace);
         return true;
     }
 
@@ -730,8 +736,13 @@ internal static class DispatchApplyJobParser
         string? SkipTags,
         int? Serial,
         int? Concurrency,
+        bool Diff,
         DispatchOutputMode OutputMode,
-        bool NoColor);
+        bool NoColor,
+        bool NoProgress,
+        bool Quiet,
+        bool Verbose,
+        bool Trace);
 
     private sealed record ParsedApplyJob
     {

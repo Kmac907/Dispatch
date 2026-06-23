@@ -390,8 +390,13 @@ public sealed class DispatchCliApplication(
         string? skipTags,
         int? serial,
         int? concurrency,
+        bool diff,
         string? outputValue,
         bool noColor,
+        bool noProgress,
+        bool quiet,
+        bool verbose,
+        bool trace,
         CancellationToken cancellationToken)
     {
         if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
@@ -415,8 +420,13 @@ public sealed class DispatchCliApplication(
                     SkipTags: skipTags,
                     Serial: serial,
                     Concurrency: concurrency,
+                    Diff: diff,
                     OutputMode: outputMode,
-                    NoColor: noColor),
+                    NoColor: noColor,
+                    NoProgress: noProgress,
+                    Quiet: quiet,
+                    Verbose: verbose,
+                    Trace: trace),
                 new DispatchRunCommandParser.DispatchRunAmbientConfig(
                     options.Value.Inventory,
                     options.Value.Target,

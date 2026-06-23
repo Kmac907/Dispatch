@@ -63,6 +63,7 @@ vars:
   package: example
 tasks:
   - ps: .\Fix.ps1
+    tags: [prod, fix]
 </code></pre>
 <p>Supported top-level fields:</p>
 <ul>
@@ -117,8 +118,9 @@ tasks:
 <li><code>credential</code></li>
 <li><code>defaults.expected_exit_codes</code></li>
 <li><code>strategy.serial</code></li>
+<li>task-level <code>tags</code> on the single supported <code>ps</code> task</li>
 </ul>
-<p>Relative <code>ps</code> task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as <code>dispatch run ps</code>. <code>--check</code> validates the supported job subset and renders the resolved plan without endpoint work; it does not simulate script side effects. <code>--serial &lt;n&gt;</code> or <code>--concurrency &lt;n&gt;</code> overrides <code>strategy.serial</code> for the supported apply subset. Multiple tasks and other planned task types remain later <code>6.5</code> work.</p>
+<p>Relative <code>ps</code> task paths resolve from the job file directory. Execution reuses the same planner, credential resolution, executor, live-rendering, and result-output path as <code>dispatch run ps</code>. <code>--check</code> validates the supported job subset and renders the resolved plan without endpoint work; it does not simulate script side effects. <code>--tags &lt;tags&gt;</code> and <code>--skip-tags &lt;tags&gt;</code> filter the single supported task by comma-separated task tags before planning or endpoint work. <code>--serial &lt;n&gt;</code> or <code>--concurrency &lt;n&gt;</code> overrides <code>strategy.serial</code> for the supported apply subset. <code>--no-progress</code>, <code>--quiet</code>, <code>--verbose</code>, and <code>--trace</code> follow the same current output/log behavior as <code>dispatch run ps</code>; <code>--diff</code> is recognized but fails before planning until the diff behavior slice is implemented. Multiple tasks and other planned task types remain later <code>6.5</code> work.</p>
 <p><code>job.vars</code> is only an inline runtime/task-input bag. Transport selection must use the top-level <code>transport</code> field, and separate vars-file concepts are rejected before endpoint work.</p>
 <h2>Secret Boundary</h2>
 <p>Job files may contain credential reference names, but must not contain passwords, tokens, SAS values, or secret material.</p>

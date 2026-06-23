@@ -63,18 +63,26 @@ vars:
 
 tasks:
   - ps: .\Fix.ps1
+    tags: [prod, fix]
 </code></pre>
 <p>Run:</p>
 <pre><code>
 dispatch apply .\job.yml --plan --output json
 dispatch apply .\job.yml --check --output json
 dispatch apply .\job.yml --serial 10
+dispatch apply .\job.yml --inventory .\hosts.yml --target kiosks --exclude KIOSK03 --plan
+dispatch apply .\job.yml --tags prod --skip-tags staging --plan
+dispatch apply .\job.yml --output ndjson --trace
+dispatch apply .\job.yml --plan --quiet
 dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 </code></pre>
 <p>The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by <code>dispatch run ps</code>.</p>
 <p><code>--check</code> validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.</p>
 <p><code>--serial &lt;n&gt;</code> or <code>--concurrency &lt;n&gt;</code> overrides <code>strategy.serial</code> for the supported apply subset. They are aliases for the same batch-size control and cannot be used together.</p>
+<p><code>--target &lt;selector&gt;</code> overrides the job <code>hosts</code> selector for the current run. <code>--inventory &lt;path&gt;</code> overrides the configured inventory path. <code>--exclude &lt;selector&gt;</code> filters the selected targets after the job or CLI target selector is resolved.</p>
+<p>Task tags are optional on the current single <code>ps</code> task. <code>--tags &lt;tags&gt;</code> selects the task only when at least one tag matches, and <code>--skip-tags &lt;tags&gt;</code> excludes it when any tag matches. If filters remove the only supported task, validation fails before endpoint work.</p>
+<p><code>--no-progress</code> disables live progress for apply execution, <code>--quiet</code> suppresses rich non-error output, and <code>--verbose</code> / <code>--trace</code> control NDJSON diagnostic detail. <code>--diff</code> is recognized but fails before planning until the diff behavior slice is implemented.</p>
 <h2>Job Credential</h2>
 <p><code>credential</code> selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.</p>
 <h2>Job Variables</h2>

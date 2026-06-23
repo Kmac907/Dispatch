@@ -2496,6 +2496,123 @@ credentials:
     }
 
     [Fact]
+    public async Task ApplyPlanQuietSuppressesRichOutputAndAcceptsDiagnosticFlags()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--quiet", "--no-color", "--no-progress", "--verbose", "--trace"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Equal(string.Empty, output);
+            Assert.Equal(string.Empty, error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.DryRun);
+            Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyNdjsonTraceOutputIncludesEventDetails()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new SucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--output", "ndjson", "--trace"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            var events = ParseNdjson(output);
+            var plan = Assert.Single(events, static document => document.RootElement.GetProperty("type").GetString() == "plan");
+            Assert.Equal("trace", plan.RootElement.GetProperty("details").GetProperty("verbosity").GetString());
+            Assert.Equal(@"C:\Dispatch\Tests\run-test\Admin\results.json", plan.RootElement.GetProperty("details").GetProperty("resultsJsonPath").GetString());
+            Assert.Equal(@"C:\Dispatch\Tests\run-test\Admin\events.ndjson", plan.RootElement.GetProperty("details").GetProperty("eventsNdjsonPath").GetString());
+            var progress = events.First(static document => document.RootElement.GetProperty("type").GetString() == "progress");
+            Assert.Equal("trace", progress.RootElement.GetProperty("details").GetProperty("verbosity").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyDiffFailsBeforePlanningUntilDiffSlice()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--diff"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("--diff", error);
+            Assert.Contains("not implemented", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ApplyPlanSelectsTaggedScriptTaskWhenIncludeTagMatches()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
