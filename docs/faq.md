@@ -1,0 +1,29 @@
+# FAQ
+
+## Why did Dispatch choose this transport?
+
+Transport comes from explicit CLI options, job files, inventory metadata, global config, then built-in defaults. Dispatch should not silently fall back to another transport.
+
+## Why did plan pass but run fail?
+
+Planning validates local inputs and supported combinations. The actual run can still fail because endpoints are offline, remoting is disabled, policy blocks access, credentials fail, or a script returns an unexpected exit code.
+
+## Why can't I pass a password directly?
+
+Command-line secrets are visible to process inspection, shell history, logs, and automation wrappers. Dispatch uses credential references and provider-backed resolution instead.
+
+## Why did target selection not match what I expected?
+
+Check inventory groups, host names, selectors, excludes, and de-duplication. Use `hosts list`, `hosts validate`, or `--plan` where available to inspect the resolved set before execution.
+
+## Why was a host skipped?
+
+A host can be skipped or fail early during resolution, probe, payload preparation, credential handoff, or transport setup. Check `Admin\results.json`, `Admin\events.ndjson`, and the target failure category.
+
+## Why do I have stdout but no artifacts?
+
+`stdout.txt` and `stderr.txt` are captured process streams. Artifacts are files created by the script and copied back. If the script did not create `logs\` or `artifacts\`, artifact status can be `not-found`.
+
+## Does Dispatch configure WinRM or firewall rules?
+
+No. Dispatch reports endpoint readiness and failures. Endpoint services and policy remain operator-owned.

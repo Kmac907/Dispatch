@@ -2,30 +2,88 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Development - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="validation.html">Validation</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="development.html">Development</a><a href="validation.html">Validation</a><a href="cli.html">CLI Reference</a><a href="powershell-module.html">PowerShell Module</a></aside>
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
   <article class="doc-content">
-    <p class="eyebrow">Contributors</p>
-    <h1>Development</h1>
-    <h2>Clone And Build</h2>
-    <pre><code>git clone https://github.com/Kmac907/Dispatch.git
-cd Dispatch
+<h1>Development</h1>
+<h2>Build</h2>
+<pre><code>
 dotnet build .\Dispatch.sln
-dotnet test .\Dispatch.sln</code></pre>
-    <h2>Run From Source</h2>
-    <pre><code>dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
-dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor</code></pre>
-    <h2>Project Structure</h2>
-    <pre><code>src/       product code
-tests/     automated tests
-docs/      public docs and GitHub Pages site
-module/    PowerShell module package surface
-packaging/ source install and package scripts
-workflow/  ignored local planning and validation state</code></pre>
-    <h2>Documentation Site</h2>
-    <p>The GitHub Pages site is served from <code>docs/</code>. Public site pages should be operator-facing; internal roadmap and tracker files remain in the repository for project execution.</p>
+</code></pre>
+<h2>Test</h2>
+<pre><code>
+dotnet test .\Dispatch.sln
+</code></pre>
+<p>Use focused filters for narrow work, then run the full suite before committing shared behavior.</p>
+<h2>Run From Source</h2>
+<pre><code>
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
+</code></pre>
+<h2>Local Validation Flow</h2>
+<ol>
+<li>Run focused tests for the touched behavior.</li>
+<li>Run <code>dotnet test .\Dispatch.sln</code>.</li>
+<li>For endpoint-execution changes, run least-invasive live validation against at least one approved reachable Windows endpoint.</li>
+<li>Inspect output files under <code>C:\ProgramData\Dispatch\Runs</code>.</li>
+</ol>
+<h2>Editing Expectations</h2>
+<ul>
+<li>Keep changes scoped.</li>
+<li>Update docs and examples with user-facing behavior changes.</li>
+<li>Do not commit local validation host names.</li>
+<li>Do not commit <code>workflow/</code> local tracker files.</li>
+<li>Do not commit secrets or endpoint-specific data.</li>
+</ul>
+<h2>Roadmap And Tracker</h2>
+<ul>
+<li><code>docs/plan.md</code> is the authoritative roadmap.</li>
+<li><code>workflow/build/implementation-plan.md</code> is ignored local execution state.</li>
+<li><code>docs/wiki.md</code> is the documentation inventory.</li>
+</ul>
+<p>The public GitHub Pages site should expose operator and maintainer docs, not the local execution tracker.</p>
   </article>
 </main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
 </body>
 </html>

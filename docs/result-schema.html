@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Result Schema - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,66 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<h1>Result Schema</h1>
+<p><code>Admin\results.json</code> is the durable final result contract. <code>Admin\events.ndjson</code> is the durable event stream.</p>
+<h2>Run Fields</h2>
+<p>Minimum run fields:</p>
 <pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
+runId
+startedAt
+endedAt
+durationMs
+requestedBy
+transport
+payloadType
+payloadName
+targetCount
+successCount
+failedCount
+cancelledCount
+timedOutCount
+resultPath
+targets
 </code></pre>
-<h2>Examples</h2>
+<h2>Target Fields</h2>
+<p>Minimum per-target fields:</p>
 <pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
+runId
+target
+transport
+payloadType
+payloadName
+state
+exitCode
+expectedExitCodes
+startedAt
+endedAt
+durationMs
+failureCategory
+failureMessage
+stdoutPath
+stderrPath
+resultPath
+artifacts
+artifactCollectionStatus
+artifactCollectionFailureMessage
+secretHandoffStatus
+cleanupStatus
+transportMetadata
+streamRecords
 </code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<p><code>streamRecords</code> is optional and mainly used by PSRP.</p>
+<h2>Artifact References</h2>
+<p>Artifacts include copied-back script-created files and metadata describing collection status. Missing default folders should produce <code>not-found</code>, not execution failure.</p>
+<h2>Stability</h2>
+<p>Automation should:</p>
+<ul>
+<li>read <code>Admin\results.json</code> for final state</li>
+<li>read <code>Admin\events.ndjson</code> for event history</li>
+<li>avoid parsing rich console output</li>
+<li>tolerate additive fields</li>
+<li>treat enum values as stable contracts</li>
+</ul>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

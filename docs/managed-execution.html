@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Managed Execution - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,17 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<h1>Managed Execution</h1>
+<p>Managed execution is not part of current v1 scope. This page exists because the documentation inventory reserves it for a later feature.</p>
+<h2>Planned Purpose</h2>
+<p>Managed execution would generate a minimal internal harness only when explicitly selected. The harness would normalize stdout/stderr, timeout behavior, child process exit classification, and result files across transports.</p>
+<h2>Boundary</h2>
+<p>Direct execution remains the v1 default. Managed execution must not rewrite user scripts and must not replace direct execution.</p>
+<h2>Planned Option</h2>
 <pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
+dispatch run ps .\Fix.ps1 --execution-mode managed
 </code></pre>
-<h2>Examples</h2>
-<pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
-</code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<p>The exact option shape may change when the feature is implemented.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

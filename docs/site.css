@@ -416,6 +416,15 @@ h1 {
   font-size: 16px;
 }
 
+.sidebar-group {
+  margin-top: 15px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .sidebar a {
   display: block;
   padding: 8px 0;

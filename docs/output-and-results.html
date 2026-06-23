@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Output And Results - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
+  <article class="doc-content">
+<h1>Output And Results</h1>
+<p>Dispatch writes one run folder per execution under the configured local run root.</p>
+<h2>Default local layout</h2>
+<pre><code>
+C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\
+  Admin\
+    events.ndjson
+    results.json
+  Targets\
+    &lt;Target&gt;\
+      stdout.txt
+      stderr.txt
+      artifacts\...
+</code></pre>
+<p>Default files:</p>
+<ul>
+<li><code>Admin\events.ndjson</code></li>
+</ul>
+<p>  - the canonical structured run log</p>
+<p>  - contains run start, plan, execution start, target progress, final target results, and final run summary</p>
+<ul>
+<li><code>Admin\results.json</code></li>
+</ul>
+<p>  - the compact final run summary for automation and operator review</p>
+<ul>
+<li><code>Targets\&lt;Target&gt;\stdout.txt</code></li>
+</ul>
+<p>  - captured process stdout for that target</p>
+<ul>
+<li><code>Targets\&lt;Target&gt;\stderr.txt</code></li>
+</ul>
+<p>  - captured process stderr for that target</p>
+<ul>
+<li><code>Targets\&lt;Target&gt;\artifacts\...</code></li>
+</ul>
+<p>  - copied-back script-created files when artifact collection finds them</p>
+<h2>Optional local files</h2>
+<p>These are supported by result policy but are not written by default:</p>
+<ul>
+<li><code>Admin\results.csv</code></li>
+<li><code>Admin\dispatch.log</code></li>
+<li><code>Targets\&lt;Target&gt;\result.json</code></li>
+</ul>
+<p>If those optional files are disabled, the final run summary still exists in <code>Admin\results.json</code>, and per-target <code>resultPath</code> values in that summary are empty.</p>
+<h2>Canonical event stream</h2>
+<p><code>Admin\events.ndjson</code> is the source of truth for the run.</p>
+<p>It records:</p>
+<ul>
+<li><code>run.started</code></li>
+<li><code>plan</code></li>
+<li><code>execution.started</code></li>
+<li><code>progress</code></li>
+<li><code>target.result</code></li>
+<li><code>result</code></li>
+</ul>
+<p>Use this file when you need:</p>
+<ul>
+<li>durable replay of a run</li>
+<li>machine ingestion</li>
+<li>a stable event history for <code>dispatch logs tail</code>, <code>dispatch logs export</code>, and <code>dispatch logs retry</code></li>
+</ul>
+<h2>Summary file</h2>
+<p><code>Admin\results.json</code> is the reduced final view.</p>
+<p>It contains:</p>
+<ul>
+<li>run metadata</li>
+<li>target summaries</li>
+<li>counts</li>
+<li>output/artifact paths where applicable</li>
+</ul>
+<p>Use this file for:</p>
+<ul>
+<li>automation that wants the final run outcome</li>
+<li>operators who need the final state without replaying the full event stream</li>
+<li><code>dispatch logs list</code>, which enumerates local run history from the reduced summaries</li>
+</ul>
+<h2>Final summary file locations</h2>
+<p>The rich/table completion summary exposes an <code>Outputs</code> panel after the target outcome table:</p>
+<ul>
+<li><code>Admin\results.json</code></li>
+<li><code>Admin\events.ndjson</code></li>
+<li><code>Targets\&lt;Target&gt;\stdout.txt</code></li>
+<li><code>Targets\&lt;Target&gt;\stderr.txt</code></li>
+</ul>
+<p>It also shows the per-target local root pattern plus separate stdout/stderr lines so an operator can move from the completion summary to the durable files without reconstructing the run layout by hand.</p>
+<h2>Console output modes</h2>
+<ul>
+<li><code>rich</code></li>
+</ul>
+<p>  - Spectre operator UI</p>
+<ul>
+<li><code>table</code></li>
+</ul>
+<p>  - stable human-readable table/text output</p>
+<ul>
+<li><code>json</code></li>
+</ul>
+<p>  - one JSON document</p>
+<ul>
+<li><code>ndjson</code></li>
+</ul>
+<p>  - one stdout event per line for the active command path</p>
+<ul>
+<li><code>yaml</code></li>
+</ul>
+<p>  - one YAML document</p>
+<p>Stdout NDJSON and durable <code>events.ndjson</code> are related but different:</p>
+<ul>
+<li>stdout NDJSON is the live command-output stream</li>
+<li><code>Admin\events.ndjson</code> is the durable local run-history file</li>
+</ul>
+<p>The current local log-inspection surface reads those same files:</p>
+<ul>
+<li><code>dispatch logs list</code> enumerates local runs from <code>Admin\results.json</code></li>
+<li><code>dispatch logs show latest</code> reads the latest local <code>Admin\results.json</code> and exposes the same final-summary/output-location view as the original run result</li>
+<li><code>dispatch logs tail [run-id|latest] --count &lt;n&gt;</code> reads the canonical <code>Admin\events.ndjson</code> stream for the selected run and returns the last <code>n</code> durable events, defaulting to <code>20</code></li>
+<li><code>dispatch logs export [run-id|latest] --dest &lt;path&gt;</code> writes a per-run export folder under the destination with <code>results.json</code>, <code>events.ndjson</code> when present, and <code>results.csv</code></li>
+<li><code>dispatch logs retry [run-id|latest]</code> reads <code>Admin\results.json</code> and emits a read-only retry plan for failed, timed-out, and cancelled targets; it includes a manual <code>dispatch run cmd ...</code> suggestion only when the original command payload can be reconstructed from the final summary</li>
+</ul>
+<p><code>logs retry</code> does not automatically re-execute endpoints in v1. Script retries are reported as not reconstructible from <code>results.json</code> because the final summary intentionally does not persist the original script path or script arguments.</p>
+<h2>Live dashboard progress contract</h2>
+<p>The live dashboard shows progress only when Dispatch has a real denominator.</p>
+<p>Current measurable per-target cases are:</p>
+<ul>
+<li>WinRM script upload:</li>
+</ul>
+<p>  - chunk count progress</p>
+<p>  - uploaded bytes when the shell transfer reports them</p>
+<ul>
+<li>WinRM artifact download:</li>
+</ul>
+<p>  - downloaded bytes when the remote archive size is known</p>
+<p>If a phase does not expose a real denominator, Dispatch shows phase/status/elapsed information instead of a fake percentage.</p>
+<h2>Remote endpoint layout</h2>
+<p>Dispatch still uses the endpoint run root for script execution and script-owned files:</p>
+<pre><code>
+C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\
+  script\
+  logs\
+  artifacts\
+</code></pre>
+<p>Dispatch prepares scripts under <code>script\</code> when the selected transport requires an endpoint-local script path.</p>
+<p>Scripts may write retrievable files under:</p>
+<ul>
+<li><code>logs\</code></li>
+<li><code>artifacts\</code></li>
+</ul>
+<p>or under declared artifact paths for the run.</p>
+<h2>Stdout/stderr vs artifacts</h2>
+<p>These are different concerns:</p>
+<ul>
+<li><code>stdout.txt</code> / <code>stderr.txt</code></li>
+</ul>
+<p>  - process output captured by Dispatch</p>
+<ul>
+<li><code>artifacts\...</code></li>
+</ul>
+<p>  - files the script created intentionally and Dispatch copied back</p>
+<p>A script can succeed and still produce no copied-back artifacts.</p>
+<h2>Artifact defaults and statuses</h2>
+<p>Default artifact folders:</p>
+<ul>
+<li><code>logs</code></li>
+<li><code>artifacts</code></li>
+</ul>
+<p>Artifact collection status values:</p>
+<ul>
+<li><code>collected</code></li>
+</ul>
+<p>  - declared/default artifact paths were found and copied back</p>
+<ul>
+<li><code>not-found</code></li>
+</ul>
+<p>  - the script succeeded, but the declared/default artifact paths were not present</p>
+<ul>
+<li><code>failed</code></li>
+</ul>
+<p>  - artifact collection itself failed after Dispatch tried to retrieve the files</p>
+<ul>
+<li><code>skipped</code></li>
+</ul>
+<p>  - Dispatch never reached artifact collection because an earlier phase failed</p>
+<h2>What automation should read</h2>
+<p>Preferred order:</p>
+<ol>
+<li><code>Admin\results.json</code> for final outcome</li>
+<li><code>Admin\events.ndjson</code> for durable event history</li>
+<li><code>Targets\&lt;Target&gt;\stdout.txt</code> and <code>stderr.txt</code> for raw target output</li>
+<li>copied-back artifacts for script-owned files</li>
+</ol>
+  </article>
+</main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+</body>
+</html>

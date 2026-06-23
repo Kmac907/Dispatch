@@ -2,33 +2,107 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Configuration - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="credentials.html">Credentials</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="configuration.html">Configuration</a><a href="inventory-and-jobs.html">Inventories And Jobs</a><a href="credentials.html">Credentials</a><a href="getting-started.html">Getting Started</a></aside>
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
   <article class="doc-content">
-    <p class="eyebrow">Config</p>
-    <h1>Configuration</h1>
-    <p>Dispatch uses one global machine-wide YAML config and optional command-level overrides. This config is the single catalog for Dispatch defaults and credential provider metadata.</p>
-    <h2>Default Location</h2>
-    <pre><code>C:\ProgramData\Dispatch\config.yml</code></pre>
-    <h2>Example</h2>
-    <pre><code>dispatch:
+<h1>Configuration</h1>
+<p>Dispatch uses one global machine-wide YAML config plus explicit command overrides.</p>
+<p>Default path:</p>
+<pre><code>
+C:\ProgramData\Dispatch\config.yml
+</code></pre>
+<p><code>--config &lt;path&gt;</code> can override the default for testing, alternate environments, or non-default locations.</p>
+<h2>Config Loading Precedence</h2>
+<ol>
+<li>Explicit <code>--config &lt;path&gt;</code>.</li>
+<li><code>C:\ProgramData\Dispatch\config.yml</code>.</li>
+<li>Built-in defaults.</li>
+</ol>
+<h2>Runtime Option Precedence</h2>
+<p>Explicit CLI options override job, inventory, config, and built-in defaults for the current command.</p>
+<h2>Example</h2>
+<pre><code>
+dispatch:
   default_transport: psrp
   default_credential_provider: prompt
+  run_root: C:\ProgramData\Dispatch\Runs
+  remote_run_root: C:\ProgramData\Dispatch\Runs
 
 credentials:
   prod-admin:
     provider: prompt
-    username: CONTOSO\prod.admin</code></pre>
-    <h2>Config Loading</h2>
-    <ol><li>Explicit <code>--config &lt;path&gt;</code>.</li><li><code>C:\ProgramData\Dispatch\config.yml</code>.</li><li>Built-in defaults.</li></ol>
-    <h2>Runtime Precedence</h2>
-    <p>Explicit CLI options override job, inventory, global config, and built-in defaults for the current command.</p>
-    <h2>Credential Catalog</h2>
-    <p><code>job.yml</code>, <code>hosts.yml</code>, and <code>--credential</code> only select a credential reference. The loaded global config defines what that reference means and how it is resolved.</p>
-    <h2>Security</h2>
-    <p>Do not store passwords, tokens, SAS values, or secret material in YAML. Only store references, usernames, provider locations, Key Vault URIs, and secret names.</p>
+    username: CONTOSO\prod.admin
+
+  helpdesk-local:
+    provider: dpapi_file
+    username: .\helpdesk-admin
+    path: C:\ProgramData\Dispatch\Credentials\helpdesk-local.cred
+</code></pre>
+<h2>Supported Keys</h2>
+<p><code>dispatch</code> keys:</p>
+<ul>
+<li><code>default_transport</code></li>
+<li><code>default_credential_provider</code></li>
+<li><code>credential_store_path</code> for legacy metadata catalog support where still present</li>
+<li><code>run_root</code></li>
+<li><code>remote_run_root</code></li>
+<li>throttle/concurrency defaults where implemented</li>
+</ul>
+<p><code>credentials.&lt;name&gt;</code> keys depend on provider:</p>
+<ul>
+<li><code>provider</code></li>
+<li><code>username</code></li>
+<li><code>path</code></li>
+<li><code>target</code></li>
+<li><code>vault_uri</code></li>
+<li><code>secret_name</code></li>
+<li><code>auth</code></li>
+</ul>
+<h2>Credential Rule</h2>
+<p><code>job.yml</code>, <code>hosts.yml</code>, and <code>--credential &lt;name&gt;</code> select a credential reference. The global config defines what that reference means and how it is resolved.</p>
+<p>No passwords in YAML.</p>
   </article>
 </main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
 </body>
 </html>

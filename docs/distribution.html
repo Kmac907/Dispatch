@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Installation - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Distribution - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,60 +45,45 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>Installation</h1>
-<p>Dispatch v1 installs from source and packages the resulting <code>dispatch.exe</code> with the PowerShell module wrapper.</p>
-<h2>Prerequisites</h2>
-<ul>
-<li>Windows 10/11 or Windows Server.</li>
-<li>PowerShell 7 or Windows PowerShell 5.1.</li>
-<li>.NET SDK matching <code>global.json</code>.</li>
-<li>Git available on <code>PATH</code>.</li>
-<li>Network access to <code>https://github.com/Kmac907/Dispatch</code>.</li>
-<li>Administrator shell for all-users installation.</li>
-</ul>
+<h1>Distribution</h1>
+<p>Distribution describes how operators install Dispatch once the v1 package surfaces are implemented.</p>
+<p>Status: planned v1.</p>
 <h2>Source Install</h2>
-<p>The primary v1 operator path downloads and runs the source installer from GitHub:</p>
+<p>Primary v1 flow:</p>
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
-<p>The installer is responsible for:</p>
+<p>The installer should:</p>
 <ol>
-<li>Creating a temporary source checkout.</li>
-<li>Building the self-contained <code>win-x64</code> <code>dispatch.exe</code>.</li>
-<li>Assembling the PowerShell module folder.</li>
-<li>Installing the module and bundled executable.</li>
-<li>Validating <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported wrapper commands.</li>
-<li>Cleaning up the temporary source checkout after validation.</li>
+<li>Create a temporary checkout.</li>
+<li>Build the self-contained <code>win-x64</code> executable.</li>
+<li>Assemble the PowerShell module.</li>
+<li>Install the module and bundled executable.</li>
+<li>Validate <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported commands.</li>
+<li>Clean up temporary source files after successful validation.</li>
 </ol>
-<p>Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.</p>
-<h2>Developer Install From Existing Checkout</h2>
-<p>Use this when you intentionally want to keep the source tree:</p>
+<h2>Existing Checkout</h2>
 <pre><code>
-git clone https://github.com/Kmac907/Dispatch.git
-cd Dispatch
 .\packaging\install-from-source.ps1 -NoCleanup
 </code></pre>
-<h2>Verify Installation</h2>
+<h2>Packaged Install</h2>
+<p>Planned v1 local package install:</p>
 <pre><code>
-dispatch --help
-dispatch version
-dispatch doctor
-Import-Module Dispatch
-Get-Command -Module Dispatch
+.\packaging\install.ps1 -Scope CurrentUser
+.\packaging\install.ps1 -Scope AllUsers
 </code></pre>
-<h2>Upgrade</h2>
-<p>Run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.</p>
-<h2>Uninstall</h2>
-<p>Remove the installed Dispatch module folder from the selected PowerShell module path and remove any machine-wide config or run history only when that data is no longer needed:</p>
+<h2>Optional ZIP</h2>
+<p>An optional release convenience artifact may be produced:</p>
 <pre><code>
-Remove-Module Dispatch -ErrorAction SilentlyContinue
+Dispatch-&lt;version&gt;-win-x64.zip
 </code></pre>
-<p>Default data locations:</p>
-<pre><code>
-C:\ProgramData\Dispatch\config.yml
-C:\ProgramData\Dispatch\Runs\
-C:\ProgramData\Dispatch\Credentials\
-</code></pre>
+<h2>Not V1</h2>
+<ul>
+<li>MSI installer.</li>
+<li>WinGet package.</li>
+<li>Azure Artifacts feed.</li>
+<li>Public PowerShell Gallery publishing.</li>
+</ul>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

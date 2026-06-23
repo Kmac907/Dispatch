@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Installation - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Inventory Schema - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,60 +45,119 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>Installation</h1>
-<p>Dispatch v1 installs from source and packages the resulting <code>dispatch.exe</code> with the PowerShell module wrapper.</p>
-<h2>Prerequisites</h2>
+<h1>Inventory Schema</h1>
+<p>This is the v1 YAML inventory contract.</p>
+<h2>Supported Top-Level Sections</h2>
+<pre><code>
+defaults:
+groups:
+hosts:
+</code></pre>
+<p>Unsupported top-level sections fail validation.</p>
+<h2>Defaults</h2>
+<pre><code>
+defaults:
+  transport: psrp
+  credential: prod-admin
+</code></pre>
+<p>Supported fields:</p>
 <ul>
-<li>Windows 10/11 or Windows Server.</li>
-<li>PowerShell 7 or Windows PowerShell 5.1.</li>
-<li>.NET SDK matching <code>global.json</code>.</li>
-<li>Git available on <code>PATH</code>.</li>
-<li>Network access to <code>https://github.com/Kmac907/Dispatch</code>.</li>
-<li>Administrator shell for all-users installation.</li>
+<li><code>transport</code></li>
+<li><code>credential</code></li>
 </ul>
-<h2>Source Install</h2>
-<p>The primary v1 operator path downloads and runs the source installer from GitHub:</p>
+<h2>Groups</h2>
 <pre><code>
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+groups:
+  web:
+    vars:
+      transport: psrp
+      credential: web-admin
+    hosts:
+      - WEB01
+      - WEB02
+    children:
+      - web_canary
 </code></pre>
-<p>The installer is responsible for:</p>
+<p>Supported group fields:</p>
+<ul>
+<li><code>vars</code></li>
+<li><code>hosts</code></li>
+<li><code>children</code></li>
+</ul>
+<p>Supported <code>vars</code> fields:</p>
+<ul>
+<li><code>transport</code></li>
+<li><code>credential</code></li>
+</ul>
+<h2>Hosts</h2>
+<p>Mapping form:</p>
+<pre><code>
+hosts:
+  SERVER01:
+    transport: winrm
+    credential: domain-admin
+  SERVER02:
+</code></pre>
+<p>List form:</p>
+<pre><code>
+hosts:
+  - SERVER01
+  - SERVER02
+</code></pre>
+<p>Inline list form:</p>
+<pre><code>
+hosts: [SERVER01, SERVER02]
+</code></pre>
+<h2>Precedence</h2>
+<p>Transport selection:</p>
 <ol>
-<li>Creating a temporary source checkout.</li>
-<li>Building the self-contained <code>win-x64</code> <code>dispatch.exe</code>.</li>
-<li>Assembling the PowerShell module folder.</li>
-<li>Installing the module and bundled executable.</li>
-<li>Validating <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported wrapper commands.</li>
-<li>Cleaning up the temporary source checkout after validation.</li>
+<li>Explicit CLI <code>--transport</code> when not <code>auto</code>.</li>
+<li>Job transport when running <code>apply</code>.</li>
+<li>Host inventory transport.</li>
+<li>Inherited group transport.</li>
+<li>Inventory defaults transport.</li>
+<li>Global config default transport.</li>
+<li>Built-in default.</li>
 </ol>
-<p>Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.</p>
-<h2>Developer Install From Existing Checkout</h2>
-<p>Use this when you intentionally want to keep the source tree:</p>
+<p>Credential reference selection:</p>
+<ol>
+<li>CLI <code>--credential</code>.</li>
+<li>Job credential.</li>
+<li>Host credential.</li>
+<li>Inherited group credential.</li>
+<li>Inventory defaults credential.</li>
+<li>No credential.</li>
+</ol>
+<h2>Valid Example</h2>
 <pre><code>
-git clone https://github.com/Kmac907/Dispatch.git
-cd Dispatch
-.\packaging\install-from-source.ps1 -NoCleanup
+defaults:
+  transport: psrp
+  credential: prod-admin
+groups:
+  kiosks:
+    vars:
+      credential: helpdesk-local
+    hosts: [KIOSK01, KIOSK02]
+hosts:
+  SERVER01:
+    transport: winrm
 </code></pre>
-<h2>Verify Installation</h2>
+<h2>Invalid Examples</h2>
+<p>Plaintext secrets are invalid:</p>
 <pre><code>
-dispatch --help
-dispatch version
-dispatch doctor
-Import-Module Dispatch
-Get-Command -Module Dispatch
+hosts:
+  PC001:
+    password: bad
 </code></pre>
-<h2>Upgrade</h2>
-<p>Run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.</p>
-<h2>Uninstall</h2>
-<p>Remove the installed Dispatch module folder from the selected PowerShell module path and remove any machine-wide config or run history only when that data is no longer needed:</p>
+<p>Unsupported fields are invalid:</p>
 <pre><code>
-Remove-Module Dispatch -ErrorAction SilentlyContinue
+groups:
+  web:
+    vars_files:
+      - web.yml
 </code></pre>
-<p>Default data locations:</p>
-<pre><code>
-C:\ProgramData\Dispatch\config.yml
-C:\ProgramData\Dispatch\Runs\
-C:\ProgramData\Dispatch\Credentials\
-</code></pre>
+<h2>Validation Behavior</h2>
+<p>Inventory validation fails before endpoint work starts. Errors should name the unsupported section, unsupported field, invalid type, unresolved selector, conflicting inherited metadata, or rejected secret-like key.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

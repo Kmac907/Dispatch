@@ -2,36 +2,112 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Getting Started - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="installation.html">Install</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="getting-started.html">Getting Started</a><a href="installation.html">Installation</a><a href="configuration.html">Configuration</a><a href="inventory-and-jobs.html">Inventories And Jobs</a><a href="credentials.html">Credentials</a><a href="outputs.html">Outputs</a><a href="transports.html">Transports</a><a href="security.html">Security</a><a href="validation.html">Validation</a><a href="development.html">Development</a></aside>
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
   <article class="doc-content">
-    <p class="eyebrow">Operator Guide</p>
-    <h1>Getting Started</h1>
-    <p>Use this path to install Dispatch, verify the local environment, and run a first endpoint script.</p>
-    <h2>1. Install</h2>
-    <pre><code>irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex</code></pre>
-    <p>Use an elevated shell for all-users installation. Use the developer checkout flow in <a href="installation.html">Installation</a> when you want to keep source files locally.</p>
-    <h2>2. Verify Local Prerequisites</h2>
-    <pre><code>dispatch --help
+<h1>Getting Started</h1>
+<p>This guide is the shortest path from a clean checkout or install to a verified Dispatch run.</p>
+<h2>Prerequisites</h2>
+<ul>
+<li>Windows 10/11 or Windows Server.</li>
+<li>PowerShell 7 or Windows PowerShell 5.1.</li>
+<li>.NET SDK matching <code>global.json</code> when building from source.</li>
+<li>Git on <code>PATH</code> for source install.</li>
+<li>At least one approved Windows endpoint for live validation when running remote commands.</li>
+<li>PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.</li>
+</ul>
+<h2>Install</h2>
+<p>The v1 source-install path downloads the installer from GitHub and builds Dispatch locally:</p>
+<pre><code>
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+</code></pre>
+<p>Use an elevated shell for all-users installation.</p>
+<h2>Run From Source</h2>
+<pre><code>
+git clone https://github.com/Kmac907/Dispatch.git
+cd Dispatch
+dotnet build .\Dispatch.sln
+dotnet test .\Dispatch.sln
+dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
+</code></pre>
+<h2>Validate Locally</h2>
+<pre><code>
+dispatch --help
 dispatch version
-dispatch doctor</code></pre>
-    <p><code>doctor</code> checks local prerequisites and policy visibility. It does not remediate endpoint configuration.</p>
-    <h2>3. Preview A Run</h2>
-    <pre><code>dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json</code></pre>
-    <p>Planning validates local inputs and renders the execution plan before endpoint work starts.</p>
-    <h2>4. Use An Inventory</h2>
-    <pre><code>dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport psrp</code></pre>
-    <p>Inventories define hosts, groups, defaults, and optional credential references. See <a href="inventory-and-jobs.html">Inventories And Jobs</a>.</p>
-    <h2>5. Execute</h2>
-    <pre><code>dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp</code></pre>
-    <p>Use <code>--transport winrm</code> for raw WinRM shell execution or <code>--transport psexec</code> where admin-share staging is available.</p>
-    <h2>6. Inspect Results</h2>
-    <pre><code>dispatch logs list
+dispatch doctor
+</code></pre>
+<p><code>dispatch doctor</code> checks local prerequisites and reports problems. It does not repair endpoint remoting, firewall, delegation, admin-share, or policy settings.</p>
+<h2>Preview A Run</h2>
+<pre><code>
+dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json
+</code></pre>
+<p>Planning validates local inputs and produces the execution plan before endpoint work starts.</p>
+<h2>Run A Script</h2>
+<pre><code>
+dispatch run ps .\Fix.ps1 --target PC001,PC002 --transport psrp
+</code></pre>
+<p>Use <code>--transport winrm</code> for raw WS-Management shell execution or <code>--transport psexec</code> where admin-share staging and PsExec policy are available.</p>
+<h2>Find Results</h2>
+<p>Runs are written under:</p>
+<pre><code>
+C:\ProgramData\Dispatch\Runs\&lt;run-id&gt;\
+</code></pre>
+<p>Important files:</p>
+<ul>
+<li><code>Admin\events.ndjson</code> - canonical structured run event stream.</li>
+<li><code>Admin\results.json</code> - final reduced run summary.</li>
+<li><code>Targets\&lt;target&gt;\stdout.txt</code> - captured target stdout.</li>
+<li><code>Targets\&lt;target&gt;\stderr.txt</code> - captured target stderr.</li>
+<li><code>Targets\&lt;target&gt;\artifacts\...</code> - copied-back script-created files when present.</li>
+</ul>
+<p>Inspect previous runs:</p>
+<pre><code>
+dispatch logs list
 dispatch logs show latest
-dispatch logs tail latest --count 50</code></pre>
-    <p>Every run writes <code>Admin\events.ndjson</code>, <code>Admin\results.json</code>, and per-target <code>stdout.txt</code> / <code>stderr.txt</code> files under <code>C:\ProgramData\Dispatch\Runs\&lt;run-id&gt;</code>.</p>
+dispatch logs tail latest --count 50
+</code></pre>
   </article>
 </main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
 </body>
 </html>

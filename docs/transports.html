@@ -2,21 +2,81 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Transports - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="validation.html">Validation</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="transports.html">Transports</a><a href="security.html">Security</a><a href="validation.html">Validation</a><a href="credentials.html">Credentials</a></aside>
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
   <article class="doc-content">
-    <p class="eyebrow">Execution</p>
-    <h1>Transports</h1>
-    <p>Dispatch makes transport choice explicit. Each transport maps into the same run/result model.</p>
-    <table><tr><th>Transport</th><th>Use When</th><th>Primary Requirements</th></tr><tr><td><code>psrp</code></td><td>You want PowerShell remoting semantics and stream capture.</td><td>PowerShell remoting enabled, WSMan reachable, session config permits caller.</td></tr><tr><td><code>winrm</code></td><td>You want raw WS-Management shell/command execution without SMB staging.</td><td>WinRM listener reachable and shell access permitted.</td></tr><tr><td><code>psexec</code></td><td>You need PsExec behavior in environments where admin shares are available.</td><td>Admin rights, SMB/admin shares, PsExec allowed by policy.</td></tr></table>
-    <h2>Examples</h2>
-    <pre><code>dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
-dispatch run cmd whoami --target PC001 --transport winrm
-dispatch run ps .\Fix.ps1 --target PC001 --transport psexec</code></pre>
-    <h2>Endpoint Policy</h2>
-    <p>Dispatch reports endpoint readiness and failures. It does not silently enable remoting, firewall rules, delegation, trusted hosts, or admin shares.</p>
+<h1>Transports</h1>
+<p>Dispatch exposes endpoint protocols as explicit transports:</p>
+<pre><code>
+--transport psrp
+--transport winrm
+--transport psexec
+</code></pre>
+<p>Each transport implements the same core model: probe, prepare, execute, collect artifacts, cleanup, result classification, and metadata.</p>
+<h2>Selection Guide</h2>
+<table><tbody>
+<tr><th>Transport</th><th>Use when</th><th>Tradeoff</th></tr>
+<tr><td><code>psrp</code></td><td>You want PowerShell remoting semantics, streams, and credential handoff support.</td><td>Requires PowerShell remoting and permitted session configuration.</td></tr>
+<tr><td><code>winrm</code></td><td>You want raw WS-Management shell/command execution without SMB staging.</td><td>Process stdout/stderr only; no rich PowerShell stream model.</td></tr>
+<tr><td><code>psexec</code></td><td>You need PsExec behavior and SMB/admin shares are available.</td><td>Depends on admin shares, PsExec binary/policy, and endpoint security controls.</td></tr>
+</tbody></table>
+<h2>Current Implementation State</h2>
+<ul>
+<li>PSRP: implemented for command/script execution, stream records, artifacts, and current credential providers on PSRP.</li>
+<li>Raw WinRM: implemented for command/script execution, remote upload, artifacts, and timeout/failure classification.</li>
+<li>PsExec: implemented for direct execution plumbing and probes, but further PsExec-first expansion depends on environments where admin-share staging is available.</li>
+</ul>
+<h2>Shared Requirements</h2>
+<ul>
+<li>Windows target endpoint.</li>
+<li>The selected protocol must be enabled and reachable.</li>
+<li>The caller or resolved credential must have sufficient rights.</li>
+<li>Dispatch does not silently remediate endpoint configuration.</li>
+</ul>
+<h2>No Silent Fallback</h2>
+<p>Dispatch does not silently fall back from one transport to another. Transport decisions must be explicit through CLI, job, inventory, or config.</p>
   </article>
 </main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
 </body>
 </html>

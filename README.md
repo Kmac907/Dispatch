@@ -159,16 +159,16 @@ Install from an existing checkout:
 ## Documentation
 
 - [Project Site](https://kmac907.github.io/Dispatch/)
+- [Documentation Home](docs/readme.html)
 - [Getting Started](docs/getting-started.html)
-- [Installation](docs/installation.md)
-- [CLI Reference](docs/cli.html)
+- [Command Reference](docs/command-reference.html)
+- [Inventory Schema](docs/inventory-schema.html)
+- [Transports](docs/transports.html)
 - [Configuration](docs/configuration.html)
-- [Inventories And Jobs](docs/inventory-and-jobs.html)
-- [Credentials](docs/credentials.md)
-- [PowerShell Module](docs/powershell-module.html)
-- [Output And Results](docs/output-and-results.md)
-- [Script-Owned Payloads](docs/script-owned-payloads.md)
-- [Testing And Validation](docs/testing-and-validation.md)
+- [Output And Results](docs/output-and-results.html)
+- [Troubleshooting](docs/troubleshooting.html)
+- [Security](docs/security.html)
+- [Roadmap Status](docs/roadmap-status.html)
 
 ## Security Notes
 

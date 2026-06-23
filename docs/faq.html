@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FAQ - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,21 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
-<pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
-</code></pre>
-<h2>Examples</h2>
-<pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
-</code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<h1>FAQ</h1>
+<h2>Why did Dispatch choose this transport?</h2>
+<p>Transport comes from explicit CLI options, job files, inventory metadata, global config, then built-in defaults. Dispatch should not silently fall back to another transport.</p>
+<h2>Why did plan pass but run fail?</h2>
+<p>Planning validates local inputs and supported combinations. The actual run can still fail because endpoints are offline, remoting is disabled, policy blocks access, credentials fail, or a script returns an unexpected exit code.</p>
+<h2>Why can&#39;t I pass a password directly?</h2>
+<p>Command-line secrets are visible to process inspection, shell history, logs, and automation wrappers. Dispatch uses credential references and provider-backed resolution instead.</p>
+<h2>Why did target selection not match what I expected?</h2>
+<p>Check inventory groups, host names, selectors, excludes, and de-duplication. Use <code>hosts list</code>, <code>hosts validate</code>, or <code>--plan</code> where available to inspect the resolved set before execution.</p>
+<h2>Why was a host skipped?</h2>
+<p>A host can be skipped or fail early during resolution, probe, payload preparation, credential handoff, or transport setup. Check <code>Admin\results.json</code>, <code>Admin\events.ndjson</code>, and the target failure category.</p>
+<h2>Why do I have stdout but no artifacts?</h2>
+<p><code>stdout.txt</code> and <code>stderr.txt</code> are captured process streams. Artifacts are files created by the script and copied back. If the script did not create <code>logs\</code> or <code>artifacts\</code>, artifact status can be <code>not-found</code>.</p>
+<h2>Does Dispatch configure WinRM or firewall rules?</h2>
+<p>No. Dispatch reports endpoint readiness and failures. Endpoint services and policy remain operator-owned.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

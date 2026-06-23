@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Roadmap Status - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
+  <article class="doc-content">
+<h1>Roadmap Status</h1>
+<p>This page is a human-readable status summary. The detailed roadmap remains in <code>docs/plan.md</code>.</p>
+<h2>Works Now</h2>
+<ul>
+<li>Buildable .NET solution.</li>
+<li>Core job/result models.</li>
+<li>Shared planner/executor path.</li>
+<li>Deterministic target resolution.</li>
+<li>Local run folder layout.</li>
+<li>Direct PsExec execution plumbing and guardrails.</li>
+<li>Raw WinRM transport for command/script execution.</li>
+<li>PSRP transport for command/script execution, streams, artifacts, and supported credential providers.</li>
+<li>Canonical <code>Admin\events.ndjson</code> and reduced <code>Admin\results.json</code>.</li>
+<li>Per-target <code>stdout.txt</code> / <code>stderr.txt</code>.</li>
+<li>Spectre.Console.Cli command tree registration.</li>
+<li>Live dashboard rendering model.</li>
+<li>Structured output modes on current paths.</li>
+<li>Inventory subset for current run paths.</li>
+<li>Logs commands over local run history.</li>
+<li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP.</li>
+</ul>
+<h2>Partial</h2>
+<ul>
+<li><code>doctor</code> exists but the full v1 transport-aware diagnostics surface is still expanding.</li>
+<li><code>hosts</code>, <code>push</code>, and <code>init</code> command groups are registered/planned but not fully implemented.</li>
+<li>Inventory support covers the v1 subset needed by current run paths.</li>
+<li>Credential handoff is not complete for every transport/provider combination.</li>
+</ul>
+<h2>Planned Next</h2>
+<ul>
+<li>Finish remaining <code>6.4</code> credential-reference gaps.</li>
+<li>Implement <code>6.5</code> YAML apply/job model.</li>
+<li>Implement <code>6.6</code> push, hosts, doctor, and init command surfaces.</li>
+<li>Implement <code>6.7</code> CLI safety, policy, and stable exit codes.</li>
+<li>Implement <code>6.8</code> diagnostics migration.</li>
+<li>Implement PowerShell module wrapper.</li>
+<li>Implement source install and local packaging.</li>
+</ul>
+<h2>Deferred Or Out Of Scope For V1</h2>
+<ul>
+<li>Full Ansible compatibility.</li>
+<li>Permanent endpoint agent.</li>
+<li>MSI installer.</li>
+<li>Azure Artifacts publishing.</li>
+<li>Enterprise package feeds.</li>
+<li>Managed execution as default.</li>
+<li>Dispatch-owned Blob/media payload staging.</li>
+</ul>
+  </article>
+</main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+</body>
+</html>

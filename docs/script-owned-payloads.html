@@ -2,20 +2,77 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Script-Owned Payloads - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
-<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
-  <aside class="sidebar"><h2>Docs</h2><a href="script-owned-payloads.html">Script-Owned Payloads</a><a href="outputs.html">Outputs</a><a href="security.html">Security</a><a href="credentials.html">Credentials</a></aside>
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
   <article class="doc-content">
-    <p class="eyebrow">Boundary</p>
-    <h1>Script-Owned Payloads</h1>
-    <p>Dispatch v1 prepares and runs the selected script. It does not stage installer media, package payloads, Blob content, Azure Files content, or SMB/HTTPS payloads for the script.</p>
-    <h2>Pattern</h2>
-    <p>Pass ordinary non-secret inputs to the script. The script downloads or copies any package payload it needs and writes its own logs/artifacts under the Dispatch run folder.</p>
-    <h2>Do Not</h2>
-    <ul><li>Pass SAS tokens or passwords on the command line.</li><li>Assume Dispatch downloads installer media.</li><li>Write secret values to stdout, stderr, logs, or artifacts.</li></ul>
-    <h2>Artifacts</h2>
-    <p>When a script creates logs or artifacts under the expected run folder locations, Dispatch copies them back and reports collection status separately from script execution.</p>
+<h1>Script-Owned Payloads</h1>
+<p>Dispatch v1 prepares and runs the selected PowerShell script. It does not stage installer media, package payloads, Azure Blob content, Azure Files content, or SMB/HTTPS payloads for the script.</p>
+<p>Scripts own their external payload retrieval. If a script needs an MSI, ZIP, configuration file, or other payload, pass ordinary non-secret values as script arguments and let the script download or copy the payload.</p>
+<p>Examples of script-owned inputs:</p>
+<pre><code>
+dispatch run ps .\Install-App.ps1 `
+  --target PC001 `
+  --plan `
+  -- -PackageUri https://contoso.example/packages/app.msi -Version 1.2.3
+</code></pre>
+<pre><code>
+dispatch run ps .\Install-App.ps1 `
+  --target-file .\targets.txt `
+  --plan `
+  -- -SourcePath \\fileserver\packages\app.msi
+</code></pre>
+<p>The legacy compatibility shape <code>dispatch run --script &lt;path&gt; --computer-name &lt;names&gt;</code> remains supported while module and install callers migrate, but new examples should use either <code>dispatch run ps &lt;script.ps1&gt;</code> or the planned <code>Invoke-DispatchPowerShell</code> wrapper documented in <code>docs/cli-design.md</code>.</p>
+<p>v1 guardrails:</p>
+<ul>
+<li>Dispatch copies only the selected script to the target-local Dispatch run path.</li>
+<li>Dispatch passes ordinary script arguments through unchanged.</li>
+<li>Dispatch logs and result metadata should describe orchestration behavior, not payload download internals.</li>
+<li>Dispatch does not generate, validate, refresh, store, or pass SAS tokens.</li>
+<li>Do not pass credentials, SAS tokens, or other secrets on the command line.</li>
+<li>Post-MVP secret handoff must use a redacted protected secret-file model rather than raw command-line values.</li>
+</ul>
   </article>
 </main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
 </body>
 </html>

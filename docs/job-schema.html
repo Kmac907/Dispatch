@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Job Schema - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,69 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
+<h1>Job Schema</h1>
+<p>This is the v1 YAML job contract for <code>dispatch apply</code>.</p>
 <p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<h2>Top-Level Fields</h2>
 <pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
+name: Fix endpoints
+description: Optional description
+hosts: kiosks
+transport: psrp
+credential: prod-admin
+strategy:
+  serial: 10
+defaults:
+  expected_exit_codes: [0, 3010]
+vars:
+  package: example
+tasks:
+  - ps: .\Fix.ps1
 </code></pre>
-<h2>Examples</h2>
-<pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
-</code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<p>Supported top-level fields:</p>
+<ul>
+<li><code>name</code></li>
+<li><code>description</code></li>
+<li><code>hosts</code></li>
+<li><code>transport</code></li>
+<li><code>credential</code></li>
+<li><code>strategy</code></li>
+<li><code>defaults</code></li>
+<li><code>vars</code></li>
+<li><code>tasks</code></li>
+</ul>
+<h2>Precedence</h2>
+<p>Transport:</p>
+<ol>
+<li>Explicit CLI <code>--transport</code> when not <code>auto</code>.</li>
+<li><code>job.transport</code>.</li>
+<li>Inventory transport policy.</li>
+<li>Explicit <code>--config</code>.</li>
+<li>Ambient global config.</li>
+<li>Built-in default.</li>
+</ol>
+<p>Credential:</p>
+<ol>
+<li>CLI <code>--credential</code>.</li>
+<li><code>job.credential</code>.</li>
+<li>Host credential.</li>
+<li>Group credential.</li>
+<li>Inventory defaults credential.</li>
+<li>No credential.</li>
+</ol>
+<h2>Validation</h2>
+<p>Validation must fail before endpoint work for:</p>
+<ul>
+<li>invalid YAML</li>
+<li>missing required fields</li>
+<li>unsupported task type</li>
+<li>unsupported field</li>
+<li>plaintext secret-like keys</li>
+<li>unresolved hosts or inventory selectors</li>
+<li>unsupported transport/payload combinations</li>
+</ul>
+<h2>Secret Boundary</h2>
+<p>Job files may contain credential reference names, but must not contain passwords, tokens, SAS values, or secret material.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

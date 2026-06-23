@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Command Reference - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
+  <article class="doc-content">
+<h1>Command Reference</h1>
+<p><code>dispatch.exe</code> is the canonical command surface. The PowerShell module wraps this executable and does not provide a separate execution engine.</p>
+<p>Status legend:</p>
+<ul>
+<li>Current: implemented in the current codebase.</li>
+<li>Planned v1: required by the v1 roadmap but not fully implemented yet.</li>
+<li>Deferred: explicitly outside v1.</li>
+</ul>
+<h2>Root</h2>
+<pre><code>
+dispatch --help
+dispatch version
+</code></pre>
+<p><code>version</code> is current.</p>
+<h2>Apply</h2>
+<pre><code>
+dispatch apply &lt;job.yml&gt; [--config &lt;path&gt;] [--credential &lt;name&gt;] [--plan] [--check] [--output rich|table|json|ndjson|yaml]
+</code></pre>
+<p>Status: planned v1.</p>
+<p>Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.</p>
+<h2>Run</h2>
+<pre><code>
+dispatch run ps &lt;script.ps1&gt; [args] --target &lt;selector&gt; [--inventory &lt;hosts.yml&gt;] [--transport psrp|winrm|psexec] [--credential &lt;name&gt;]
+dispatch run cmd &lt;command&gt; --target &lt;selector&gt; [--transport psrp|winrm]
+dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm|psexec]
+</code></pre>
+<p>Status: <code>run ps</code>, <code>run cmd</code>, and <code>run exe</code> route through the shared planner/executor when the transport supports the payload. Compatibility routing for the older <code>dispatch run --script ...</code> shape remains for migration.</p>
+<p>Common options:</p>
+<ul>
+<li><code>--target</code></li>
+<li><code>--target-file</code></li>
+<li><code>--inventory</code></li>
+<li><code>--config</code></li>
+<li><code>--transport</code></li>
+<li><code>--credential</code></li>
+<li><code>--expected-exit-code</code></li>
+<li><code>--throttle</code> / concurrency option where implemented</li>
+<li><code>--plan</code></li>
+<li><code>--output</code></li>
+<li><code>--no-progress</code></li>
+</ul>
+<h2>Push</h2>
+<pre><code>
+dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--target &lt;selector&gt;] [--recurse] [--checksum] [--overwrite] [--backup] [--execute] [--cleanup]
+</code></pre>
+<p>Status: planned v1.</p>
+<p>Copies files to endpoints and can optionally execute after transfer.</p>
+<h2>Hosts</h2>
+<pre><code>
+dispatch hosts list --inventory &lt;hosts.yml&gt;
+dispatch hosts test --inventory &lt;hosts.yml&gt; --target &lt;selector&gt; [--transport psrp|winrm|psexec|auto]
+dispatch hosts validate --inventory &lt;hosts.yml&gt;
+dispatch hosts graph --inventory &lt;hosts.yml&gt;
+dispatch hosts vars --inventory &lt;hosts.yml&gt; --target &lt;host&gt;
+</code></pre>
+<p>Status: planned v1 command group. Inventory parsing and selector behavior are partially implemented on current run paths.</p>
+<h2>Logs</h2>
+<pre><code>
+dispatch logs list
+dispatch logs show latest
+dispatch logs tail latest --count 50
+dispatch logs export latest --dest .\exports
+dispatch logs retry latest
+</code></pre>
+<p>Status: current.</p>
+<p>Reads local run history from <code>Admin\results.json</code> and <code>Admin\events.ndjson</code>.</p>
+<h2>Credentials</h2>
+<pre><code>
+dispatch creds list
+dispatch creds add &lt;name&gt; [--force]
+dispatch creds test &lt;name&gt;
+dispatch creds remove &lt;name&gt;
+</code></pre>
+<p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff and non-PSRP credential handoff are planned v1.</p>
+<h2>Doctor</h2>
+<pre><code>
+dispatch doctor [--transport psexec|psrp|winrm|auto] [--output rich|json|table]
+</code></pre>
+<p>Status: partial/current diagnostics, with expanded transport-aware checks planned v1.</p>
+<p><code>doctor</code> reports local readiness. It does not remediate endpoints.</p>
+<h2>Init</h2>
+<pre><code>
+dispatch init config
+dispatch init hosts
+dispatch init job
+dispatch init all
+</code></pre>
+<p>Status: planned v1.</p>
+<p>Scaffolds starter YAML files.</p>
+<h2>Output Modes</h2>
+<ul>
+<li><code>rich</code> - Spectre.Console operator UI.</li>
+<li><code>table</code> - concise human-readable text/table output.</li>
+<li><code>json</code> - stable automation document.</li>
+<li><code>ndjson</code> - one event per line where supported.</li>
+<li><code>yaml</code> - stable YAML document where supported.</li>
+</ul>
+<p>Automation should prefer result files or structured output modes instead of parsing rich terminal output.</p>
+  </article>
+</main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+</body>
+</html>

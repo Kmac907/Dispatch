@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Testing And Validation - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<body>
+<header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
+<main class="docs-layout">
+  <aside class="sidebar"><h2>Docs</h2>
+<div class="sidebar-group">Start</div>
+<a href="readme.html">Documentation Home</a>
+<a href="getting-started.html">Getting Started</a>
+<a href="installation.html">Installation</a>
+<a href="concepts.html">Concepts</a>
+<a href="command-reference.html">Command Reference</a>
+<div class="sidebar-group">Operators</div>
+<a href="running-scripts.html">Running Scripts</a>
+<a href="inventory.html">Inventory</a>
+<a href="inventory-schema.html">Inventory Schema</a>
+<a href="transports.html">Transports</a>
+<a href="transport-psexec.html">PsExec Transport</a>
+<a href="transport-winrm.html">Raw WinRM Transport</a>
+<a href="transport-psrp.html">PSRP Transport</a>
+<a href="configuration.html">Configuration</a>
+<a href="output-and-results.html">Output And Results</a>
+<a href="logs.html">Logs</a>
+<a href="troubleshooting.html">Troubleshooting</a>
+<a href="security.html">Security</a>
+<a href="script-owned-payloads.html">Script-Owned Payloads</a>
+<div class="sidebar-group">Reference</div>
+<a href="credentials.html">Credentials</a>
+<a href="error-codes.html">Error Codes</a>
+<a href="result-schema.html">Result Schema</a>
+<a href="examples.html">Examples</a>
+<a href="faq.html">FAQ</a>
+<a href="jobs.html">Jobs</a>
+<a href="job-schema.html">Job Schema</a>
+<div class="sidebar-group">Maintainers</div>
+<a href="architecture.html">Architecture</a>
+<a href="development.html">Development</a>
+<a href="testing-and-validation.html">Testing And Validation</a>
+<a href="roadmap-status.html">Roadmap Status</a>
+<a href="powershell-module.html">PowerShell Module</a>
+<a href="distribution.html">Distribution</a>
+<div class="sidebar-group">Deferred</div>
+<a href="managed-execution.html">Managed Execution</a>
+<a href="enterprise-distribution.html">Enterprise Distribution</a>
+</aside>
+  <article class="doc-content">
+<h1>Testing and Validation</h1>
+<p>Dispatch validation has two layers:</p>
+<ul>
+<li>automated validation through unit and CLI tests</li>
+<li>live endpoint validation for slices that execute against Windows endpoints</li>
+</ul>
+<p>Automated tests prove local contracts, planning, parsing, rendering, result modeling, and transport logic that can be exercised without a real endpoint. Live endpoint validation proves that an endpoint-execution slice works against at least one real Windows machine in the current environment.</p>
+<h2>Automated Tests</h2>
+<p>Run the solution test suite before completing validation for a slice that changes shared behavior:</p>
+<pre><code>
+dotnet test .\Dispatch.sln
+</code></pre>
+<p>For narrower changes, run the relevant project or filtered tests plus any broader regression tests needed for the touched behavior.</p>
+<h2>Live Endpoint Validation</h2>
+<p>Live endpoint validation is required for endpoint-execution slices whenever the current environment and selected slice allow it. It should use the least invasive command practical, usually <code>whoami</code> or a temporary file under the Dispatch run folder.</p>
+<p>Live validation only needs to pass on one user-approved reachable Windows endpoint. If multiple devices are provided and at least one reachable approved device passes the relevant live test, the live validation requirement is satisfied for that slice.</p>
+<p>An offline, powered-down, disconnected, or unreachable device does not make the product validation fail by itself. It is an environment availability issue. Report the unavailable device separately and include the reason when it is known, such as failed name resolution, failed ping/connectivity, closed WinRM ports, timeout, or missing admin-share access.</p>
+<p>If every supplied validation device is unavailable, live validation is blocked. The operator needs to connect and power on at least one device, restore network access, or provide replacement test devices before Dispatch can claim live endpoint validation for that slice.</p>
+<h2>Reporting Live Results</h2>
+<p>When reporting live endpoint validation, include:</p>
+<ul>
+<li>the command that was run</li>
+<li>which target passed</li>
+<li>which targets were unavailable</li>
+<li>whether unavailable targets were excluded as environment availability issues</li>
+<li>any failure categories or connection details that help the operator fix the lab state</li>
+</ul>
+<p>Do not report a live validation pass if no endpoint was actually reached and executed.</p>
+<h2>Local Test Host Catalog</h2>
+<p>Concrete lab host names must not be committed in public docs or tracked files. Keep the current approved validation targets in <code>workflow/build/test-hosts.yml</code>, which is ignored by git through the existing <code>/workflow</code> ignore rule.</p>
+<p>The local test-host file should list approved endpoints by transport and can be changed per workstation, lab, or validation environment. If one listed device is offline, validation can still pass against another reachable approved endpoint. If every listed device is offline or unreachable, provide a reachable replacement endpoint or reconnect one of the existing devices before claiming live endpoint validation for that slice.</p>
+  </article>
+</main>
+<footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
+</body>
+</html>

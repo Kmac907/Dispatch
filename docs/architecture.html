@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Architecture - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,62 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<h1>Architecture</h1>
+<p>Dispatch is split into core orchestration, transport implementations, CLI rendering, and tests.</p>
+<h2>Project Layout</h2>
 <pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
+src/
+  Dispatch.Core/
+  Dispatch.Cli/
+  Dispatch.Transports.PsExec/
+  Dispatch.Transports.Psrp/
+  Dispatch.Transports.WinRm/
+tests/
+  Dispatch.Core.Tests/
+  Dispatch.Cli.Tests/
+docs/
+module/
+packaging/
+workflow/
 </code></pre>
-<h2>Examples</h2>
-<pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
-</code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<h2>Core Responsibilities</h2>
+<p><code>Dispatch.Core</code> owns:</p>
+<ul>
+<li>request and job models</li>
+<li>target resolution</li>
+<li>planning</li>
+<li>result models</li>
+<li>local run layout</li>
+<li>event contracts</li>
+<li>orchestration</li>
+<li>artifact abstractions</li>
+<li>transport interfaces</li>
+</ul>
+<h2>Planner / Executor Split</h2>
+<p>The planner validates local inputs and builds an execution plan before endpoint work starts.</p>
+<p>The executor consumes the plan, creates the run folder, emits events, runs target workers, calls transports, captures output, collects artifacts, and writes summaries.</p>
+<h2>Target Resolver</h2>
+<p>The target resolver normalizes direct targets, target files, and inventory selectors into deterministic target lists.</p>
+<h2>Transport Abstraction</h2>
+<p>Transports implement common phases:</p>
+<ul>
+<li>probe</li>
+<li>prepare payload</li>
+<li>execute script</li>
+<li>execute command</li>
+<li>collect artifacts</li>
+<li>cleanup</li>
+</ul>
+<p>Expected endpoint failures should return structured results rather than escaping as unclassified exceptions.</p>
+<h2>Renderer And Output Model</h2>
+<p>CLI rendering is owned by <code>Dispatch.Cli</code>. Worker threads do not write directly to the console. Rich live rendering consumes events and heartbeat updates; structured output modes are automation contracts.</p>
+<h2>Dependency Boundaries</h2>
+<ul>
+<li>Transport projects depend on core contracts.</li>
+<li>CLI depends on core plus registered transports.</li>
+<li>Core does not depend on Spectre.Console.</li>
+<li>Tests cover contracts, planning, rendering, transport behavior, and serialization.</li>
+</ul>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

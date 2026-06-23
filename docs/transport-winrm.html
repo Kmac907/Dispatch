@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Raw WinRM Transport - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,41 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<h1>Raw WinRM Transport</h1>
+<p>The raw WinRM transport uses WS-Management shell/command semantics rather than PowerShell SDK runspaces.</p>
+<h2>Requirements</h2>
+<ul>
+<li>WinRM listener reachable on the target.</li>
+<li>WS-Management shell access permitted.</li>
+<li>Selected authentication mechanism allowed by endpoint policy.</li>
+<li>HTTPS listener for Basic authentication if Basic is ever enabled.</li>
+<li>Caller or resolved credential has rights to create shells and run commands.</li>
+</ul>
+<h2>Behavior</h2>
+<p>Raw WinRM supports:</p>
+<ul>
+<li>Direct command execution.</li>
+<li>PowerShell script execution by invoking <code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File &lt;prepared script&gt;</code>.</li>
+<li>Chunked script upload without SMB/admin shares.</li>
+<li>Artifact collection over the WinRM channel.</li>
+<li>Process stdout/stderr and exit code capture.</li>
+</ul>
+<h2>Differences From PSRP</h2>
+<p>Raw WinRM captures process stdout/stderr. It does not provide rich PowerShell streams such as warning, verbose, debug, and information as native stream records.</p>
+<h2>Validation Commands</h2>
 <pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
+dispatch run cmd whoami --target PC001 --transport winrm --no-progress --output json
+dispatch run ps .\Smoke.ps1 --target PC001 --transport winrm --no-progress --output json
 </code></pre>
-<h2>Examples</h2>
-<pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
-</code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<h2>Common Failures</h2>
+<table><tbody>
+<tr><th>Failure</th><th>Meaning</th></tr>
+<tr><td><code>TransportUnavailable</code></td><td>WinRM endpoint or shell service is unavailable.</td></tr>
+<tr><td><code>AuthenticationFailed</code></td><td>Authentication failed before execution.</td></tr>
+<tr><td><code>AuthorizationFailed</code></td><td>Authenticated user is not allowed to create shell/execute.</td></tr>
+<tr><td><code>TimedOut</code></td><td>Probe, shell, command, upload, or artifact operation timed out.</td></tr>
+</tbody></table>
+<p>Dispatch does not run <code>winrm quickconfig</code> or change endpoint policy.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>

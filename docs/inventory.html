@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PowerShell Module - Dispatch</title><link rel="stylesheet" href="site.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Inventory - Dispatch</title><link rel="stylesheet" href="site.css"></head>
 <body>
 <header class="topbar"><nav class="nav"><a class="brand" href="index.html"><span class="brand-mark">D</span><span>Dispatch</span></a><div class="nav-links"><a href="docs.html">Docs</a><a href="getting-started.html">Get Started</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></nav></header>
 <main class="docs-layout">
@@ -45,35 +45,60 @@
 <a href="enterprise-distribution.html">Enterprise Distribution</a>
 </aside>
   <article class="doc-content">
-<h1>PowerShell Module</h1>
-<p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
-<h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<h1>Inventory</h1>
+<p>Inventories define which hosts Dispatch can target and optional metadata such as transport or credential references.</p>
+<h2>Text Inventories</h2>
+<p>Simple host files are supported for direct host lists:</p>
 <pre><code>
-Invoke-DispatchPowerShell
-Invoke-DispatchCommand
-Invoke-DispatchExecutable
-Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
+PC001
+PC002
+# comments are ignored
+PC003
 </code></pre>
-<h2>Examples</h2>
+<p>Blank lines and comments are ignored. Duplicate host names are removed case-insensitively while preserving first-seen order.</p>
+<h2>YAML Inventories</h2>
 <pre><code>
-Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
-Test-Dispatch
-Get-DispatchVersion
+defaults:
+  transport: psrp
+  credential: prod-admin
+
+groups:
+  kiosks:
+    vars:
+      transport: psrp
+      credential: helpdesk-local
+    hosts:
+      - KIOSK01
+      - KIOSK02
+
+hosts:
+  SERVER01:
+    transport: winrm
+    credential: domain-admin
+  SERVER02:
 </code></pre>
-<h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
-<h2>PSCredential Handoff</h2>
-<p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The wrapper can accept a <code>PSCredential</code> in-process and hand it to Dispatch without putting the password on a command line. Direct <code>dispatch.exe</code> must reject <code>pscredential</code> unless a compatible protected handoff is present.</p>
-<h2>No Separate Shell</h2>
-<p>The module does not introduce an alternate interactive shell launcher. It maps PowerShell-friendly functions onto the documented Dispatch command tree.</p>
+<h2>Selectors</h2>
+<p>Selectors name hosts or groups:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target SERVER01
+</code></pre>
+<p>Comma-separated selectors are accepted where the command supports them.</p>
+<h2>Excludes</h2>
+<p>Exclude selectors remove hosts after inclusion:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --exclude KIOSK02
+</code></pre>
+<h2>Ordering</h2>
+<p>Dispatch preserves deterministic ordering:</p>
+<ol>
+<li>Read targets from CLI, file, or inventory in declared order.</li>
+<li>Expand groups in declaration order.</li>
+<li>De-duplicate case-insensitively while keeping first occurrence.</li>
+<li>Apply excludes.</li>
+</ol>
+<h2>Current Boundaries</h2>
+<p>Current inventory support covers the v1 host/group/defaults subset. Advanced Ansible-style expressions, facts, vars files, dynamic inventory plugins, roles, handlers, and module ecosystems are not v1 features.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><span><a href="docs.html">All Docs</a></span></div></footer>
