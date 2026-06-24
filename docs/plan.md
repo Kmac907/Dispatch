@@ -1080,7 +1080,7 @@ Scope:
 Current implementation note:
 - `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version` are registered through Spectre.Console.Cli.
 - Existing `dispatch run --script <path> --computer-name <names>` callers are preserved through the compatibility parser because that syntax predates the new command tree.
-- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `logs` read local run history; `creds` call the credential provider abstraction and report provider availability; `apply` and `init` now have current behavior in their documented subsets; `push` has current single-file and recursive-directory raw WinRM or explicit PSRP behavior with create-new default semantics and explicit replacement through `--overwrite`; `hosts` still returns planned-feature errors until its roadmap item is implemented.
+- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `logs` read local run history; `creds` call the credential provider abstraction and report provider availability; `apply` and `init` now have current behavior in their documented subsets; `push` has current single-file and recursive-directory raw WinRM or PSRP behavior with `--transport auto` inventory/config/default selection, create-new default semantics, and explicit replacement through `--overwrite`; `hosts` still returns planned-feature errors until its roadmap item is implemented.
 
 Non-goals:
 - No separate interactive execution engine.
@@ -1373,8 +1373,8 @@ Definition of done:
 - Init commands generate valid starter YAML files.
 
 Current implementation boundary:
-- `dispatch push <source> --dest <remote-path>` supports single-file and recursive directory transfer over raw WinRM or explicit PSRP, optional replacement through `--overwrite`, target/inventory selection, and `--plan` / `--check` preview.
-- Push `--transport auto` selection, checksum comparison, backup, execute-after-copy, and cleanup remain later `6.6` work. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
+- `dispatch push <source> --dest <remote-path>` supports single-file and recursive directory transfer over raw WinRM or PSRP, omitted/`--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, target/inventory selection, and `--plan` / `--check` preview.
+- Push checksum comparison, backup, execute-after-copy, and cleanup remain later `6.6` work. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 - `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
 - Init scaffolding refuses to overwrite existing starter files.
 - `hosts` and expanded transport-aware `doctor` behavior remain later `6.6` work.

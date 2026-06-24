@@ -1293,19 +1293,9 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        var requestedTransport = NormalizeOptionalValue(transport);
-        var explicitConcreteTransport = !string.IsNullOrWhiteSpace(requestedTransport)
-            && !requestedTransport.Equals("auto", StringComparison.OrdinalIgnoreCase);
-
-        if (resolvedTransport == TransportKind.Psrp && !explicitConcreteTransport)
-        {
-            error = "push --transport auto selection for PSRP is planned but is not implemented in this push slice. Use --transport psrp to request PSRP push explicitly.";
-            return false;
-        }
-
         if (resolvedTransport is not (TransportKind.WinRm or TransportKind.Psrp))
         {
-            error = $"push currently supports raw WinRM and explicit PSRP only. Transport '{resolvedTransport.ToDispatchString()}' is planned or deferred for a later push slice.";
+            error = $"push currently supports raw WinRM and PSRP. Transport '{resolvedTransport.ToDispatchString()}' is planned or deferred for a later push slice.";
             return false;
         }
 

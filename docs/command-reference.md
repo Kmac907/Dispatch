@@ -91,12 +91,12 @@ The compatibility shape `dispatch run --script <path> --computer-name <names>` s
 ## Push
 
 ```powershell
-dispatch push <source> --dest <remote-path> [--target <selector>] [--transport winrm|psrp] [--overwrite] [--plan|--check] [--recurse] [--checksum] [--backup] [--execute] [--cleanup]
+dispatch push <source> --dest <remote-path> [--target <selector>] [--transport auto|winrm|psrp] [--overwrite] [--plan|--check] [--recurse] [--checksum] [--backup] [--execute] [--cleanup]
 ```
 
 Status: partial current.
 
-Current support: single-file push and recursive directory push over raw WinRM or explicit PSRP, target selection, inventory selection, optional replacement through `--overwrite`, and structured output. `--plan` and `--check` preview the transfer without writing. `--transport auto` push selection is planned v1 work in `6.6`; checksum comparison, backup, execute-after-copy, cleanup, and PsExec push remain planned or deferred.
+Current support: single-file push and recursive directory push over raw WinRM or PSRP, target selection, inventory selection, `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, and structured output. `--plan` and `--check` preview the transfer without writing. Checksum comparison, backup, execute-after-copy, cleanup, and PsExec push remain planned or deferred.
 
 Options and behavior:
 
@@ -104,7 +104,7 @@ Options and behavior:
 - `--dest <remote-path>` is the drive-qualified Windows path to write on each target, such as `C:\ProgramData\Dispatch\Payloads\agent.msi`.
 - `--overwrite` allows replacing an existing remote file. Without it, Dispatch creates the remote file only if it does not already exist; an existing remote file fails that target instead of being replaced. For directory push, this applies independently to each file under `--dest`.
 - `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing files.
-- `--transport winrm` and explicit `--transport psrp` are the current real push transports. `--transport auto` expansion is v1 `6.6` work for this command. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
+- `--transport winrm` and `--transport psrp` are the current real push transports. Omitted transport or `--transport auto` follows inventory transport policy first, then configured/default transport; the resolved transport must be WinRM or PSRP for push. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 
 ## Hosts
 

@@ -2697,7 +2697,7 @@ credentials:
     }
 
     [Theory]
-    [InlineData("--transport", "psexec", "raw WinRM and explicit PSRP only")]
+    [InlineData("--transport", "psexec", "raw WinRM and PSRP")]
     [InlineData("--checksum", null, "--checksum comparison is planned")]
     [InlineData("--backup", null, "--backup is planned")]
     [InlineData("--execute", null, "--execute is planned")]
@@ -2741,7 +2741,7 @@ credentials:
     }
 
     [Fact]
-    public async Task PushRejectsInventoryPsrpSelectionUntilAutoSlice()
+    public async Task PushAutoTransportUsesInventoryPsrpSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -2761,13 +2761,96 @@ credentials:
         try
         {
             var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
-                ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--inventory", inventoryPath],
+                ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--inventory", inventoryPath, "--transport", "auto", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            var request = Assert.Single(psrpUploader.Requests);
+            Assert.Equal("PC001", request.Target);
+            Assert.Equal(@"C:\Temp\payload.txt", request.RemotePath);
+            Assert.False(request.Overwrite);
+            Assert.Equal("payload", DecodeTransferPlan(request.TransferPlan));
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("psrp", json.RootElement.GetProperty("plan").GetProperty("transport").GetString());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.Equal("psrp", target.GetProperty("metadata").GetProperty("uploadTransport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushAutoTransportUsesConfiguredPsrpDefault()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var psrpUploader = new RecordingPsrpFileTransferClient();
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            options: new DispatchOptions
+            {
+                ExpectedExitCodes = [0],
+                DefaultTransport = TransportKind.Psrp
+            },
+            psrpFileTransferClient: psrpUploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--target", "PC001", "--transport", "auto", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Single(psrpUploader.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal("psrp", json.RootElement.GetProperty("plan").GetProperty("transport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushAutoTransportRejectsUnsupportedInventoryPsexecSelection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            inventoryPath,
+            """
+            hosts:
+              PC001:
+                transport: psexec
+            """);
+        var psrpUploader = new RecordingPsrpFileTransferClient();
+        var winRmUploader = new RecordingWinRmTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: winRmUploader, psrpFileTransferClient: psrpUploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--inventory", inventoryPath, "--transport", "auto"],
                 CancellationToken.None));
 
             Assert.Equal(1, exitCode);
             Assert.Empty(output);
+            Assert.Empty(winRmUploader.Requests);
             Assert.Empty(psrpUploader.Requests);
-            Assert.Contains("push --transport auto selection for PSRP is planned", error);
+            Assert.Contains("raw WinRM and PSRP", error);
+            Assert.Contains("psexec", error);
         }
         finally
         {
