@@ -46,7 +46,7 @@
 </aside>
   <article class="doc-content">
 <h1>Command Reference</h1>
-<p><code>dispatch.exe</code> is the canonical command surface. The PowerShell module wraps this executable and does not provide a separate execution engine.</p>
+<p><code>dispatch.exe</code> is the canonical command surface. The planned PowerShell module will wrap this executable and will not provide a separate execution engine.</p>
 <p>Status legend:</p>
 <ul>
 <li>Current: implemented in the current codebase.</li>
@@ -80,7 +80,7 @@ dispatch apply &lt;job.yml&gt; [--inventory &lt;hosts.yml&gt;] [--target &lt;sel
 <pre><code>
 dispatch run ps &lt;script.ps1&gt; [args] --target &lt;selector&gt; [--inventory &lt;hosts.yml&gt;] [--transport psrp|winrm|psexec] [--credential &lt;name&gt;]
 dispatch run cmd &lt;command&gt; --target &lt;selector&gt; [--transport psrp|winrm]
-dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm|psexec]
+dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm]
 </code></pre>
 <p>Status: <code>run ps</code>, <code>run cmd</code>, and <code>run exe</code> route through the shared planner/executor when the transport supports the payload. Compatibility routing for the older <code>dispatch run --script ...</code> shape remains for migration.</p>
 <p>Common options:</p>

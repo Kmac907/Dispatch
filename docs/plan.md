@@ -1080,7 +1080,7 @@ Scope:
 Current implementation note:
 - `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version` are registered through Spectre.Console.Cli.
 - Existing `dispatch run --script <path> --computer-name <names>` callers are preserved through the compatibility parser because that syntax predates the new command tree.
-- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `logs` read local run history; `creds` call the credential provider abstraction and report provider availability; `apply` and `init` now have current behavior in their documented subsets; `push` has current single-file raw WinRM behavior; `hosts` still returns planned-feature errors until its roadmap item is implemented.
+- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `logs` read local run history; `creds` call the credential provider abstraction and report provider availability; `apply` and `init` now have current behavior in their documented subsets; `push` has current single-file and recursive-directory raw WinRM behavior with create-new default semantics and explicit replacement through `--overwrite`; `hosts` still returns planned-feature errors until its roadmap item is implemented.
 
 Non-goals:
 - No separate interactive execution engine.

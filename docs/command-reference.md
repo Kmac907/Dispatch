@@ -1,6 +1,6 @@
 # Command Reference
 
-`dispatch.exe` is the canonical command surface. The PowerShell module wraps this executable and does not provide a separate execution engine.
+`dispatch.exe` is the canonical command surface. The planned PowerShell module will wrap this executable and will not provide a separate execution engine.
 
 Status legend:
 
@@ -49,7 +49,7 @@ Use `--no-progress` to disable live widgets, `--quiet` to suppress rich non-erro
 ```powershell
 dispatch run ps <script.ps1> [args] --target <selector> [--inventory <hosts.yml>] [--transport psrp|winrm|psexec] [--credential <name>]
 dispatch run cmd <command> --target <selector> [--transport psrp|winrm]
-dispatch run exe <path> --target <selector> [--transport psrp|winrm|psexec]
+dispatch run exe <path> --target <selector> [--transport psrp|winrm]
 ```
 
 Status: `run ps`, `run cmd`, and `run exe` route through the shared planner/executor when the transport supports the payload. Compatibility routing for the older `dispatch run --script ...` shape remains for migration.
