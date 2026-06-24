@@ -182,14 +182,14 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 ## Doctor
 
 ```powershell
-dispatch doctor [--transport psexec|psrp|winrm|auto] [--output rich|json|table]
+dispatch doctor [--output rich|json|table]
 ```
 
 Status: partial/current diagnostics, with expanded transport-aware checks planned v1.
 
 `doctor` reports local readiness. It does not remediate endpoints.
 
-Current diagnostics are local prerequisite checks only. Expanded `--transport psexec|psrp|winrm|auto` behavior is planned so operators can ask for transport-specific prerequisite checks without scanning the fleet.
+Current diagnostics are local prerequisite checks only. Expanded `--transport psexec|psrp|winrm|auto` behavior is planned but not accepted by the current command, so operators cannot request transport-specific prerequisite checks yet.
 
 ## Init
 
