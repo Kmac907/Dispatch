@@ -2487,7 +2487,12 @@ credentials:
             Assert.Equal(["PC001", "PC002"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
 
             using var json = JsonDocument.Parse(output);
-            Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+            Assert.Equal("plan", json.RootElement.GetProperty("mode").GetString());
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(1, task.GetProperty("index").GetInt32());
+            Assert.Equal("ps", task.GetProperty("type").GetString());
+            Assert.Equal(scriptPath, task.GetProperty("scriptPath").GetString());
+            Assert.Equal("run-test", task.GetProperty("plan").GetProperty("runId").GetString());
         }
         finally
         {
@@ -2532,6 +2537,10 @@ credentials:
 
             using var json = JsonDocument.Parse(output);
             var arguments = json.RootElement
+                .GetProperty("tasks")
+                .EnumerateArray()
+                .Single()
+                .GetProperty("plan")
                 .GetProperty("job")
                 .GetProperty("payload")
                 .GetProperty("scriptArguments")
@@ -3310,7 +3319,11 @@ credentials:
             Assert.Equal(secondScriptPath, payload.ScriptPath);
 
             using var json = JsonDocument.Parse(output);
-            Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(2, task.GetProperty("index").GetInt32());
+            Assert.Equal("ps", task.GetProperty("type").GetString());
+            Assert.Equal(secondScriptPath, task.GetProperty("scriptPath").GetString());
+            Assert.Equal("run-test", task.GetProperty("plan").GetProperty("runId").GetString());
         }
         finally
         {
@@ -3766,7 +3779,7 @@ credentials:
     }
 
     [Fact]
-    public async Task ApplyCheckParsesScriptFirstYamlJobAndRendersPlanWithoutExecution()
+    public async Task ApplyCheckParsesScriptFirstYamlJobAndRendersApplyPlanWithoutExecution()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -3803,7 +3816,12 @@ credentials:
             Assert.Null(executor.LastPlan);
 
             using var json = JsonDocument.Parse(output);
-            Assert.Equal("run-test", json.RootElement.GetProperty("runId").GetString());
+            Assert.Equal("check", json.RootElement.GetProperty("mode").GetString());
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(1, task.GetProperty("index").GetInt32());
+            Assert.Equal("ps", task.GetProperty("type").GetString());
+            Assert.Equal(scriptPath, task.GetProperty("scriptPath").GetString());
+            Assert.Equal("run-test", task.GetProperty("plan").GetProperty("runId").GetString());
         }
         finally
         {

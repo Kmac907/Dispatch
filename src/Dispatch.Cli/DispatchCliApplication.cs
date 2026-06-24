@@ -452,7 +452,7 @@ public sealed class DispatchCliApplication(
             return 1;
         }
 
-        if (apply!.Tasks.Count == 1)
+        if (apply!.Mode == "execute" && apply.Tasks.Count == 1)
         {
             return await RunParsedCommandAsync(apply.Tasks[0].Command, cancellationToken).ConfigureAwait(false);
         }
