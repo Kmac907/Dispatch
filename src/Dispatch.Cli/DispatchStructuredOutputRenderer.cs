@@ -147,6 +147,7 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Transport: {plan.Transport.ToDispatchString()}");
                 writer.WriteLine($"Targets: {string.Join(", ", plan.TargetNames)}");
                 writer.WriteLine($"Overwrite: {plan.Overwrite}");
+                writer.WriteLine($"Checksum: {plan.Checksum}");
                 writer.WriteLine($"Concurrency: {plan.Concurrency}");
                 break;
         }
@@ -477,6 +478,7 @@ internal sealed record DispatchPushPlan(
     TransportKind Transport,
     IReadOnlyList<TargetSpec> Targets,
     bool Overwrite,
+    bool Checksum,
     int Concurrency,
     [property: JsonIgnore]
     DispatchOutputMode OutputMode)

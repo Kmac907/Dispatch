@@ -2493,7 +2493,50 @@ credentials:
             Assert.Equal(@"C:\Temp\payload.txt", json.RootElement.GetProperty("destinationPath").GetString());
             Assert.Equal("winrm", json.RootElement.GetProperty("transport").GetString());
             Assert.False(json.RootElement.GetProperty("overwrite").GetBoolean());
+            Assert.False(json.RootElement.GetProperty("checksum").GetBoolean());
             Assert.Equal(["PC001", "PC002"], json.RootElement.GetProperty("targetNames").EnumerateArray().Select(static item => item.GetString()).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushPlanRendersChecksumSelection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var uploader = new RecordingWinRmTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--checksum",
+                    "--plan",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(uploader.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("checksum").GetBoolean());
         }
         finally
         {
@@ -2543,6 +2586,107 @@ credentials:
             Assert.Equal("PC001", target.GetProperty("target").GetString());
             Assert.True(target.GetProperty("succeeded").GetBoolean());
             Assert.Equal(7, target.GetProperty("bytesUploaded").GetInt64());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionVerifiesChecksumWhenRequested()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var uploader = new RecordingWinRmTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--checksum",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            var request = Assert.Single(uploader.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("succeeded").GetBoolean());
+            Assert.True(json.RootElement.GetProperty("plan").GetProperty("checksum").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            var metadata = target.GetProperty("metadata");
+            Assert.Equal("True", metadata.GetProperty("checksumRequested").GetString());
+            Assert.Equal("sha256", metadata.GetProperty("checksumMode").GetString());
+            Assert.Equal("1", metadata.GetProperty("checksumVerifiedFileCount").GetString());
+            Assert.Equal(request.TransferPlan.ContentSha256, metadata.GetProperty("uploadExpectedSha256").GetString());
+            Assert.Equal(request.TransferPlan.ContentSha256, metadata.GetProperty("uploadReportedSha256").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionFailsWhenRequestedChecksumDoesNotMatch()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var uploader = new RecordingWinRmTransferClient(request => WinRmScriptTransferResult.Success(new Dictionary<string, string>
+        {
+            ["uploadStage"] = "completed",
+            ["uploadExpectedSha256"] = request.TransferPlan.ContentSha256,
+            ["uploadReportedSha256"] = new string('0', 64)
+        }));
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--checksum",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(2, exitCode);
+            Assert.Empty(error);
+            Assert.Single(uploader.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.False(json.RootElement.GetProperty("succeeded").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.False(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("scriptTransferFailed", target.GetProperty("failureCategory").GetString());
+            Assert.Contains("checksum comparison failed", target.GetProperty("failureMessage").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, target.GetProperty("bytesUploaded").GetInt64());
+            Assert.Equal("0", target.GetProperty("metadata").GetProperty("checksumVerifiedFileCount").GetString());
         }
         finally
         {
@@ -2698,7 +2842,6 @@ credentials:
 
     [Theory]
     [InlineData("--transport", "psexec", "raw WinRM and PSRP")]
-    [InlineData("--checksum", null, "--checksum comparison is planned")]
     [InlineData("--backup", null, "--backup is planned")]
     [InlineData("--execute", null, "--execute is planned")]
     [InlineData("--execute-as", "system", "--execute-as is planned")]
@@ -6696,8 +6839,13 @@ credentials:
     }
 
     private sealed class RecordingWinRmTransferClient(
-        WinRmScriptTransferResult? result = null) : IWinRmScriptTransferClient
+        Func<WinRmScriptTransferRequest, WinRmScriptTransferResult>? resultFactory = null) : IWinRmScriptTransferClient
     {
+        public RecordingWinRmTransferClient(WinRmScriptTransferResult result)
+            : this(_ => result)
+        {
+        }
+
         public List<WinRmScriptTransferRequest> Requests { get; } = [];
 
         public Task<WinRmScriptTransferResult> UploadAsync(
@@ -6705,16 +6853,23 @@ credentials:
             CancellationToken cancellationToken)
         {
             Requests.Add(request);
-            return Task.FromResult(result ?? WinRmScriptTransferResult.Success(new Dictionary<string, string>
+            return Task.FromResult(resultFactory?.Invoke(request) ?? WinRmScriptTransferResult.Success(new Dictionary<string, string>
             {
-                ["uploadStage"] = "completed"
+                ["uploadStage"] = "completed",
+                ["uploadExpectedSha256"] = request.TransferPlan.ContentSha256,
+                ["uploadReportedSha256"] = request.TransferPlan.ContentSha256
             }));
         }
     }
 
     private sealed class RecordingPsrpFileTransferClient(
-        PsrpFileTransferResult? result = null) : IPsrpFileTransferClient
+        Func<PsrpFileTransferRequest, PsrpFileTransferResult>? resultFactory = null) : IPsrpFileTransferClient
     {
+        public RecordingPsrpFileTransferClient(PsrpFileTransferResult result)
+            : this(_ => result)
+        {
+        }
+
         public List<PsrpFileTransferRequest> Requests { get; } = [];
 
         public Task<PsrpFileTransferResult> UploadAsync(
@@ -6722,10 +6877,12 @@ credentials:
             CancellationToken cancellationToken)
         {
             Requests.Add(request);
-            return Task.FromResult(result ?? PsrpFileTransferResult.Success(new Dictionary<string, string>
+            return Task.FromResult(resultFactory?.Invoke(request) ?? PsrpFileTransferResult.Success(new Dictionary<string, string>
             {
                 ["uploadStage"] = "completed",
-                ["uploadTransport"] = "psrp"
+                ["uploadTransport"] = "psrp",
+                ["uploadExpectedSha256"] = request.TransferPlan.ContentSha256,
+                ["uploadReportedSha256"] = request.TransferPlan.ContentSha256
             }));
         }
     }

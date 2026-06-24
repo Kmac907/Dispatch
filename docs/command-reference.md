@@ -96,13 +96,14 @@ dispatch push <source> --dest <remote-path> [--target <selector>] [--transport a
 
 Status: partial current.
 
-Current support: single-file push and recursive directory push over raw WinRM or PSRP, target selection, inventory selection, `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, and structured output. `--plan` and `--check` preview the transfer without writing. Checksum comparison, backup, execute-after-copy, cleanup, and PsExec push remain planned or deferred.
+Current support: single-file push and recursive directory push over raw WinRM or PSRP, target selection, inventory selection, `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, optional post-upload SHA-256 verification through `--checksum`, and structured output. `--plan` and `--check` preview the transfer without writing. Backup, execute-after-copy, cleanup, and PsExec push remain planned or deferred.
 
 Options and behavior:
 
 - `<source>` is the local file or directory to transfer. Directory transfer requires `--recurse` and preserves relative file paths under `--dest`.
 - `--dest <remote-path>` is the drive-qualified Windows path to write on each target, such as `C:\ProgramData\Dispatch\Payloads\agent.msi`.
 - `--overwrite` allows replacing an existing remote file. Without it, Dispatch creates the remote file only if it does not already exist; an existing remote file fails that target instead of being replaced. For directory push, this applies independently to each file under `--dest`.
+- `--checksum` requires the selected transfer transport to report the remote SHA-256 after upload and fails the target if it does not match the local source hash.
 - `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing files.
 - `--transport winrm` and `--transport psrp` are the current real push transports. Omitted transport or `--transport auto` follows inventory transport policy first, then configured/default transport; the resolved transport must be WinRM or PSRP for push. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 

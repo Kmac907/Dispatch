@@ -1201,12 +1201,6 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        if (checksum)
-        {
-            error = "--checksum comparison is planned for push but is not implemented in this push slice.";
-            return false;
-        }
-
         if (backup)
         {
             error = "--backup is planned for push but is not implemented in this push slice.";
@@ -1340,6 +1334,7 @@ public sealed class DispatchCliApplication(
             Transport: resolvedTransport,
             Targets: targets,
             Overwrite: overwrite,
+            Checksum: checksum,
             Concurrency: 1,
             OutputMode: outputMode);
         return true;
@@ -1388,9 +1383,11 @@ public sealed class DispatchCliApplication(
                 var bytesUploaded = 0L;
                 var uploadMetadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["pushFileCount"] = pushItems.Count.ToString()
+                    ["pushFileCount"] = pushItems.Count.ToString(),
+                    ["checksumRequested"] = plan.Checksum.ToString()
                 };
                 PushUploadFailure? failedUpload = null;
+                var checksumVerifiedCount = 0;
                 foreach (var item in pushItems)
                 {
                     var upload = await UploadPushItemAsync(plan, target.Name, item, credential, cancellationToken).ConfigureAwait(false);
@@ -1411,7 +1408,28 @@ public sealed class DispatchCliApplication(
                         break;
                     }
 
+                    if (plan.Checksum
+                        && !TryVerifyPushChecksum(item, upload.Metadata, out var checksumFailure))
+                    {
+                        uploadMetadata["checksumStage"] = "verify";
+                        uploadMetadata["checksumFailedSourcePath"] = item.SourcePath;
+                        uploadMetadata["checksumFailedRemotePath"] = item.RemotePath;
+                        failedUpload = new PushUploadFailure(FailureCategory.ScriptTransferFailed, checksumFailure);
+                        break;
+                    }
+
+                    if (plan.Checksum)
+                    {
+                        checksumVerifiedCount++;
+                    }
+
                     bytesUploaded += item.TransferPlan.TotalBytes;
+                }
+
+                if (plan.Checksum)
+                {
+                    uploadMetadata["checksumMode"] = "sha256";
+                    uploadMetadata["checksumVerifiedFileCount"] = checksumVerifiedCount.ToString();
                 }
 
                 targetResults.Add(new DispatchPushTargetResult(
@@ -1488,6 +1506,47 @@ public sealed class DispatchCliApplication(
                 cancellationToken)
             .ConfigureAwait(false);
         return new PushUploadResult(psrpUpload.Succeeded, psrpUpload.FailureCategory, psrpUpload.FailureMessage, psrpUpload.Metadata);
+    }
+
+    private static bool TryVerifyPushChecksum(
+        DispatchPushTransferItem item,
+        IReadOnlyDictionary<string, string>? metadata,
+        out string failure)
+    {
+        failure = string.Empty;
+        if (metadata is null)
+        {
+            failure = $"Push checksum comparison did not receive SHA-256 metadata for '{item.RemotePath}'.";
+            return false;
+        }
+
+        if (!metadata.TryGetValue("uploadExpectedSha256", out var expected)
+            || string.IsNullOrWhiteSpace(expected))
+        {
+            failure = $"Push checksum comparison did not receive the expected SHA-256 for '{item.RemotePath}'.";
+            return false;
+        }
+
+        if (!string.Equals(expected, item.TransferPlan.ContentSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            failure = $"Push checksum comparison expected SHA-256 '{item.TransferPlan.ContentSha256}' for '{item.RemotePath}', but the transport reported expected SHA-256 '{expected}'.";
+            return false;
+        }
+
+        if (!metadata.TryGetValue("uploadReportedSha256", out var reported)
+            || string.IsNullOrWhiteSpace(reported))
+        {
+            failure = $"Push checksum comparison did not receive the remote SHA-256 for '{item.RemotePath}'.";
+            return false;
+        }
+
+        if (!string.Equals(reported, item.TransferPlan.ContentSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            failure = $"Push checksum comparison failed for '{item.RemotePath}': remote SHA-256 '{reported}' did not match local SHA-256 '{item.TransferPlan.ContentSha256}'.";
+            return false;
+        }
+
+        return true;
     }
 
     private async Task<RuntimeCredentialResolutionResult> ResolvePushCredentialsAsync(
