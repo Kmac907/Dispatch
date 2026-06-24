@@ -1080,7 +1080,7 @@ Scope:
 Current implementation note:
 - `apply`, `run ps|cmd|exe`, `push`, `hosts`, `logs`, `creds`, `doctor`, `init`, and `version` are registered through Spectre.Console.Cli.
 - Existing `dispatch run --script <path> --computer-name <names>` callers are preserved through the compatibility parser because that syntax predates the new command tree.
-- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `logs` read local run history; `creds` call the credential provider abstraction and report provider availability; `apply`, `push`, `hosts`, and `init` still return planned-feature errors until their specific roadmap items are implemented.
+- `run cmd` and `run exe` route through Spectre.Console.Cli and the shared planner/executor path when the selected transport supports command payloads; `logs` read local run history; `creds` call the credential provider abstraction and report provider availability; `apply` and `init` now have current behavior in their documented subsets; `push` has current single-file raw WinRM behavior; `hosts` still returns planned-feature errors until its roadmap item is implemented.
 
 Non-goals:
 - No separate interactive execution engine.
@@ -1371,9 +1371,11 @@ Definition of done:
 - Init commands generate valid starter YAML files.
 
 Current implementation boundary:
+- `dispatch push <source> --dest <remote-path>` supports single-file raw WinRM transfer with explicit `--overwrite`, target/inventory selection, and `--plan` / `--check` preview.
+- Push directory recursion, checksum comparison, backup, execute-after-copy, cleanup, and non-WinRM push transports remain later `6.6` work.
 - `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
 - Init scaffolding refuses to overwrite existing starter files.
-- `push`, `hosts`, and expanded transport-aware `doctor` behavior remain later `6.6` work.
+- `hosts` and expanded transport-aware `doctor` behavior remain later `6.6` work.
 
 #### 6.7 CLI Safety, Policy, And Exit Codes
 

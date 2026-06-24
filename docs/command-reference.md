@@ -15,7 +15,10 @@ dispatch --help
 dispatch version
 ```
 
-`version` is current.
+Status: current.
+
+- `dispatch --help` prints the registered command tree and high-level examples.
+- `dispatch version` prints the CLI version/build identity available to the executable.
 
 ## Apply
 
@@ -77,15 +80,31 @@ dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 
 Use `--plan` to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.
 
+Subcommands:
+
+- `run ps <script.ps1>` runs a PowerShell script file. Extra arguments after the script path are passed through as script arguments. Use this for script-first automation and installer/remediation scripts.
+- `run cmd <command>` runs a shell command through the selected command-capable transport. Use this for short Windows command-line checks such as `whoami`.
+- `run exe <path>` runs an executable path through the selected command-capable transport. Use this for direct process execution when a script wrapper is not needed.
+
+The compatibility shape `dispatch run --script <path> --computer-name <names>` still works for older callers, but new docs and automation should use `dispatch run ps`.
+
 ## Push
 
 ```powershell
-dispatch push <source> --dest <remote-path> [--target <selector>] [--recurse] [--checksum] [--overwrite] [--backup] [--execute] [--cleanup]
+dispatch push <source> --dest <remote-path> [--target <selector>] [--transport winrm] [--overwrite] [--plan|--check] [--recurse] [--checksum] [--backup] [--execute] [--cleanup]
 ```
 
-Status: planned v1.
+Status: partial current.
 
-Copies files to endpoints and can optionally execute after transfer.
+Current support: single-file push over raw WinRM with `--overwrite`, target selection, inventory selection, and structured output. `--plan` and `--check` preview the transfer without writing. Directory recursion, checksum comparison, backup, execute-after-copy, cleanup, and non-WinRM push transports remain planned.
+
+Options and behavior:
+
+- `<source>` is the local file to transfer. Current support is files only; directory transfer requires later `--recurse` work.
+- `--dest <remote-path>` is the drive-qualified Windows path to write on each target, such as `C:\ProgramData\Dispatch\Payloads\agent.msi`.
+- `--overwrite` is required for real transfer in the current slice because remote existence preflight/backup behavior is not implemented yet.
+- `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing the file.
+- `--transport winrm` is the only current real push transport. `psrp`, `psexec`, and `auto` expansion remain planned for this command.
 
 ## Hosts
 
@@ -98,6 +117,14 @@ dispatch hosts vars --inventory <hosts.yml> --target <host>
 ```
 
 Status: planned v1 command group. Inventory parsing and selector behavior are partially implemented on current run paths.
+
+Planned subcommands:
+
+- `hosts list` will read an inventory and print the hosts Dispatch can resolve, including group membership where available.
+- `hosts test` will test the selected remoting path for matching hosts. It is not an ICMP ping command and will not remediate endpoints.
+- `hosts validate` will validate inventory syntax/schema without running endpoint work.
+- `hosts graph` will show group/child relationships so nested inventory structure is easier to inspect.
+- `hosts vars` will show the effective host metadata Dispatch can derive for one target, including supported transport and credential reference fields.
 
 ## Logs
 
@@ -113,6 +140,14 @@ Status: current.
 
 Reads local run history from `Admin\results.json` and `Admin\events.ndjson`.
 
+Subcommands:
+
+- `logs list` enumerates local runs under the configured run root and shows reduced run summaries.
+- `logs show <run-id|latest>` prints a selected run summary, target outcomes, and output file locations.
+- `logs tail <run-id|latest> --count <n>` reads the durable NDJSON event stream and prints the latest events.
+- `logs export <run-id|latest> --dest <path>` copies the selected run's durable summary/event data to an export folder and generates a CSV summary where available.
+- `logs retry <run-id|latest>` builds a read-only retry plan for failed, timed-out, or cancelled targets. It does not rerun anything.
+
 ## Credentials
 
 ```powershell
@@ -125,6 +160,14 @@ dispatch creds remove <name>
 Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper `PSCredential` handoff remains planned for the wrapper slice. PsExec explicit password handoff remains intentionally unsupported while the v1 PsExec boundary forbids plaintext `psexec -u/-p` password passing.
 
 Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.
+
+Subcommands:
+
+- `creds list` shows configured credential references and provider metadata that is safe to display. It does not reveal passwords or secret values.
+- `creds add <name>` enrolls or validates local provider state for a configured reference. For `dpapi_file` and `windows_credential_manager`, it prompts for a password and stores it in the configured protected local store. For `prompt`, it records that runtime prompting is expected. For `azure_keyvault`, it validates Key Vault access and secret readability without storing a local password.
+- `creds add <name> --force` allows replacement when the configured provider already has local state, such as an existing DPAPI file or Windows Credential Manager target.
+- `creds test <name>` verifies the configured provider can resolve or validate the reference. For prompt-style references, this proves metadata and provider availability rather than silently storing a password.
+- `creds remove <name>` removes local provider state where that provider owns local state. It does not delete the reference definition from `config.yml` and does not delete Azure Key Vault secrets.
 
 Examples:
 
@@ -146,6 +189,8 @@ Status: partial/current diagnostics, with expanded transport-aware checks planne
 
 `doctor` reports local readiness. It does not remediate endpoints.
 
+Current diagnostics are local prerequisite checks only. Expanded `--transport psexec|psrp|winrm|auto` behavior is planned so operators can ask for transport-specific prerequisite checks without scanning the fleet.
+
 ## Init
 
 ```powershell
@@ -158,6 +203,13 @@ dispatch init all
 Status: current.
 
 Scaffolds starter YAML files in the current directory: `config.yml`, `hosts.yml`, and `job.yml`. `init all` creates all three files. Init refuses to overwrite an existing starter file.
+
+Subcommands:
+
+- `init config` creates `config.yml` with starter Dispatch defaults and a prompt-based credential reference example.
+- `init hosts` creates `hosts.yml` with a small starter inventory group and host entries.
+- `init job` creates `job.yml` with a starter declared job that targets the starter inventory group.
+- `init all` creates all three starter files after first checking that none of the target paths already exists.
 
 ## Output Modes
 

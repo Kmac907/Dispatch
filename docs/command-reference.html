@@ -58,7 +58,11 @@
 dispatch --help
 dispatch version
 </code></pre>
-<p><code>version</code> is current.</p>
+<p>Status: current.</p>
+<ul>
+<li><code>dispatch --help</code> prints the registered command tree and high-level examples.</li>
+<li><code>dispatch version</code> prints the CLI version/build identity available to the executable.</li>
+</ul>
 <h2>Apply</h2>
 <pre><code>
 dispatch apply &lt;job.yml&gt; [--inventory &lt;hosts.yml&gt;] [--target &lt;selector&gt;] [--exclude &lt;selector&gt;] [--config &lt;path&gt;] [--credential &lt;name&gt;] [--transport auto|psrp|winrm|psexec] [--tags &lt;tags&gt;] [--skip-tags &lt;tags&gt;] [--serial &lt;n&gt;|--concurrency &lt;n&gt;] [--plan|--check] [--diff] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
@@ -102,12 +106,27 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 </code></pre>
 <p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
+<p>Subcommands:</p>
+<ul>
+<li><code>run ps &lt;script.ps1&gt;</code> runs a PowerShell script file. Extra arguments after the script path are passed through as script arguments. Use this for script-first automation and installer/remediation scripts.</li>
+<li><code>run cmd &lt;command&gt;</code> runs a shell command through the selected command-capable transport. Use this for short Windows command-line checks such as <code>whoami</code>.</li>
+<li><code>run exe &lt;path&gt;</code> runs an executable path through the selected command-capable transport. Use this for direct process execution when a script wrapper is not needed.</li>
+</ul>
+<p>The compatibility shape <code>dispatch run --script &lt;path&gt; --computer-name &lt;names&gt;</code> still works for older callers, but new docs and automation should use <code>dispatch run ps</code>.</p>
 <h2>Push</h2>
 <pre><code>
-dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--target &lt;selector&gt;] [--recurse] [--checksum] [--overwrite] [--backup] [--execute] [--cleanup]
+dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--target &lt;selector&gt;] [--transport winrm] [--overwrite] [--plan|--check] [--recurse] [--checksum] [--backup] [--execute] [--cleanup]
 </code></pre>
-<p>Status: planned v1.</p>
-<p>Copies files to endpoints and can optionally execute after transfer.</p>
+<p>Status: partial current.</p>
+<p>Current support: single-file push over raw WinRM with <code>--overwrite</code>, target selection, inventory selection, and structured output. <code>--plan</code> and <code>--check</code> preview the transfer without writing. Directory recursion, checksum comparison, backup, execute-after-copy, cleanup, and non-WinRM push transports remain planned.</p>
+<p>Options and behavior:</p>
+<ul>
+<li><code>&lt;source&gt;</code> is the local file to transfer. Current support is files only; directory transfer requires later <code>--recurse</code> work.</li>
+<li><code>--dest &lt;remote-path&gt;</code> is the drive-qualified Windows path to write on each target, such as <code>C:\ProgramData\Dispatch\Payloads\agent.msi</code>.</li>
+<li><code>--overwrite</code> is required for real transfer in the current slice because remote existence preflight/backup behavior is not implemented yet.</li>
+<li><code>--plan</code> and <code>--check</code> resolve targets and render the planned transfer without opening a remote shell or writing the file.</li>
+<li><code>--transport winrm</code> is the only current real push transport. <code>psrp</code>, <code>psexec</code>, and <code>auto</code> expansion remain planned for this command.</li>
+</ul>
 <h2>Hosts</h2>
 <pre><code>
 dispatch hosts list --inventory &lt;hosts.yml&gt;
@@ -117,6 +136,14 @@ dispatch hosts graph --inventory &lt;hosts.yml&gt;
 dispatch hosts vars --inventory &lt;hosts.yml&gt; --target &lt;host&gt;
 </code></pre>
 <p>Status: planned v1 command group. Inventory parsing and selector behavior are partially implemented on current run paths.</p>
+<p>Planned subcommands:</p>
+<ul>
+<li><code>hosts list</code> will read an inventory and print the hosts Dispatch can resolve, including group membership where available.</li>
+<li><code>hosts test</code> will test the selected remoting path for matching hosts. It is not an ICMP ping command and will not remediate endpoints.</li>
+<li><code>hosts validate</code> will validate inventory syntax/schema without running endpoint work.</li>
+<li><code>hosts graph</code> will show group/child relationships so nested inventory structure is easier to inspect.</li>
+<li><code>hosts vars</code> will show the effective host metadata Dispatch can derive for one target, including supported transport and credential reference fields.</li>
+</ul>
 <h2>Logs</h2>
 <pre><code>
 dispatch logs list
@@ -127,6 +154,14 @@ dispatch logs retry latest
 </code></pre>
 <p>Status: current.</p>
 <p>Reads local run history from <code>Admin\results.json</code> and <code>Admin\events.ndjson</code>.</p>
+<p>Subcommands:</p>
+<ul>
+<li><code>logs list</code> enumerates local runs under the configured run root and shows reduced run summaries.</li>
+<li><code>logs show &lt;run-id|latest&gt;</code> prints a selected run summary, target outcomes, and output file locations.</li>
+<li><code>logs tail &lt;run-id|latest&gt; --count &lt;n&gt;</code> reads the durable NDJSON event stream and prints the latest events.</li>
+<li><code>logs export &lt;run-id|latest&gt; --dest &lt;path&gt;</code> copies the selected run's durable summary/event data to an export folder and generates a CSV summary where available.</li>
+<li><code>logs retry &lt;run-id|latest&gt;</code> builds a read-only retry plan for failed, timed-out, or cancelled targets. It does not rerun anything.</li>
+</ul>
 <h2>Credentials</h2>
 <pre><code>
 dispatch creds list
@@ -136,6 +171,14 @@ dispatch creds remove &lt;name&gt;
 </code></pre>
 <p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff remains planned for the wrapper slice. PsExec explicit password handoff remains intentionally unsupported while the v1 PsExec boundary forbids plaintext <code>psexec -u/-p</code> password passing.</p>
 <p>Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.</p>
+<p>Subcommands:</p>
+<ul>
+<li><code>creds list</code> shows configured credential references and provider metadata that is safe to display. It does not reveal passwords or secret values.</li>
+<li><code>creds add &lt;name&gt;</code> enrolls or validates local provider state for a configured reference. For <code>dpapi_file</code> and <code>windows_credential_manager</code>, it prompts for a password and stores it in the configured protected local store. For <code>prompt</code>, it records that runtime prompting is expected. For <code>azure_keyvault</code>, it validates Key Vault access and secret readability without storing a local password.</li>
+<li><code>creds add &lt;name&gt; --force</code> allows replacement when the configured provider already has local state, such as an existing DPAPI file or Windows Credential Manager target.</li>
+<li><code>creds test &lt;name&gt;</code> verifies the configured provider can resolve or validate the reference. For prompt-style references, this proves metadata and provider availability rather than silently storing a password.</li>
+<li><code>creds remove &lt;name&gt;</code> removes local provider state where that provider owns local state. It does not delete the reference definition from <code>config.yml</code> and does not delete Azure Key Vault secrets.</li>
+</ul>
 <p>Examples:</p>
 <pre><code>
 dispatch creds list
@@ -150,6 +193,7 @@ dispatch doctor [--transport psexec|psrp|winrm|auto] [--output rich|json|table]
 </code></pre>
 <p>Status: partial/current diagnostics, with expanded transport-aware checks planned v1.</p>
 <p><code>doctor</code> reports local readiness. It does not remediate endpoints.</p>
+<p>Current diagnostics are local prerequisite checks only. Expanded <code>--transport psexec|psrp|winrm|auto</code> behavior is planned so operators can ask for transport-specific prerequisite checks without scanning the fleet.</p>
 <h2>Init</h2>
 <pre><code>
 dispatch init config
@@ -159,6 +203,13 @@ dispatch init all
 </code></pre>
 <p>Status: current.</p>
 <p>Scaffolds starter YAML files in the current directory: <code>config.yml</code>, <code>hosts.yml</code>, and <code>job.yml</code>. <code>init all</code> creates all three files. Init refuses to overwrite an existing starter file.</p>
+<p>Subcommands:</p>
+<ul>
+<li><code>init config</code> creates <code>config.yml</code> with starter Dispatch defaults and a prompt-based credential reference example.</li>
+<li><code>init hosts</code> creates <code>hosts.yml</code> with a small starter inventory group and host entries.</li>
+<li><code>init job</code> creates <code>job.yml</code> with a starter declared job that targets the starter inventory group.</li>
+<li><code>init all</code> creates all three starter files after first checking that none of the target paths already exists.</li>
+</ul>
 <h2>Output Modes</h2>
 <ul>
 <li><code>rich</code> - Spectre.Console operator UI.</li>

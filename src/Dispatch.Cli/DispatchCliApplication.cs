@@ -3,9 +3,12 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
+using Dispatch.Core.Targeting;
 using Dispatch.Transports.PsExec;
+using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -20,7 +23,8 @@ public sealed class DispatchCliApplication(
     TextWriter? statusWriter = null,
     ICredentialProvider? credentialProvider = null,
     IRuntimeCredentialResolver? runtimeCredentialResolver = null,
-    IRuntimeCredentialPrompt? runtimeCredentialPrompt = null)
+    IRuntimeCredentialPrompt? runtimeCredentialPrompt = null,
+    IWinRmScriptTransferClient? winRmTransferClient = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
@@ -31,6 +35,7 @@ public sealed class DispatchCliApplication(
         runtimeCredentialResolver ?? new UnavailableRuntimeCredentialResolver();
     private readonly IRuntimeCredentialPrompt runtimeCredentialPrompt =
         runtimeCredentialPrompt ?? new UnavailableRuntimeCredentialPrompt();
+    private readonly IWinRmScriptTransferClient? winRmTransferClient = winRmTransferClient;
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -387,6 +392,99 @@ public sealed class DispatchCliApplication(
         var report = doctor.Run();
         SpectreConsoleRenderer.RenderDoctorReport(Console.Out, report);
         return report.Succeeded ? 0 : 1;
+    }
+
+    internal async Task<int> RunPushCommandAsync(
+        string? source,
+        string? destination,
+        bool plan,
+        bool check,
+        bool recurse,
+        bool checksum,
+        bool overwrite,
+        bool backup,
+        bool execute,
+        string? executeAs,
+        bool cleanup,
+        string? inventory,
+        string? target,
+        string? exclude,
+        string? transport,
+        string? credentialReference,
+        int? concurrency,
+        string? configPath,
+        string? outputValue,
+        bool noColor,
+        bool noProgress,
+        bool quiet,
+        bool verbose,
+        bool trace,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Push", outputError!);
+            return 1;
+        }
+
+        if (plan && check)
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Push", "--plan and --check cannot be used together.");
+            return 1;
+        }
+
+        if (!TryBuildPushPlan(
+                source,
+                destination,
+                recurse,
+                checksum,
+                overwrite,
+                backup,
+                execute,
+                executeAs,
+                cleanup,
+                inventory,
+                target,
+                exclude,
+                transport,
+                credentialReference,
+                concurrency,
+                configPath,
+                outputMode,
+                out var pushPlan,
+                out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Push", error);
+            return 1;
+        }
+
+        if (plan || check)
+        {
+            DispatchStructuredOutputRenderer.RenderPushPlan(Console.Out, pushPlan!, outputMode);
+            return 0;
+        }
+
+        if (!pushPlan!.Overwrite)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Push Failed",
+                "Real push execution currently requires --overwrite because remote existence preflight is not implemented in this push slice. Use --plan or --check to preview without writing.");
+            return 1;
+        }
+
+        if (winRmTransferClient is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Push Failed",
+                "Raw WinRM upload support is unavailable in this Dispatch runtime.");
+            return 1;
+        }
+
+        var result = await ExecutePushPlanAsync(pushPlan!, noProgress, cancellationToken).ConfigureAwait(false);
+        DispatchStructuredOutputRenderer.RenderPushResult(Console.Out, result, outputMode);
+        return result.Succeeded ? 0 : 2;
     }
 
     internal async Task<int> RunApplyCommandAsync(
@@ -1064,6 +1162,397 @@ public sealed class DispatchCliApplication(
     private static string? NormalizeOptionalValue(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private bool TryBuildPushPlan(
+        string? source,
+        string? destination,
+        bool recurse,
+        bool checksum,
+        bool overwrite,
+        bool backup,
+        bool execute,
+        string? executeAs,
+        bool cleanup,
+        string? inventory,
+        string? target,
+        string? exclude,
+        string? transport,
+        string? credentialReference,
+        int? concurrency,
+        string? configPath,
+        DispatchOutputMode outputMode,
+        out DispatchPushPlan? plan,
+        out string error)
+    {
+        plan = null;
+        error = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            error = "push requires <source>.";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(destination))
+        {
+            error = "push requires --dest <remote-path>.";
+            return false;
+        }
+
+        if (recurse)
+        {
+            error = "--recurse is planned for push directories but is not implemented in this push slice.";
+            return false;
+        }
+
+        if (checksum)
+        {
+            error = "--checksum comparison is planned for push but is not implemented in this push slice.";
+            return false;
+        }
+
+        if (backup)
+        {
+            error = "--backup is planned for push but is not implemented in this push slice.";
+            return false;
+        }
+
+        if (execute)
+        {
+            error = "--execute is planned for push but is not implemented in this push slice.";
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(executeAs))
+        {
+            error = "--execute-as is planned for push execution but is not implemented in this push slice.";
+            return false;
+        }
+
+        if (cleanup)
+        {
+            error = "--cleanup is planned for push execution but is not implemented in this push slice.";
+            return false;
+        }
+
+        if (concurrency is <= 0)
+        {
+            error = "--concurrency must be a positive integer.";
+            return false;
+        }
+
+        if (concurrency is > 1)
+        {
+            error = "--concurrency greater than 1 is planned for push but is not implemented in this push slice.";
+            return false;
+        }
+
+        var sourcePath = Path.GetFullPath(source);
+        if (Directory.Exists(sourcePath))
+        {
+            error = "Directory push requires --recurse and is not implemented in this push slice.";
+            return false;
+        }
+
+        if (!File.Exists(sourcePath))
+        {
+            error = $"Push source file '{sourcePath}' does not exist.";
+            return false;
+        }
+
+        var destinationPath = destination.Replace('/', '\\').Trim();
+        if (ContainsInvalidPushDestinationCharacter(destinationPath))
+        {
+            error = "Push destination must not contain control characters or invalid Windows path characters.";
+            return false;
+        }
+
+        var destinationValidation = AdminSharePath.FromRemoteWindowsPath("TARGET", destinationPath);
+        if (!destinationValidation.IsValid)
+        {
+            error = destinationValidation.Error!.Message;
+            return false;
+        }
+
+        if (!TryLoadPushConfig(configPath, out var config, out error))
+        {
+            return false;
+        }
+
+        var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(
+            ComputerNameValues: [],
+            TargetFile: null,
+            TargetSelectors: [NormalizeOptionalValue(target) ?? config.Target ?? string.Empty],
+            InventoryPath: NormalizeOptionalValue(inventory) ?? config.Inventory,
+            ExcludeSelectors: (NormalizeOptionalValue(exclude) ?? config.Exclude) is { } excludeSelector ? [excludeSelector] : []));
+        if (!targetResolution.IsValid)
+        {
+            error = string.Join(Environment.NewLine, targetResolution.Errors.Select(static item => $"{item.Code}: {item.Message}"));
+            return false;
+        }
+
+        if (!TryResolvePushTransport(transport, targetResolution, config.DefaultTransport, out var resolvedTransport, out error))
+        {
+            return false;
+        }
+
+        if (resolvedTransport != TransportKind.WinRm)
+        {
+            error = $"push currently supports raw WinRM only. Transport '{resolvedTransport.ToDispatchString()}' is planned but not implemented in this push slice.";
+            return false;
+        }
+
+        var targets = targetResolution.Targets;
+        if (!string.IsNullOrWhiteSpace(credentialReference))
+        {
+            targets = targets
+                .Select(targetSpec => targetSpec with { CredentialReference = credentialReference.Trim() })
+                .ToArray();
+        }
+
+        var fileInfo = new FileInfo(sourcePath);
+        if (fileInfo.Length > int.MaxValue)
+        {
+            error = $"Push source file '{sourcePath}' is too large for the current WinRM chunked upload path.";
+            return false;
+        }
+
+        plan = new DispatchPushPlan(
+            Mode: "push",
+            SourcePath: sourcePath,
+            DestinationPath: destinationPath,
+            SourceBytes: fileInfo.Length,
+            Transport: resolvedTransport,
+            Targets: targets,
+            Overwrite: overwrite,
+            Concurrency: 1,
+            OutputMode: outputMode);
+        return true;
+    }
+
+    private async Task<DispatchPushResult> ExecutePushPlanAsync(
+        DispatchPushPlan plan,
+        bool noProgress,
+        CancellationToken cancellationToken)
+    {
+        var startedAt = DateTimeOffset.UtcNow;
+        var transferPlan = await CreatePushTransferPlanAsync(plan.SourcePath, cancellationToken).ConfigureAwait(false);
+        var credentials = await ResolvePushCredentialsAsync(plan, cancellationToken).ConfigureAwait(false);
+        if (!credentials.Succeeded)
+        {
+            return new DispatchPushResult(
+                plan,
+                false,
+                startedAt,
+                DateTimeOffset.UtcNow,
+                [
+                    new DispatchPushTargetResult(
+                        Target: "-",
+                        Succeeded: false,
+                        FailureCategory: FailureCategory.AuthenticationFailed,
+                        FailureMessage: credentials.FailureMessage ?? "Credential resolution failed.",
+                        BytesUploaded: 0,
+                        Metadata: new Dictionary<string, string>())
+                ]);
+        }
+
+        try
+        {
+            var targetResults = new List<DispatchPushTargetResult>();
+            foreach (var target in plan.Targets)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var credential = target.CredentialReference is not null
+                    && credentials.Credentials.TryGetValue(target.CredentialReference, out var resolvedCredential)
+                        ? resolvedCredential
+                        : null;
+
+                var upload = await winRmTransferClient!.UploadAsync(
+                        new WinRmScriptTransferRequest(
+                            target.Name,
+                            plan.DestinationPath,
+                            transferPlan,
+                            null,
+                            credential),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+
+                targetResults.Add(new DispatchPushTargetResult(
+                    target.Name,
+                    upload.Succeeded,
+                    upload.FailureCategory,
+                    upload.FailureMessage,
+                    upload.Succeeded ? plan.SourceBytes : 0,
+                    upload.Metadata ?? new Dictionary<string, string>()));
+            }
+
+            return new DispatchPushResult(
+                plan,
+                targetResults.All(static target => target.Succeeded),
+                startedAt,
+                DateTimeOffset.UtcNow,
+                targetResults);
+        }
+        finally
+        {
+            foreach (var credential in credentials.Credentials.Values)
+            {
+                credential.Dispose();
+            }
+        }
+    }
+
+    private async Task<RuntimeCredentialResolutionResult> ResolvePushCredentialsAsync(
+        DispatchPushPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var references = plan.Targets
+            .Select(static target => target.CredentialReference)
+            .Where(static reference => !string.IsNullOrWhiteSpace(reference))
+            .Select(static reference => reference!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return references.Length == 0
+            ? RuntimeCredentialResolutionResult.Success(new Dictionary<string, DispatchResolvedCredential>(StringComparer.OrdinalIgnoreCase))
+            : await runtimeCredentialResolver.ResolveAsync(references, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<ScriptTransferPlan> CreatePushTransferPlanAsync(
+        string sourcePath,
+        CancellationToken cancellationToken)
+    {
+        const int chunkSizeBytes = 8192;
+        var bytes = await File.ReadAllBytesAsync(sourcePath, cancellationToken).ConfigureAwait(false);
+        var chunks = new List<ScriptTransferChunk>((bytes.Length + chunkSizeBytes - 1) / chunkSizeBytes);
+        for (var offset = 0; offset < bytes.Length; offset += chunkSizeBytes)
+        {
+            var chunkLength = Math.Min(chunkSizeBytes, bytes.Length - offset);
+            var chunkBytes = bytes.AsSpan(offset, chunkLength).ToArray();
+            chunks.Add(new ScriptTransferChunk(
+                chunks.Count,
+                offset,
+                chunkLength,
+                ComputeSha256(chunkBytes),
+                Convert.ToBase64String(chunkBytes)));
+        }
+
+        return new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            bytes.Length,
+            ComputeSha256(bytes),
+            chunkSizeBytes,
+            chunks);
+    }
+
+    private static string ComputeSha256(byte[] bytes) =>
+        Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static bool ContainsInvalidPushDestinationCharacter(string path)
+    {
+        var invalid = Path.GetInvalidPathChars();
+        return path.Any(character => char.IsControl(character) || invalid.Contains(character));
+    }
+
+    private bool TryLoadPushConfig(
+        string? configPath,
+        out PushCommandConfig config,
+        out string error)
+    {
+        config = new PushCommandConfig(options.Value.Inventory, options.Value.Target, options.Value.Exclude, options.Value.DefaultTransport);
+        error = string.Empty;
+        if (string.IsNullOrWhiteSpace(configPath))
+        {
+            return true;
+        }
+
+        if (!File.Exists(configPath))
+        {
+            error = $"Config file '{configPath}' does not exist.";
+            return false;
+        }
+
+        try
+        {
+            var configuration = DispatchConfigFileReader.Load(configPath);
+            var section = configuration.GetSection(DispatchOptions.SectionName);
+            var defaultTransport = config.DefaultTransport;
+            if (section["DefaultTransport"] is { Length: > 0 } configuredTransport)
+            {
+                if (!TryParseTransport(configuredTransport, out var parsedTransport, out error))
+                {
+                    return false;
+                }
+
+                defaultTransport = parsedTransport;
+            }
+
+            config = config with
+            {
+                Inventory = section["Inventory"] ?? config.Inventory,
+                Target = section["Target"] ?? config.Target,
+                Exclude = section["Exclude"] ?? config.Exclude,
+                DefaultTransport = defaultTransport
+            };
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or FormatException)
+        {
+            error = $"Config file '{configPath}' could not be read: {exception.Message}";
+            return false;
+        }
+    }
+
+    private static bool TryResolvePushTransport(
+        string? transport,
+        TargetResolutionResult targetResolution,
+        TransportKind? defaultTransport,
+        out TransportKind resolvedTransport,
+        out string error)
+    {
+        resolvedTransport = TransportKind.WinRm;
+        error = string.Empty;
+        var normalized = NormalizeOptionalValue(transport);
+        if (!string.IsNullOrWhiteSpace(normalized) && !normalized.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseTransport(normalized, out resolvedTransport, out error);
+        }
+
+        if (targetResolution.InventoryTransport is not null)
+        {
+            resolvedTransport = targetResolution.InventoryTransport.Value;
+            return true;
+        }
+
+        if (defaultTransport is not null)
+        {
+            resolvedTransport = defaultTransport.Value;
+            return true;
+        }
+
+        resolvedTransport = TransportKind.WinRm;
+        return true;
+    }
+
+    private static bool TryParseTransport(string value, out TransportKind transport, out string error)
+    {
+        error = string.Empty;
+        switch (value.Trim().ToLowerInvariant())
+        {
+            case "psexec":
+                transport = TransportKind.PsExec;
+                return true;
+            case "psrp":
+                transport = TransportKind.Psrp;
+                return true;
+            case "winrm":
+                transport = TransportKind.WinRm;
+                return true;
+            default:
+                transport = TransportKind.WinRm;
+                error = $"Unsupported transport '{value}'.";
+                return false;
+        }
+    }
+
     private static IReadOnlyList<DispatchInitTemplate> GetInitTemplates(DispatchInitScaffold scaffold) =>
         scaffold switch
         {
@@ -1176,3 +1665,9 @@ internal sealed record DispatchInitTemplate(string FileName, string Content)
 {
     public string Path { get; init; } = string.Empty;
 }
+
+internal sealed record PushCommandConfig(
+    string? Inventory,
+    string? Target,
+    string? Exclude,
+    TransportKind? DefaultTransport);

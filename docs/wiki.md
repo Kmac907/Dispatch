@@ -356,9 +356,9 @@ Must include:
 - what is planned next
 - what is intentionally deferred
 
-## Required docs for unfinished v1 roadmap features
+## Feature-specific v1 documentation
 
-These are not post-MVP docs. They are still required for Dispatch, but they are naturally gated by the corresponding feature landing in the product. They should be written as those roadmap items become real.
+These are not post-MVP docs. They track feature-specific operator surfaces. Some are current and some remain planned or partial; each page should clearly mark its own implementation boundary.
 
 ### 26. `docs/jobs.md`
 
@@ -375,17 +375,28 @@ Purpose:
 Purpose:
 - Credential-reference model and provider behavior.
 
-### 29. `docs/logs.md`
+### 29. `docs/credential-store-plan.md`
+
+Purpose:
+- Internal credential catalog/provider design that backs `docs/credentials.md` and the roadmap.
+
+Audience:
+- Maintainers and implementers.
+
+Notes:
+- This is not the primary operator credential guide; operators should start with `docs/credentials.md`.
+
+### 30. `docs/logs.md`
 
 Purpose:
 - Durable run-history model and `logs` command behavior.
 
-### 30. `docs/powershell-module.md`
+### 31. `docs/powershell-module.md`
 
 Purpose:
 - PowerShell module usage and automation guidance, including the command-aligned wrapper surface over `dispatch.exe` (`Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`) and the rule that the module does not introduce a separate interactive shell launcher.
 
-### 31. `docs/distribution.md`
+### 32. `docs/distribution.md`
 
 Purpose:
 - Packaging, GitHub `irm` source install, ZIP install, and local installation guidance for the v1 distribution model.
@@ -394,7 +405,7 @@ Purpose:
 
 These are the only docs in this file that are not part of the current v1 documentation completion set. They map to features that `docs/plan.md` explicitly marks out of scope for v1.
 
-### 32. `docs/managed-execution.md`
+### 33. `docs/managed-execution.md`
 
 Purpose:
 - Managed execution mode behavior, result normalization, and when to use it instead of direct execution.
@@ -402,7 +413,7 @@ Purpose:
 Reason it is not part of current v1 docs:
 - `Managed/harness execution mode` is explicitly out of scope for v1 in `docs/plan.md`.
 
-### 33. `docs/enterprise-distribution.md`
+### 34. `docs/enterprise-distribution.md`
 
 Purpose:
 - Azure Artifacts, MSI, enterprise package distribution, private feeds, and related install channels beyond the local/source-install v1 path.
@@ -427,27 +438,24 @@ If a smaller but still credible initial docs set is needed, these are the minimu
 11. `docs/output-and-results.md`
 12. `docs/troubleshooting.md`
 
-## Highest-priority missing docs right now
+## Current coverage snapshot
 
-Based on the current repo state, these are the highest-value docs to create first:
+As of the current repo state, every Markdown document listed above exists in `docs/`. The highest-value documentation work is no longer creating missing pages; it is keeping the existing pages synchronized with the implementation boundary after each slice.
 
-1. `docs/README.md`
-2. `docs/getting-started.md`
-3. `docs/command-reference.md`
-4. `docs/inventory-schema.md`
-5. `docs/transports.md`
-6. `docs/configuration.md`
-7. `docs/output-and-results.md`
-8. `docs/troubleshooting.md`
-9. `docs/security.md`
-10. `docs/architecture.md`
+Current maintenance priorities:
+
+1. Keep `docs/command-reference.md` and `docs/command-reference.html` aligned with the real command surface.
+2. Keep `docs/roadmap-status.md` and `docs/roadmap-status.html` aligned with completed slices and known blockers.
+3. Keep focused operator docs, such as `docs/credentials.md`, `docs/logs.md`, `docs/jobs.md`, and transport docs, aligned with command-reference status.
+4. Keep planned or deferred pages explicit about what is not implemented yet.
 
 ## Notes
 
 - `docs/plan.md` remains the authoritative roadmap, not the operator wiki.
 - `docs/cli-design.md` remains the CLI contract/design doc, not the operator quickstart.
 - `docs/wiki.md` is the inventory of required docs, not the end-user docs themselves.
+- `docs/credential-store-plan.md` is an internal design/reference doc; do not use it as the primary operator credential guide.
 - The shared artifact/logging model belongs primarily in `docs/output-and-results.md`, with supporting operator and troubleshooting coverage in `docs/running-scripts.md`, `docs/concepts.md`, and `docs/troubleshooting.md`.
 - Do not use `docs/transports.md`, `docs/transport-winrm.md`, or `docs/transport-psexec.md` as the primary home for shared artifact/logging semantics. Those docs should only describe transport-specific behavior and limitations.
-- Items under `Required docs for unfinished v1 roadmap features` are still required for Dispatch v1; they are only deferred until the corresponding roadmap feature is implemented.
+- Items under `Feature-specific v1 documentation` are required for Dispatch v1 and should be maintained as their corresponding feature surfaces change.
 - Only items under `Docs only required if out-of-scope v1 features are later brought back into scope` are outside the current v1 documentation completion set.

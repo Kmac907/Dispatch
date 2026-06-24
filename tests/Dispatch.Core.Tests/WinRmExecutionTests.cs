@@ -853,8 +853,9 @@ public sealed class WinRmExecutionTests
                 new ScriptTransferChunk(1, 4, 2, "hash-2", "RUY=")
             ]);
 
+        var remotePath = @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1";
         var result = await client.UploadAsync(
-            new WinRmScriptTransferRequest("PC001", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", transferPlan),
+            new WinRmScriptTransferRequest("PC001", remotePath, transferPlan),
             CancellationToken.None);
 
         Assert.True(result.Succeeded);
@@ -868,7 +869,9 @@ public sealed class WinRmExecutionTests
         var encodedCommandIndex = request.Arguments.ToList().IndexOf("-EncodedCommand");
         var encodedCommand = request.Arguments[encodedCommandIndex + 1];
         var uploaderScript = Encoding.Unicode.GetString(Convert.FromBase64String(encodedCommand));
-        Assert.Contains(@"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", uploaderScript, StringComparison.Ordinal);
+        Assert.DoesNotContain(remotePath, uploaderScript, StringComparison.Ordinal);
+        Assert.Contains(Convert.ToBase64String(Encoding.Unicode.GetBytes(remotePath)), uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("FromBase64String", uploaderScript, StringComparison.Ordinal);
         Assert.Contains("Get-FileHash", uploaderScript, StringComparison.Ordinal);
         Assert.Equal("completed", result.Metadata?["uploadStage"]);
         Assert.Equal("abcd1234", result.Metadata?["uploadExpectedSha256"]);

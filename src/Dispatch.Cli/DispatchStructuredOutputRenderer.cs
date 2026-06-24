@@ -123,6 +123,67 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderPushPlan(TextWriter writer, DispatchPushPlan plan, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(plan));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    new { type = "push.plan", push = plan },
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, plan);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine("Dispatch push plan");
+                writer.WriteLine($"Source: {plan.SourcePath}");
+                writer.WriteLine($"Destination: {plan.DestinationPath}");
+                writer.WriteLine($"Transport: {plan.Transport.ToDispatchString()}");
+                writer.WriteLine($"Targets: {string.Join(", ", plan.TargetNames)}");
+                writer.WriteLine($"Overwrite: {plan.Overwrite}");
+                writer.WriteLine($"Concurrency: {plan.Concurrency}");
+                break;
+        }
+    }
+
+    public static void RenderPushResult(TextWriter writer, DispatchPushResult result, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(result));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    new { type = "push.result", push = result },
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, result);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine(result.Succeeded ? "Dispatch push complete" : "Dispatch push completed with failures");
+                writer.WriteLine($"Source: {result.Plan.SourcePath}");
+                writer.WriteLine($"Destination: {result.Plan.DestinationPath}");
+                writer.WriteLine($"Transport: {result.Plan.Transport.ToDispatchString()}");
+                foreach (var target in result.Targets)
+                {
+                    var status = target.Succeeded ? "succeeded" : "failed";
+                    writer.WriteLine($"{target.Target}: {status}; bytes={target.BytesUploaded}; failure={target.FailureMessage ?? "-"}");
+                }
+
+                break;
+        }
+    }
+
     public static void RenderRunHistory(TextWriter writer, string localRunRoot, IReadOnlyList<DispatchRunHistoryEntry> runs, DispatchOutputMode mode)
     {
         switch (mode)
@@ -407,3 +468,33 @@ internal sealed record DispatchApplyExecutedTask(
 internal sealed record DispatchRunCommandOutcome(
     int ExitCode,
     DispatchRunResult? Result);
+
+internal sealed record DispatchPushPlan(
+    string Mode,
+    string SourcePath,
+    string DestinationPath,
+    long SourceBytes,
+    TransportKind Transport,
+    IReadOnlyList<TargetSpec> Targets,
+    bool Overwrite,
+    int Concurrency,
+    [property: JsonIgnore]
+    DispatchOutputMode OutputMode)
+{
+    public IReadOnlyList<string> TargetNames => Targets.Select(static target => target.Name).ToArray();
+}
+
+internal sealed record DispatchPushResult(
+    DispatchPushPlan Plan,
+    bool Succeeded,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    IReadOnlyList<DispatchPushTargetResult> Targets);
+
+internal sealed record DispatchPushTargetResult(
+    string Target,
+    bool Succeeded,
+    FailureCategory FailureCategory,
+    string? FailureMessage,
+    long BytesUploaded,
+    IReadOnlyDictionary<string, string> Metadata);

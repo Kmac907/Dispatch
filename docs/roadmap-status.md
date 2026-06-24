@@ -19,6 +19,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Structured output modes on current paths.
 - Inventory subset for current run paths.
 - `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs, plus plan/check-only `copy` task rendering.
+- `dispatch push <source> --dest <remote-path> --transport winrm --overwrite` for single-file raw WinRM transfer, plus push `--plan` / `--check` preview.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -26,7 +27,8 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 ## Partial
 
 - `doctor` exists but the full v1 transport-aware diagnostics surface is still expanding.
-- `hosts` and `push` command groups are registered/planned but not fully implemented.
+- `push` is limited to single-file raw WinRM transfer; directory recursion, checksum comparison, backup, execute-after-copy, cleanup, and non-WinRM push transports remain planned.
+- `hosts` command group is registered/planned but not fully implemented.
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.

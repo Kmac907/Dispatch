@@ -123,7 +123,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
             if (type == typeof(PushCommand))
             {
-                return new PushCommand();
+                return new PushCommand(application);
             }
 
             if (type == typeof(RunPsCommand))
@@ -184,6 +184,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             if (type == typeof(CredsRemoveCommand))
             {
                 return new CredsRemoveCommand(application);
+            }
+
+            if (type == typeof(PushCommand))
+            {
+                return new PushCommand(application);
             }
 
             if (type == typeof(InitJobCommand))
@@ -275,10 +280,39 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         }
     }
 
-    private sealed class PushCommand : Command<PushSettings>
+    private sealed class PushCommand(DispatchCliApplication application) : AsyncCommand<PushSettings>
     {
-        protected override int Execute(CommandContext context, PushSettings settings, CancellationToken cancellationToken) =>
-            DispatchCliApplication.RenderPlannedCommand("push", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            PushSettings settings,
+            CancellationToken cancellationToken) =>
+            await application.RunPushCommandAsync(
+                    settings.Source,
+                    settings.Destination,
+                    settings.Plan,
+                    settings.Check,
+                    settings.Recurse,
+                    settings.Checksum,
+                    settings.Overwrite,
+                    settings.Backup,
+                    settings.Execute,
+                    settings.ExecuteAs,
+                    settings.Cleanup,
+                    settings.Inventory,
+                    settings.Target,
+                    settings.Exclude,
+                    settings.Transport,
+                    settings.Credential,
+                    settings.Concurrency,
+                    settings.Config,
+                    settings.Output,
+                    settings.NoColor,
+                    settings.NoProgress,
+                    settings.Quiet,
+                    settings.Verbose,
+                    settings.Trace,
+                    cancellationToken)
+                .ConfigureAwait(false);
     }
 
     private sealed class RunPsCommand(DispatchCliApplication application) : AsyncCommand<RunPsSettings>
@@ -517,6 +551,75 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         [CommandArgument(0, "[source]")]
         public string? Source { get; init; }
+
+        [CommandOption("--dest <remote-path>")]
+        public string? Destination { get; init; }
+
+        [CommandOption("--plan")]
+        public bool Plan { get; init; }
+
+        [CommandOption("--check")]
+        public bool Check { get; init; }
+
+        [CommandOption("--recurse")]
+        public bool Recurse { get; init; }
+
+        [CommandOption("--checksum")]
+        public bool Checksum { get; init; }
+
+        [CommandOption("--overwrite")]
+        public bool Overwrite { get; init; }
+
+        [CommandOption("--backup")]
+        public bool Backup { get; init; }
+
+        [CommandOption("--execute")]
+        public bool Execute { get; init; }
+
+        [CommandOption("--execute-as <mode>")]
+        public string? ExecuteAs { get; init; }
+
+        [CommandOption("--cleanup")]
+        public bool Cleanup { get; init; }
+
+        [CommandOption("-i|--inventory <path>")]
+        public string? Inventory { get; init; }
+
+        [CommandOption("-t|--target <selector>")]
+        public string? Target { get; init; }
+
+        [CommandOption("--exclude <selector>")]
+        public string? Exclude { get; init; }
+
+        [CommandOption("--transport <name>")]
+        public string? Transport { get; init; }
+
+        [CommandOption("--credential <name>")]
+        public string? Credential { get; init; }
+
+        [CommandOption("--concurrency <n>")]
+        public int? Concurrency { get; init; }
+
+        [CommandOption("--config <path>")]
+        public string? Config { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+
+        [CommandOption("--no-color")]
+        public bool NoColor { get; init; }
+
+        [CommandOption("--no-progress")]
+        public bool NoProgress { get; init; }
+
+        [CommandOption("--quiet")]
+        public bool Quiet { get; init; }
+
+        [CommandOption("-v|--verbose")]
+        public bool Verbose { get; init; }
+
+        [CommandOption("--trace")]
+        public bool Trace { get; init; }
     }
 
     private sealed class LogsListSettings : CommandSettings

@@ -10,6 +10,7 @@ Project site: https://kmac907.github.io/Dispatch/
 
 - Current ad-hoc execution: `dispatch run ps`, `dispatch run cmd`, and `dispatch run exe` where supported by the selected transport.
 - Current declared-job subset: `dispatch apply <job.yml>` with selected multi-task `ps`, `cmd`, and `exe` jobs, plus `--plan` / `--check` rendering for selected `copy` tasks.
+- Current push subset: `dispatch push <source> --dest <remote-path> --transport winrm --overwrite` for single-file raw WinRM transfer, plus `--plan` / `--check` preview.
 - Current starter scaffolding: `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all`.
 - Current host selection through direct targets, target files, inventories, groups, and selectors on implemented run paths.
 - Explicit transports: `psrp`, `winrm`, and `psexec`.
@@ -18,7 +19,7 @@ Project site: https://kmac907.github.io/Dispatch/
 - Canonical structured event log: `Admin\events.ndjson`.
 - Final run summary: `Admin\results.json`.
 - Per-target `stdout.txt`, `stderr.txt`, and collected script-created artifacts.
-- Current credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers on implemented PSRP paths.
+- Current credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers on implemented PSRP and raw WinRM paths.
 - Machine-wide YAML config at `C:\ProgramData\Dispatch\config.yml`.
 - Planned PowerShell module wrapper over the same `dispatch.exe` command surface.
 

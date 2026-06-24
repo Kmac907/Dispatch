@@ -102,10 +102,9 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
 
     private static string BuildUploaderEncodedCommand(string remoteScriptPath)
     {
+        var remoteScriptPathBase64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(remoteScriptPath));
         var script = $$"""
-$path = @'
-{{remoteScriptPath}}
-'@
+$path = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('{{remoteScriptPathBase64}}'))
 $directory = Split-Path -Parent -LiteralPath $path
 [System.IO.Directory]::CreateDirectory($directory) | Out-Null
 $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
