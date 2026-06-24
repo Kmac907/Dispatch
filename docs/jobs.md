@@ -59,7 +59,7 @@ Task tags are optional on `ps` tasks. `--tags <tags>` selects tasks when at leas
 
 ## Job Variables
 
-`job.vars` is the v1 runtime/task-input variable bag. Inventory vars are host/group metadata and are not automatically merged into runtime task variables.
+`job.vars` is the v1 runtime/task-input variable bag. Current `ps` apply tasks pass scalar `job.vars` entries to scripts as named PowerShell arguments in YAML order, for example `message: fixed` becomes `-message fixed`. Variable names must use letters, numbers, or underscores, and start with a letter or underscore. Inventory vars are host/group metadata and are not automatically merged into runtime task variables.
 
 Transport is not allowed under `job.vars`; use the top-level `transport` field. Separate vars-file concepts such as `group_vars`, `host_vars`, `vars_files`, and `include_vars` are not part of v1 jobs and fail validation before endpoint work.
 

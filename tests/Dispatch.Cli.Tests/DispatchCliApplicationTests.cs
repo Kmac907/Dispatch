@@ -2496,6 +2496,106 @@ credentials:
     }
 
     [Fact]
+    public async Task ApplyPlanPassesJobVarsAsScriptArgumentsInYamlOrder()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            vars:
+              message: fixed
+              package: example
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(scriptPath, payload.ScriptPath);
+            Assert.Equal(["-message", "fixed", "-package", "example"], payload.ScriptArguments);
+
+            using var json = JsonDocument.Parse(output);
+            var arguments = json.RootElement
+                .GetProperty("job")
+                .GetProperty("payload")
+                .GetProperty("scriptArguments")
+                .EnumerateArray()
+                .Select(static item => item.GetString())
+                .ToArray();
+            Assert.Equal(["-message", "fixed", "-package", "example"], arguments);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanInlineJobVarsPassAsScriptArgumentsWithoutInventoryVars()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            inventoryPath,
+            """
+            hosts:
+              PC001:
+                vars:
+                  transport: winrm
+            """);
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            vars: { message: "fixed, now", package: 'example:one' }
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--inventory", inventoryPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.WinRm, planner.LastRequest.Transport);
+            var payload = Assert.IsType<ScriptPayload>(planner.LastRequest.Payload);
+            Assert.Equal(["-message", "fixed, now", "-package", "example:one"], payload.ScriptArguments);
+            Assert.DoesNotContain("-transport", payload.ScriptArguments);
+            Assert.DoesNotContain("winrm", payload.ScriptArguments);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ApplyPlanUsesInventoryTransportWhenJobAndCliTransportAreNotSpecified()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
@@ -3965,6 +4065,83 @@ credentials:
             Assert.Contains("Invalid Dispatch Job", error);
             Assert.Contains("transport is a first-class job field", error);
             Assert.Contains("job.vars", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("invalid-name")]
+    [InlineData("1message")]
+    public async Task ApplyPlanRejectsUnsupportedJobVarsNamesBeforePlanning(string variableName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            $$"""
+            hosts: PC001
+            transport: psrp
+            vars:
+              {{variableName}}: fixed
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("job.vars key", error);
+            Assert.Contains(variableName, error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("vars:\n  options: [one, two]")]
+    [InlineData("vars: { options: { enabled: true } }")]
+    public async Task ApplyPlanRejectsNonScalarJobVarsBeforePlanning(string varsYaml)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            "hosts: PC001\n"
+            + "transport: psrp\n"
+            + varsYaml
+            + "\n"
+            + "tasks:\n"
+            + "  - ps: .\\Fix.ps1\n");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("job.vars supports scalar task input values only", error);
         }
         finally
         {

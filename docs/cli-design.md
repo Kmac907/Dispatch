@@ -221,7 +221,7 @@ tasks
 
 `transport` is a first-class job field. It is not part of the generic job `vars` bag and must not be accepted under `job.vars`.
 
-`job.vars` is the planned task/runtime input map for `dispatch apply`. It is inline job data in v1, not a reference to separate vars files. The v1 design does not include Ansible-style `group_vars`, `host_vars`, `vars_files`, or `include_vars`.
+`job.vars` is the task/runtime input map for `dispatch apply`. Current script-first `ps` apply tasks pass scalar `job.vars` entries as named PowerShell script arguments in YAML order, with variable names limited to letters, numbers, and underscores starting with a letter or underscore. It is inline job data in v1, not a reference to separate vars files. The v1 design does not include Ansible-style `group_vars`, `host_vars`, `vars_files`, or `include_vars`.
 
 Initial task vocabulary is also explicit and closed. Unsupported fields, unsupported task types, unsafe secret fields, and unsupported selector expressions must fail validation before any endpoint probe, staging, or execution begins.
 

@@ -27,6 +27,8 @@ Status: partial/current. Plan, check, and execution are implemented for selected
 
 Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.
 
+Scalar `job.vars` entries are passed to selected `ps` tasks as named PowerShell script arguments in YAML order. Inventory vars remain host/group metadata and do not become runtime task inputs.
+
 Use `--target <selector>` to override `hosts` from the job file for the current run. Use `--inventory <path>` to override the configured inventory path. Use `--exclude <selector>` to remove hosts from the selected set after the job or CLI target selector is resolved.
 
 Use `--transport <value>` to override job, inventory, and config transport policy. `--transport auto` is a fall-through value: Dispatch uses non-`auto` `job.transport`, then inventory transport policy, then config/default transport. If the selected inventory hosts resolve to conflicting transport policies and no explicit non-`auto` transport is supplied, validation fails before planning.

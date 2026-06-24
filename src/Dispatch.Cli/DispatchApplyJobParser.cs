@@ -157,13 +157,14 @@ internal static class DispatchApplyJobParser
         var expectedExitCodes = job.ExpectedExitCodes.Count > 0
             ? job.ExpectedExitCodes
             : defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
+        var scriptArguments = BuildJobVariableArguments(job.Variables);
         var commands = selectedTasks
             .Select(task => new ApplyTaskCommand(
                 task.Index,
                 task.Tags,
                 new DispatchRunCommand(
                     DryRun: validateOnly,
-                    Payload: new ScriptPayload(task.PowerShellScriptPath, []),
+                    Payload: new ScriptPayload(task.PowerShellScriptPath, scriptArguments),
                     Targets: targetResolution.Targets,
                     Transport: transport,
                     ConfigPath: options.ConfigPath,
@@ -273,6 +274,17 @@ internal static class DispatchApplyJobParser
 
             if (value.Length == 0)
             {
+                if (path.Length > 1 && path[0].Equals("vars", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!TryValidateJobVariablePath(jobPath, lineNumber, path, out error))
+                    {
+                        return false;
+                    }
+
+                    error = $"{jobPath}:{lineNumber}: job.vars supports scalar task input values only in this apply slice.";
+                    return false;
+                }
+
                 sectionStack.Add(new YamlPathPart(indent, key));
                 continue;
             }
@@ -485,6 +497,13 @@ internal static class DispatchApplyJobParser
                 case "name":
                 case "description":
                     return true;
+                case "vars":
+                    if (!TryParseInlineJobVariables(jobPath, lineNumber, normalized, ref job, out error))
+                    {
+                        return false;
+                    }
+
+                    return true;
                 default:
                     error = $"{jobPath}:{lineNumber}: field '{path[0]}' must be a mapping in this apply slice.";
                     return false;
@@ -521,18 +540,24 @@ internal static class DispatchApplyJobParser
 
         if (path[0].Equals("vars", StringComparison.OrdinalIgnoreCase))
         {
-            if (path.Any(static part => UnsupportedVarsSourceKeys.Contains(part)))
+            if (!TryValidateJobVariablePath(jobPath, lineNumber, path, out error))
             {
-                error = $"{jobPath}:{lineNumber}: vars source '{path[^1]}' is not supported in v1 jobs. Use inline job.vars only.";
                 return false;
             }
 
-            if (path.Any(static part => part.Equals("transport", StringComparison.OrdinalIgnoreCase)))
+            if (path.Count != 2)
             {
-                error = $"{jobPath}:{lineNumber}: transport is a first-class job field and is not allowed under job.vars.";
+                error = $"{jobPath}:{lineNumber}: job.vars supports scalar task input values only in this apply slice.";
                 return false;
             }
 
+            if (IsInlineYamlCollection(value))
+            {
+                error = $"{jobPath}:{lineNumber}: job.vars supports scalar task input values only in this apply slice.";
+                return false;
+            }
+
+            job = job with { Variables = [.. job.Variables, new ParsedApplyVariable(path[1], normalized)] };
             return true;
         }
 
@@ -557,6 +582,199 @@ internal static class DispatchApplyJobParser
         }
 
         return true;
+    }
+
+    private static bool TryValidateJobVariablePath(
+        string jobPath,
+        int lineNumber,
+        IReadOnlyList<string> path,
+        out string error)
+    {
+        error = string.Empty;
+        if (path.Any(static part => UnsupportedVarsSourceKeys.Contains(part)))
+        {
+            error = $"{jobPath}:{lineNumber}: vars source '{path[^1]}' is not supported in v1 jobs. Use inline job.vars only.";
+            return false;
+        }
+
+        if (path.Any(static part => part.Equals("transport", StringComparison.OrdinalIgnoreCase)))
+        {
+            error = $"{jobPath}:{lineNumber}: transport is a first-class job field and is not allowed under job.vars.";
+            return false;
+        }
+
+        if (path.Count >= 2 && !IsSupportedJobVariableName(path[1]))
+        {
+            error = $"{jobPath}:{lineNumber}: job.vars key '{path[1]}' is not supported in this apply slice. Use letters, numbers, or underscores, starting with a letter or underscore.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsSupportedJobVariableName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || !(char.IsLetter(name[0]) || name[0] == '_'))
+        {
+            return false;
+        }
+
+        return name.All(static character => char.IsLetterOrDigit(character) || character == '_');
+    }
+
+    private static bool TryParseInlineJobVariables(
+        string jobPath,
+        int lineNumber,
+        string value,
+        ref ParsedApplyJob job,
+        out string error)
+    {
+        error = string.Empty;
+        if (!value.StartsWith("{", StringComparison.Ordinal) || !value.EndsWith("}", StringComparison.Ordinal))
+        {
+            error = $"{jobPath}:{lineNumber}: field 'vars' must be a mapping in this apply slice.";
+            return false;
+        }
+
+        var body = value[1..^1].Trim();
+        if (body.Length == 0)
+        {
+            return true;
+        }
+
+        if (!TrySplitInlineMapEntries(body, out var items))
+        {
+            error = $"{jobPath}:{lineNumber}: job.vars inline entries must use balanced quotes.";
+            return false;
+        }
+
+        foreach (var item in items)
+        {
+            var separator = IndexOfInlineMapSeparator(item);
+            if (separator <= 0)
+            {
+                error = $"{jobPath}:{lineNumber}: job.vars inline entries must use 'name: value' syntax.";
+                return false;
+            }
+
+            var key = item[..separator].Trim();
+            var rawVariableValue = item[(separator + 1)..].Trim();
+            if (IsInlineYamlCollection(rawVariableValue))
+            {
+                error = $"{jobPath}:{lineNumber}: job.vars supports scalar task input values only in this apply slice.";
+                return false;
+            }
+
+            var variableValue = NormalizeScalar(rawVariableValue);
+            if (!TryValidateKey(jobPath, lineNumber, ["vars", key], out error)
+                || !TryValidateJobVariablePath(jobPath, lineNumber, ["vars", key], out error))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                error = $"{jobPath}:{lineNumber}: job.vars entries require non-empty names.";
+                return false;
+            }
+
+            job = job with { Variables = [.. job.Variables, new ParsedApplyVariable(key, variableValue)] };
+        }
+
+        return true;
+    }
+
+    private static bool TrySplitInlineMapEntries(string value, out IReadOnlyList<string> entries)
+    {
+        var parsed = new List<string>();
+        var start = 0;
+        var inSingleQuote = false;
+        var inDoubleQuote = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character == '\'' && !inDoubleQuote)
+            {
+                inSingleQuote = !inSingleQuote;
+            }
+            else if (character == '"' && !inSingleQuote)
+            {
+                inDoubleQuote = !inDoubleQuote;
+            }
+            else if (character == ',' && !inSingleQuote && !inDoubleQuote)
+            {
+                var entry = value[start..index].Trim();
+                if (entry.Length > 0)
+                {
+                    parsed.Add(entry);
+                }
+
+                start = index + 1;
+            }
+        }
+
+        if (inSingleQuote || inDoubleQuote)
+        {
+            entries = [];
+            return false;
+        }
+
+        var finalEntry = value[start..].Trim();
+        if (finalEntry.Length > 0)
+        {
+            parsed.Add(finalEntry);
+        }
+
+        entries = parsed;
+        return true;
+    }
+
+    private static int IndexOfInlineMapSeparator(string value)
+    {
+        var inSingleQuote = false;
+        var inDoubleQuote = false;
+        for (var index = 0; index < value.Length; index++)
+        {
+            var character = value[index];
+            if (character == '\'' && !inDoubleQuote)
+            {
+                inSingleQuote = !inSingleQuote;
+            }
+            else if (character == '"' && !inSingleQuote)
+            {
+                inDoubleQuote = !inDoubleQuote;
+            }
+            else if (character == ':' && !inSingleQuote && !inDoubleQuote)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static IReadOnlyList<string> BuildJobVariableArguments(IReadOnlyList<ParsedApplyVariable> variables)
+    {
+        if (variables.Count == 0)
+        {
+            return [];
+        }
+
+        var arguments = new List<string>(variables.Count * 2);
+        foreach (var variable in variables)
+        {
+            arguments.Add($"-{variable.Name}");
+            arguments.Add(variable.Value);
+        }
+
+        return arguments;
+    }
+
+    private static bool IsInlineYamlCollection(string value)
+    {
+        var trimmed = value.TrimStart();
+        return trimmed.StartsWith("{", StringComparison.Ordinal)
+            || trimmed.StartsWith("[", StringComparison.Ordinal);
     }
 
     private static bool TryLoadConfig(
@@ -814,8 +1032,14 @@ internal static class DispatchApplyJobParser
 
         public int? Serial { get; init; }
 
+        public IReadOnlyList<ParsedApplyVariable> Variables { get; init; } = [];
+
         public IReadOnlyList<ParsedApplyTask> Tasks { get; init; } = [];
     }
+
+    private sealed record ParsedApplyVariable(
+        string Name,
+        string Value);
 
     private sealed record ParsedApplyTask(
         int Index,
