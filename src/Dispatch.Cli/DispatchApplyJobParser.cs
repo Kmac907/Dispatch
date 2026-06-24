@@ -304,7 +304,7 @@ internal static class DispatchApplyJobParser
 
         if (job.Tasks.Count == 0)
         {
-            error = "This apply slice requires at least one tasks entry with 'ps: <script.ps1>' or 'cmd: <command>'.";
+            error = "This apply slice requires at least one tasks entry with 'ps: <script.ps1>', 'cmd: <command>', or 'exe: <command>'.";
             return false;
         }
 
@@ -376,7 +376,7 @@ internal static class DispatchApplyJobParser
         var separator = task.IndexOf(':', StringComparison.Ordinal);
         if (separator <= 0)
         {
-            error = $"{jobPath}:{lineNumber}: expected task syntax such as '- ps: <script.ps1>' or '- cmd: <command>'.";
+            error = $"{jobPath}:{lineNumber}: expected task syntax such as '- ps: <script.ps1>', '- cmd: <command>', or '- exe: <command>'.";
             return false;
         }
 
@@ -389,7 +389,8 @@ internal static class DispatchApplyJobParser
         }
 
         if (!taskType.Equals("ps", StringComparison.OrdinalIgnoreCase)
-            && !taskType.Equals("cmd", StringComparison.OrdinalIgnoreCase))
+            && !taskType.Equals("cmd", StringComparison.OrdinalIgnoreCase)
+            && !taskType.Equals("exe", StringComparison.OrdinalIgnoreCase))
         {
             error = $"{jobPath}:{lineNumber}: task type '{taskType}' is planned but not implemented in this apply slice.";
             return false;
@@ -397,9 +398,12 @@ internal static class DispatchApplyJobParser
 
         if (string.IsNullOrWhiteSpace(value))
         {
-            error = taskType.Equals("cmd", StringComparison.OrdinalIgnoreCase)
-                ? $"{jobPath}:{lineNumber}: cmd task requires a command line."
-                : $"{jobPath}:{lineNumber}: ps task requires a script path.";
+            error = taskType.ToLowerInvariant() switch
+            {
+                "cmd" => $"{jobPath}:{lineNumber}: cmd task requires a command line.",
+                "exe" => $"{jobPath}:{lineNumber}: exe task requires a command line.",
+                _ => $"{jobPath}:{lineNumber}: ps task requires a script path."
+            };
             return false;
         }
 
@@ -416,8 +420,8 @@ internal static class DispatchApplyJobParser
     }
 
     private static DispatchPayload CreatePayload(ParsedApplyTask task, IReadOnlyList<ParsedApplyVariable> variables) =>
-        task.Type.Equals("cmd", StringComparison.OrdinalIgnoreCase)
-            ? new CommandPayload(task.Value, "cmd", null)
+        task.Type is "cmd" or "exe"
+            ? new CommandPayload(task.Value, task.Type, null)
             : new ScriptPayload(task.Value, BuildJobVariableArguments(variables));
 
     private static bool TryParseTagFilter(

@@ -3169,8 +3169,52 @@ credentials:
         }
     }
 
+    [Theory]
+    [InlineData("--plan")]
+    [InlineData("--check")]
+    public async Task ApplyPlanAndCheckSupportExeTask(string validationMode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - exe: C:\Tools\tool.exe /quiet /norestart
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, validationMode, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.DryRun);
+            Assert.Null(executor.LastPlan);
+            var payload = Assert.IsType<CommandPayload>(planner.LastRequest.Payload);
+            Assert.Equal(@"C:\Tools\tool.exe /quiet /norestart", payload.CommandLine);
+            Assert.Equal("exe", payload.Shell);
+            Assert.Null(payload.WorkingDirectory);
+            Assert.Equal(TransportKind.Psrp, planner.LastRequest.Transport);
+            Assert.Equal(["PC001"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
-    public async Task ApplyPlanRendersMixedPsAndCmdTasksInYamlOrder()
+    public async Task ApplyPlanRendersMixedPsCmdAndExeTasksInYamlOrder()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -3187,6 +3231,8 @@ credentials:
                 tags: [repair]
               - cmd: whoami
                 tags: [audit]
+              - exe: C:\Tools\tool.exe /quiet
+                tags: [install]
             """);
         var planner = new CapturingPlanner();
         var application = CreateApplication(planner);
@@ -3199,19 +3245,27 @@ credentials:
 
             Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
             Assert.Empty(error);
-            Assert.Equal(2, planner.Requests.Count);
+            Assert.Equal(3, planner.Requests.Count);
             Assert.Equal(scriptPath, Assert.IsType<ScriptPayload>(planner.Requests[0].Payload).ScriptPath);
-            Assert.Equal("whoami", Assert.IsType<CommandPayload>(planner.Requests[1].Payload).CommandLine);
+            var cmdPayload = Assert.IsType<CommandPayload>(planner.Requests[1].Payload);
+            Assert.Equal("whoami", cmdPayload.CommandLine);
+            Assert.Equal("cmd", cmdPayload.Shell);
+            var exePayload = Assert.IsType<CommandPayload>(planner.Requests[2].Payload);
+            Assert.Equal(@"C:\Tools\tool.exe /quiet", exePayload.CommandLine);
+            Assert.Equal("exe", exePayload.Shell);
 
             using var json = JsonDocument.Parse(output);
             Assert.Equal("plan", json.RootElement.GetProperty("mode").GetString());
             var tasks = json.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
-            Assert.Equal(2, tasks.Length);
+            Assert.Equal(3, tasks.Length);
             Assert.Equal("ps", tasks[0].GetProperty("type").GetString());
             Assert.Equal(scriptPath, tasks[0].GetProperty("scriptPath").GetString());
             Assert.Equal("cmd", tasks[1].GetProperty("type").GetString());
             Assert.Equal("whoami", tasks[1].GetProperty("commandLine").GetString());
             Assert.Equal("audit", tasks[1].GetProperty("tags")[0].GetString());
+            Assert.Equal("exe", tasks[2].GetProperty("type").GetString());
+            Assert.Equal(@"C:\Tools\tool.exe /quiet", tasks[2].GetProperty("commandLine").GetString());
+            Assert.Equal("install", tasks[2].GetProperty("tags")[0].GetString());
         }
         finally
         {
@@ -3326,7 +3380,7 @@ credentials:
     }
 
     [Fact]
-    public async Task ApplyExecutionRunsMixedPsAndCmdTasksInYamlOrder()
+    public async Task ApplyExecutionRunsMixedPsCmdAndExeTasksInYamlOrder()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -3341,6 +3395,7 @@ credentials:
             tasks:
               - ps: .\Fix.ps1
               - cmd: whoami
+              - exe: C:\Tools\tool.exe /quiet
             """);
         var planner = new CapturingPlanner();
         var executor = new CapturingSucceedingExecutor();
@@ -3354,21 +3409,33 @@ credentials:
 
             Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
             Assert.Empty(error);
-            Assert.Equal(2, planner.Requests.Count);
-            Assert.Equal(2, executor.Plans.Count);
+            Assert.Equal(3, planner.Requests.Count);
+            Assert.Equal(3, executor.Plans.Count);
             Assert.Equal(scriptPath, Assert.IsType<ScriptPayload>(planner.Requests[0].Payload).ScriptPath);
-            Assert.Equal("whoami", Assert.IsType<CommandPayload>(planner.Requests[1].Payload).CommandLine);
+            var plannedCmdPayload = Assert.IsType<CommandPayload>(planner.Requests[1].Payload);
+            Assert.Equal("whoami", plannedCmdPayload.CommandLine);
+            Assert.Equal("cmd", plannedCmdPayload.Shell);
+            var plannedExePayload = Assert.IsType<CommandPayload>(planner.Requests[2].Payload);
+            Assert.Equal(@"C:\Tools\tool.exe /quiet", plannedExePayload.CommandLine);
+            Assert.Equal("exe", plannedExePayload.Shell);
             Assert.Equal(scriptPath, Assert.IsType<ScriptPayload>(executor.Plans[0].Job.Payload).ScriptPath);
-            Assert.Equal("whoami", Assert.IsType<CommandPayload>(executor.Plans[1].Job.Payload).CommandLine);
+            var executedCmdPayload = Assert.IsType<CommandPayload>(executor.Plans[1].Job.Payload);
+            Assert.Equal("whoami", executedCmdPayload.CommandLine);
+            Assert.Equal("cmd", executedCmdPayload.Shell);
+            var executedExePayload = Assert.IsType<CommandPayload>(executor.Plans[2].Job.Payload);
+            Assert.Equal(@"C:\Tools\tool.exe /quiet", executedExePayload.CommandLine);
+            Assert.Equal("exe", executedExePayload.Shell);
 
             using var json = JsonDocument.Parse(output);
             Assert.Equal("execute", json.RootElement.GetProperty("mode").GetString());
             var tasks = json.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
-            Assert.Equal([1, 2], tasks.Select(static task => task.GetProperty("index").GetInt32()).ToArray());
+            Assert.Equal([1, 2, 3], tasks.Select(static task => task.GetProperty("index").GetInt32()).ToArray());
             Assert.Equal("ps", tasks[0].GetProperty("type").GetString());
             Assert.Equal(scriptPath, tasks[0].GetProperty("scriptPath").GetString());
             Assert.Equal("cmd", tasks[1].GetProperty("type").GetString());
             Assert.Equal("whoami", tasks[1].GetProperty("commandLine").GetString());
+            Assert.Equal("exe", tasks[2].GetProperty("type").GetString());
+            Assert.Equal(@"C:\Tools\tool.exe /quiet", tasks[2].GetProperty("commandLine").GetString());
         }
         finally
         {
@@ -3907,6 +3974,41 @@ credentials:
             Assert.Contains("Invalid Dispatch Job", error);
             Assert.Contains("reboot", error);
             Assert.Contains("planned but not implemented", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRejectsEmptyExeTaskBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - exe:
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("exe task requires a command line", error);
         }
         finally
         {

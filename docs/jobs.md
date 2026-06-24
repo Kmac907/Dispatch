@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps` and scalar `cmd` jobs in YAML order. Additional task types remain planned v1.
+Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs in YAML order. Additional task types remain planned v1.
 
 ## Purpose
 
@@ -25,6 +25,8 @@ tasks:
     tags: [prod, fix]
   - cmd: whoami
     tags: [audit]
+  - exe: .\tools\repair.exe /quiet
+    tags: [install]
 ```
 
 Run:
@@ -51,7 +53,7 @@ The current implementation converts the supported job subset into the same plann
 
 Transport selection follows the apply precedence contract: explicit CLI `--transport` values other than `auto` win, `--transport auto` falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. If selected inventory hosts resolve to conflicting transport policies and no explicit concrete transport is supplied, validation fails before planning.
 
-Task tags are optional on `ps` and `cmd` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
+Task tags are optional on `ps`, `cmd`, and `exe` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
 
 `--no-progress` disables live progress for apply execution, `--quiet` suppresses rich non-error output, and `--verbose` / `--trace` control NDJSON diagnostic detail. `--diff` is recognized but fails before planning until the diff behavior slice is implemented.
 
@@ -77,4 +79,4 @@ Planned v1 task vocabulary:
 - `wait`
 - `reboot`
 
-The current implementation accepts multiple selected `ps` and `cmd` tasks for `--plan`, `--check`, and execution. Unsupported task types fail validation before endpoint work.
+The current implementation accepts multiple selected `ps`, `cmd`, and `exe` tasks for `--plan`, `--check`, and execution. Unsupported task types fail validation before endpoint work.

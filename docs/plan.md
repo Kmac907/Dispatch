@@ -1314,20 +1314,20 @@ Scope:
 - Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
 
 Current implementation boundary:
-- `dispatch apply <job.yml> --plan` parses selected YAML job `ps` and `cmd` tasks and renders one planned task entry per selected task.
+- `dispatch apply <job.yml> --plan` parses selected YAML job `ps`, `cmd`, and `exe` tasks and renders one planned task entry per selected task.
 - `dispatch apply <job.yml> --check` validates and renders a no-endpoint-work plan for that same script-first subset; it is mutually exclusive with `--plan` and does not simulate task side effects.
-- `dispatch apply <job.yml>` executes selected script-first `ps` and scalar `cmd` tasks in YAML order through the shared planner/executor path used by `dispatch run`, stopping after the first failed task run.
+- `dispatch apply <job.yml>` executes selected script-first `ps`, scalar `cmd`, and scalar `exe` tasks in YAML order through the shared planner/executor path used by `dispatch run`, stopping after the first failed task run.
 - The current apply parser supports `hosts`, `transport`, `credential`, scalar `job.vars` runtime inputs, `defaults.expected_exit_codes`, and `strategy.serial` for plan, check, and execution paths.
 - `--serial <n>` and `--concurrency <n>` override `strategy.serial` for that same subset and cannot be used together.
 - Relative `ps` task paths resolve relative to the job file.
-- Task-level `tags` are supported on selected `ps` and `cmd` tasks, and `--tags <tags>` / `--skip-tags <tags>` filter those tasks before planning or endpoint work.
+- Task-level `tags` are supported on selected `ps`, `cmd`, and `exe` tasks, and `--tags <tags>` / `--skip-tags <tags>` filter those tasks before planning or endpoint work.
 - `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
 - `--diff` is accepted as an explicit apply setting but fails before planning until the diff behavior slice is implemented.
 - For the current apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
 - For the current apply subset, explicit non-`auto` CLI transport overrides job and inventory transport policy; omitted or `auto` CLI transport falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. Mixed selected inventory transport policies fail before planning unless a concrete CLI/job transport resolves the conflict.
 - Scalar `job.vars` entries are passed to selected `ps` tasks as named PowerShell script arguments in YAML order, with variable names limited to letters, numbers, and underscores starting with a letter or underscore; inventory vars remain host/group metadata and do not merge into runtime task inputs.
 - Unsupported task types, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
-- Non-`cmd` task execution beyond `ps`, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
+- Task execution beyond `ps`/`cmd`/`exe`, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
 
 Non-goals:
 - No full Ansible compatibility.
@@ -1340,7 +1340,7 @@ Dependencies:
 Definition of done:
 - `dispatch apply <job.yml> --plan` resolves inventory, variables, selected tasks, batches, and transport decisions.
 - Validation rejects unsupported vars sources, unsupported vars-file concepts, and `transport` under `job.vars` before endpoint work.
-- Supported `ps` and `cmd` tasks execute through the same planner/executor model as `dispatch run`.
+- Supported `ps`, `cmd`, and `exe` tasks execute through the same planner/executor model as `dispatch run`.
 - Validation reports unsupported task types and unsafe secret fields before endpoint work.
 
 #### 6.6 Push, Hosts, Doctor, And Init Command Surfaces
