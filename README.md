@@ -10,6 +10,7 @@ Project site: https://kmac907.github.io/Dispatch/
 
 - Current ad-hoc execution: `dispatch run ps`, `dispatch run cmd`, and `dispatch run exe` where supported by the selected transport.
 - Current declared-job subset: `dispatch apply <job.yml>` with selected multi-task `ps`, `cmd`, and `exe` jobs, plus `--plan` / `--check` rendering for selected `copy` tasks.
+- Current starter scaffolding: `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all`.
 - Current host selection through direct targets, target files, inventories, groups, and selectors on implemented run paths.
 - Explicit transports: `psrp`, `winrm`, and `psexec`.
 - Live Spectre.Console run dashboard with honest phase/status reporting.

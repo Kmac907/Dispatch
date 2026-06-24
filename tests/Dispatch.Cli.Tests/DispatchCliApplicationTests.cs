@@ -4821,7 +4821,6 @@ credentials:
 
     [Theory]
     [InlineData("hosts", "list")]
-    [InlineData("init", "job")]
     public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
     {
         var application = CreateApplication(new CapturingPlanner());
@@ -4831,6 +4830,152 @@ credentials:
         Assert.Equal(1, exitCode);
         Assert.Contains("Planned Dispatch command", error);
         Assert.Contains($"{command} {subcommand}", error);
+    }
+
+    [Fact]
+    public async Task InitJobRouteCreatesStarterYamlInCurrentDirectory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-init-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var originalDirectory = Directory.GetCurrentDirectory();
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            Directory.SetCurrentDirectory(root);
+
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["init", "job"],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error);
+            var jobPath = Path.Combine(root, "job.yml");
+            Assert.True(File.Exists(jobPath));
+            Assert.Contains(jobPath, output);
+            var job = File.ReadAllText(jobPath);
+            Assert.Contains("hosts: workstations", job);
+            Assert.Contains("cmd: whoami", job);
+            Assert.DoesNotContain("Planned Dispatch command", error);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalDirectory);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("config", "config.yml")]
+    [InlineData("hosts", "hosts.yml")]
+    [InlineData("all", "config.yml")]
+    public async Task InitRoutesCreateExpectedStarterFiles(string subcommand, string expectedFileName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-init-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var originalDirectory = Directory.GetCurrentDirectory();
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            Directory.SetCurrentDirectory(root);
+
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["init", subcommand],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error);
+            var expectedPath = Path.Combine(root, expectedFileName);
+            Assert.True(File.Exists(expectedPath));
+            Assert.Contains(expectedPath, output);
+            Assert.DoesNotContain("Planned Dispatch command", error);
+        }
+        finally
+        {
+            Directory.SetCurrentDirectory(originalDirectory);
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task InitAllCreatesValidStarterYamlFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-init-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (initExitCode, initOutput, initError) = await CaptureConsoleAsync(() => Task.FromResult(
+                application.RunInitCommand(DispatchInitScaffold.All, root)));
+
+            Assert.Equal(0, initExitCode);
+            Assert.Empty(initError);
+            Assert.Contains(Path.Combine(root, "config.yml"), initOutput);
+            Assert.Contains(Path.Combine(root, "hosts.yml"), initOutput);
+            Assert.Contains(Path.Combine(root, "job.yml"), initOutput);
+
+            var config = DispatchConfigFileReader.Load(Path.Combine(root, "config.yml"));
+            Assert.Equal("psrp", config["Dispatch:DefaultTransport"]);
+            Assert.Equal("hosts.yml", config["Dispatch:Inventory"]);
+            Assert.Equal("prompt", config["Credentials:prod-admin:Provider"]);
+            Assert.Equal(@"CONTOSO\prod.admin", config["Credentials:prod-admin:Username"]);
+
+            var (applyExitCode, applyOutput, applyError) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "apply",
+                    Path.Combine(root, "job.yml"),
+                    "--plan",
+                    "--inventory",
+                    Path.Combine(root, "hosts.yml"),
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(applyExitCode == 0, $"Stdout: {applyOutput}. Stderr: {applyError}");
+            Assert.Empty(applyError);
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.DryRun);
+            Assert.Equal(TransportKind.Psrp, planner.LastRequest.Transport);
+            Assert.Equal(["PC001", "PC002"], planner.LastRequest.Targets.Select(static target => target.Name).ToArray());
+            var payload = Assert.IsType<CommandPayload>(planner.LastRequest.Payload);
+            Assert.Equal("whoami", payload.CommandLine);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task InitRefusesToOverwriteExistingStarterFile()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-init-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var configPath = Path.Combine(root, "config.yml");
+        File.WriteAllText(configPath, "existing: true");
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => Task.FromResult(
+                application.RunInitCommand(DispatchInitScaffold.All, root)));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("Dispatch Init Failed", error);
+            Assert.Contains("Refusing to overwrite", error);
+            Assert.Equal("existing: true", File.ReadAllText(configPath));
+            Assert.False(File.Exists(Path.Combine(root, "hosts.yml")));
+            Assert.False(File.Exists(Path.Combine(root, "job.yml")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]

@@ -6,6 +6,7 @@ using Dispatch.Core.Models;
 using Dispatch.Transports.PsExec;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using System.Text;
 using System.Text.Json;
 
 namespace Dispatch.Cli;
@@ -859,6 +860,62 @@ public sealed class DispatchCliApplication(
         return RenderCredentialOperationResult(result, outputMode);
     }
 
+    internal int RunInitCommand(DispatchInitScaffold scaffold, string? outputDirectory = null)
+    {
+        var templates = GetInitTemplates(scaffold);
+        var directory = Path.GetFullPath(string.IsNullOrWhiteSpace(outputDirectory)
+            ? Directory.GetCurrentDirectory()
+            : outputDirectory);
+        var targets = templates
+            .Select(template => template with { Path = Path.Combine(directory, template.FileName) })
+            .ToArray();
+
+        if (!Directory.Exists(directory))
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Init Failed",
+                $"Directory '{directory}' does not exist.");
+            return 1;
+        }
+
+        var existing = targets.FirstOrDefault(static target =>
+            File.Exists(target.Path) || Directory.Exists(target.Path));
+        if (existing is not null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Init Failed",
+                $"Refusing to overwrite existing path '{existing.Path}'.");
+            return 1;
+        }
+
+        try
+        {
+            foreach (var target in targets)
+            {
+                using var stream = new FileStream(target.Path, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                using var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                writer.Write(target.Content);
+            }
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Init Failed",
+                $"Starter files could not be written. {exception.Message}");
+            return 1;
+        }
+
+        foreach (var target in targets)
+        {
+            Console.Out.WriteLine($"Created {target.Path}");
+        }
+
+        return 0;
+    }
+
     internal static int RenderPlannedCommand(string command, string roadmapItem)
     {
         SpectreConsoleRenderer.RenderPlannedFeature(Console.Error, command, roadmapItem);
@@ -1007,6 +1064,63 @@ public sealed class DispatchCliApplication(
     private static string? NormalizeOptionalValue(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static IReadOnlyList<DispatchInitTemplate> GetInitTemplates(DispatchInitScaffold scaffold) =>
+        scaffold switch
+        {
+            DispatchInitScaffold.Config => [ConfigTemplate],
+            DispatchInitScaffold.Hosts => [HostsTemplate],
+            DispatchInitScaffold.Job => [JobTemplate],
+            DispatchInitScaffold.All => [ConfigTemplate, HostsTemplate, JobTemplate],
+            _ => throw new ArgumentOutOfRangeException(nameof(scaffold), scaffold, "Unsupported init scaffold.")
+        };
+
+    private static readonly DispatchInitTemplate ConfigTemplate = new(
+        "config.yml",
+        """
+        dispatch:
+          default_transport: psrp
+          inventory: hosts.yml
+          target: workstations
+          local_run_root: C:\ProgramData\Dispatch\Runs
+          remote_run_root: C:\ProgramData\Dispatch
+          throttle: 4
+
+        credentials:
+          prod-admin:
+            provider: prompt
+            username: CONTOSO\prod.admin
+        """);
+
+    private static readonly DispatchInitTemplate HostsTemplate = new(
+        "hosts.yml",
+        """
+        defaults:
+          transport: psrp
+          credential: prod-admin
+
+        groups:
+          workstations:
+            hosts: [PC001, PC002]
+
+        hosts:
+          PC001:
+          PC002:
+        """);
+
+    private static readonly DispatchInitTemplate JobTemplate = new(
+        "job.yml",
+        """
+        name: Starter Dispatch job
+        hosts: workstations
+        transport: psrp
+        defaults:
+          expected_exit_codes: [0]
+        strategy:
+          serial: 2
+        tasks:
+          - cmd: whoami
+        """);
+
     private static int RenderUnknownCommand(string command)
     {
         SpectreConsoleRenderer.RenderError(
@@ -1048,4 +1162,17 @@ public sealed class DispatchCliApplication(
         return false;
     }
 
+}
+
+internal enum DispatchInitScaffold
+{
+    Config,
+    Hosts,
+    Job,
+    All
+}
+
+internal sealed record DispatchInitTemplate(string FileName, string Content)
+{
+    public string Path { get; init; } = string.Empty;
 }

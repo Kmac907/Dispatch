@@ -1370,6 +1370,11 @@ Definition of done:
 - Unsupported transport-specific behavior fails clearly.
 - Init commands generate valid starter YAML files.
 
+Current implementation boundary:
+- `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
+- Init scaffolding refuses to overwrite existing starter files.
+- `push`, `hosts`, and expanded transport-aware `doctor` behavior remain later `6.6` work.
+
 #### 6.7 CLI Safety, Policy, And Exit Codes
 
 Objective:

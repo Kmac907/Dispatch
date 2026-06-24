@@ -155,9 +155,9 @@ dispatch init job
 dispatch init all
 ```
 
-Status: planned v1.
+Status: current.
 
-Scaffolds starter YAML files.
+Scaffolds starter YAML files in the current directory: `config.yml`, `hosts.yml`, and `job.yml`. `init all` creates all three files. Init refuses to overwrite an existing starter file.
 
 ## Output Modes
 

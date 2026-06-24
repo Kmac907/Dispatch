@@ -19,21 +19,21 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Structured output modes on current paths.
 - Inventory subset for current run paths.
 - `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs, plus plan/check-only `copy` task rendering.
+- `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
 
 ## Partial
 
 - `doctor` exists but the full v1 transport-aware diagnostics surface is still expanding.
-- `hosts`, `push`, and `init` command groups are registered/planned but not fully implemented.
+- `hosts` and `push` command groups are registered/planned but not fully implemented.
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 
 ## Planned Next
 
-- Continue `6.5` YAML apply/job model.
-- Implement `6.6` push, hosts, doctor, and init command surfaces.
+- Continue `6.6` push, hosts, and transport-aware doctor command surfaces.
 - Implement `6.7` CLI safety, policy, and stable exit codes.
 - Implement `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.

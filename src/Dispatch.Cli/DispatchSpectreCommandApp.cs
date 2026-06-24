@@ -186,6 +186,26 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new CredsRemoveCommand(application);
             }
 
+            if (type == typeof(InitJobCommand))
+            {
+                return new InitJobCommand(application);
+            }
+
+            if (type == typeof(InitHostsCommand))
+            {
+                return new InitHostsCommand(application);
+            }
+
+            if (type == typeof(InitConfigCommand))
+            {
+                return new InitConfigCommand(application);
+            }
+
+            if (type == typeof(InitAllCommand))
+            {
+                return new InitAllCommand(application);
+            }
+
             if (PlannedCommandTypes.Contains(type))
             {
                 return Activator.CreateInstance(type);
@@ -406,13 +426,29 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         }
     }
 
-    private sealed class InitJobCommand() : PlannedCommand("init job", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class InitJobCommand(DispatchCliApplication application) : Command
+    {
+        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
+            application.RunInitCommand(DispatchInitScaffold.Job);
+    }
 
-    private sealed class InitHostsCommand() : PlannedCommand("init hosts", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class InitHostsCommand(DispatchCliApplication application) : Command
+    {
+        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
+            application.RunInitCommand(DispatchInitScaffold.Hosts);
+    }
 
-    private sealed class InitConfigCommand() : PlannedCommand("init config", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class InitConfigCommand(DispatchCliApplication application) : Command
+    {
+        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
+            application.RunInitCommand(DispatchInitScaffold.Config);
+    }
 
-    private sealed class InitAllCommand() : PlannedCommand("init all", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class InitAllCommand(DispatchCliApplication application) : Command
+    {
+        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
+            application.RunInitCommand(DispatchInitScaffold.All);
+    }
 
     private sealed class ApplySettings : CommandSettings
     {
@@ -697,11 +733,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         typeof(HostsTestCommand),
         typeof(HostsValidateCommand),
         typeof(HostsGraphCommand),
-        typeof(HostsVarsCommand),
-        typeof(InitJobCommand),
-        typeof(InitHostsCommand),
-        typeof(InitConfigCommand),
-        typeof(InitAllCommand)
+        typeof(HostsVarsCommand)
     ];
 
     private static string[] BuildPowerShellArgs(RunPsSettings settings, IReadOnlyList<string> remaining)
