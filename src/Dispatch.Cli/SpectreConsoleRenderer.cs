@@ -46,7 +46,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine();
         console.WriteLine("Examples:");
         console.WriteLine(@"  dispatch run ps .\scripts\Collect-Disk.ps1 --target web");
-        console.WriteLine(@"  dispatch doctor --transport psexec");
+        console.WriteLine("  dispatch doctor");
     }
 
     public static void RenderVersion(TextWriter writer)
@@ -98,7 +98,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("Validate local configuration and dependencies.");
         console.WriteLine();
         console.WriteLine("Usage:");
-        console.WriteLine("  dispatch doctor [--transport psexec|psrp|winrm|auto]");
+        console.WriteLine("  dispatch doctor");
     }
 
     public static void RenderPlannedFeature(TextWriter writer, string command, string roadmapItem)
