@@ -1314,20 +1314,21 @@ Scope:
 - Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
 
 Current implementation boundary:
-- `dispatch apply <job.yml> --plan` parses selected YAML job `ps`, `cmd`, and `exe` tasks and renders one planned task entry per selected task.
-- `dispatch apply <job.yml> --check` validates and renders a no-endpoint-work plan for that same script-first subset; it is mutually exclusive with `--plan` and does not simulate task side effects.
-- `dispatch apply <job.yml>` executes selected script-first `ps`, scalar `cmd`, and scalar `exe` tasks in YAML order through the shared planner/executor path used by `dispatch run`, stopping after the first failed task run.
+- `dispatch apply <job.yml> --plan` parses selected YAML job `ps`, `cmd`, `exe`, and plan/check-only `copy` tasks and renders one planned task entry per selected task.
+- `dispatch apply <job.yml> --check` validates and renders a no-endpoint-work plan for that same current subset; it is mutually exclusive with `--plan` and does not simulate task side effects.
+- `dispatch apply <job.yml>` executes selected script-first `ps`, scalar `cmd`, and scalar `exe` tasks in YAML order through the shared planner/executor path used by `dispatch run`, stopping after the first failed task run; selected `copy` tasks are rejected before endpoint planning until file transfer execution exists.
 - The current apply parser supports `hosts`, `transport`, `credential`, scalar `job.vars` runtime inputs, `defaults.expected_exit_codes`, and `strategy.serial` for plan, check, and execution paths.
 - `--serial <n>` and `--concurrency <n>` override `strategy.serial` for that same subset and cannot be used together.
 - Relative `ps` task paths resolve relative to the job file.
-- Task-level `tags` are supported on selected `ps`, `cmd`, and `exe` tasks, and `--tags <tags>` / `--skip-tags <tags>` filter those tasks before planning or endpoint work.
+- Task-level `tags` are supported on selected `ps`, `cmd`, `exe`, and plan/check `copy` tasks, and `--tags <tags>` / `--skip-tags <tags>` filter those tasks before planning or endpoint work.
+- `copy` tasks currently accept block or inline mapping syntax with required `src` and `dest` fields and optional `overwrite`; selected plan/check tasks require an existing local source file, resolve relative `src` paths from the job file directory, require `dest` to be a rooted Windows path, and render without creating a `DispatchRequest`.
 - `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
 - `--diff` is accepted as an explicit apply setting but fails before planning until the diff behavior slice is implemented.
 - For the current apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
 - For the current apply subset, explicit non-`auto` CLI transport overrides job and inventory transport policy; omitted or `auto` CLI transport falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. Mixed selected inventory transport policies fail before planning unless a concrete CLI/job transport resolves the conflict.
 - Scalar `job.vars` entries are passed to selected `ps` tasks as named PowerShell script arguments in YAML order, with variable names limited to letters, numbers, and underscores starting with a letter or underscore; inventory vars remain host/group metadata and do not merge into runtime task inputs.
 - Unsupported task types, unsupported fields, unsupported vars-source concepts, `transport` under `job.vars`, and plaintext secret-like fields fail before planning or endpoint work.
-- Task execution beyond `ps`/`cmd`/`exe`, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
+- Copy execution, task execution beyond `ps`/`cmd`/`exe`, actual `--diff` behavior, remaining common log/path controls, and richer job behavior remain later `6.5` work.
 
 Non-goals:
 - No full Ansible compatibility.

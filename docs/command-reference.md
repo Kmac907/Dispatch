@@ -23,17 +23,17 @@ dispatch version
 dispatch apply <job.yml> [--inventory <hosts.yml>] [--target <selector>] [--exclude <selector>] [--config <path>] [--credential <name>] [--transport auto|psrp|winrm|psexec] [--tags <tags>] [--skip-tags <tags>] [--serial <n>|--concurrency <n>] [--plan|--check] [--diff] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
 ```
 
-Status: partial/current. Plan, check, and execution are implemented for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs in YAML order. Additional task types remain planned v1.
+Status: partial/current. Plan, check, and execution are implemented for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs in YAML order. Plan/check-only rendering is implemented for selected `copy` tasks. Additional task types remain planned v1.
 
 Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.
 
-Scalar `job.vars` entries are passed to selected `ps` tasks as named PowerShell script arguments in YAML order. Scalar `cmd` tasks run through the same command payload path as `dispatch run cmd`, and scalar `exe` tasks run through the same command payload path as `dispatch run exe`. Inventory vars remain host/group metadata and do not become runtime task inputs.
+Scalar `job.vars` entries are passed to selected `ps` tasks as named PowerShell script arguments in YAML order. Scalar `cmd` tasks run through the same command payload path as `dispatch run cmd`, and scalar `exe` tasks run through the same command payload path as `dispatch run exe`. Selected `copy` tasks are plan/check-only and use mapping syntax such as `copy: { src: .\payloads\agent.msi, dest: C:\ProgramData\Dispatch\Payloads\agent.msi, overwrite: true }` or a block with `src`, `dest`, `overwrite`, and `tags` fields. Inventory vars remain host/group metadata and do not become runtime task inputs.
 
 Use `--target <selector>` to override `hosts` from the job file for the current run. Use `--inventory <path>` to override the configured inventory path. Use `--exclude <selector>` to remove hosts from the selected set after the job or CLI target selector is resolved.
 
 Use `--transport <value>` to override job, inventory, and config transport policy. `--transport auto` is a fall-through value: Dispatch uses non-`auto` `job.transport`, then inventory transport policy, then config/default transport. If the selected inventory hosts resolve to conflicting transport policies and no explicit non-`auto` transport is supplied, validation fails before planning.
 
-Use `--tags <tags>` to select `ps`, `cmd`, and `exe` tasks when at least one task tag matches. Use `--skip-tags <tags>` to exclude supported tasks when any task tag matches. Tag values are comma-separated, and a filter that excludes every supported task fails before endpoint work. Execution runs the selected `ps`, `cmd`, and `exe` tasks in YAML order and stops after the first failed task run.
+Use `--tags <tags>` to select `ps`, `cmd`, `exe`, and plan/check `copy` tasks when at least one task tag matches. Use `--skip-tags <tags>` to exclude supported tasks when any task tag matches. Tag values are comma-separated, and a filter that excludes every supported task fails before endpoint work. Execution runs the selected `ps`, `cmd`, and `exe` tasks in YAML order and stops after the first failed task run. Real `copy` execution is rejected before endpoint planning until file transfer execution is implemented.
 
 Use `--plan` to inspect the resolved plan. Use `--check` to validate and render the supported job subset without endpoint work. The current check mode does not simulate task side effects.
 

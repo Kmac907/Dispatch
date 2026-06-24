@@ -76,7 +76,18 @@ internal static class DispatchStructuredOutputRenderer
                 foreach (var task in plan.Tasks)
                 {
                     writer.WriteLine($"Task {task.Index}: {task.Type} {task.DisplayValue}");
-                    SpectreConsoleRenderer.RenderDryRunPlan(writer, task.Plan);
+                    if (task.Plan is not null)
+                    {
+                        SpectreConsoleRenderer.RenderDryRunPlan(writer, task.Plan);
+                    }
+                    else if (task.Type.Equals("copy", StringComparison.OrdinalIgnoreCase))
+                    {
+                        writer.WriteLine($"  Source: {task.SourcePath}");
+                        writer.WriteLine($"  Destination: {task.DestinationPath}");
+                        writer.WriteLine($"  Overwrite: {task.Overwrite}");
+                        writer.WriteLine($"  Transport: {task.Transport?.ToDispatchString()}");
+                        writer.WriteLine($"  Targets: {string.Join(", ", task.Targets ?? [])}");
+                    }
                 }
 
                 break;
@@ -341,10 +352,39 @@ internal sealed record DispatchApplyPlannedTask(
     string? ScriptPath,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? CommandLine,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? SourcePath,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? DestinationPath,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    bool? Overwrite,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    TransportKind? Transport,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<string>? Targets,
     IReadOnlyList<string> Tags,
-    ExecutionPlan Plan)
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    ExecutionPlan? Plan)
 {
-    internal string DisplayValue => ScriptPath ?? CommandLine ?? string.Empty;
+    internal string DisplayValue
+    {
+        get
+        {
+            if (ScriptPath is not null)
+            {
+                return ScriptPath;
+            }
+
+            if (CommandLine is not null)
+            {
+                return CommandLine;
+            }
+
+            return SourcePath is not null && DestinationPath is not null
+                ? $"{SourcePath} -> {DestinationPath}"
+                : string.Empty;
+        }
+    }
 }
 
 internal sealed record DispatchApplyExecution(

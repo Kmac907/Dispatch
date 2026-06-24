@@ -112,6 +112,18 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        var validateOnly = options.Plan || options.Check;
+        if (validateOnly && !TryValidateCopyTasks(jobPath, selectedTasks, requireExistingSource: true, out error))
+        {
+            return false;
+        }
+
+        if (!validateOnly && selectedTasks.Any(static task => task.Type.Equals("copy", StringComparison.OrdinalIgnoreCase)))
+        {
+            error = "copy task execution is planned but not implemented in this apply slice. Use --plan or --check.";
+            return false;
+        }
+
         if (!TryLoadConfig(options.ConfigPath, ambientConfig, out var config, out error))
         {
             return false;
@@ -152,39 +164,77 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        var validateOnly = options.Plan || options.Check;
-
         var expectedExitCodes = job.ExpectedExitCodes.Count > 0
             ? job.ExpectedExitCodes
             : defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
         var commands = selectedTasks
-            .Select(task => new ApplyTaskCommand(
+            .Select(task => CreateApplyTaskCommand(
+                task,
+                validateOnly,
+                targetResolution.Targets,
+                transport,
+                options,
+                expectedExitCodes,
+                job))
+            .ToArray();
+        result = new ApplyParseResult(
+            validateOnly ? options.Check ? "check" : "plan" : "execute",
+            commands,
+            options.OutputMode,
+            options.Quiet);
+        return true;
+    }
+
+    private static ApplyTaskCommand CreateApplyTaskCommand(
+        ParsedApplyTask task,
+        bool validateOnly,
+        IReadOnlyList<TargetSpec> targets,
+        TransportKind transport,
+        ApplyCommandOptions options,
+        IReadOnlyList<int> expectedExitCodes,
+        ParsedApplyJob job)
+    {
+        if (task.Copy is { } copy)
+        {
+            return new ApplyTaskCommand(
                 task.Index,
                 task.Type,
                 task.Value,
                 task.Tags,
-                new DispatchRunCommand(
-                    DryRun: validateOnly,
-                    Payload: CreatePayload(task, job.Variables),
-                    Targets: targetResolution.Targets,
-                    Transport: transport,
-                    ConfigPath: options.ConfigPath,
-                    ExpectedExitCodes: expectedExitCodes,
-                    Throttle: options.Serial ?? options.Concurrency ?? job.Serial,
-                    LocalRunRoot: null,
-                    RemoteRunRoot: null,
-                    ArtifactPaths: [],
-                    CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
-                    RunAsSystem: false,
-                    NoDashboard: validateOnly || options.NoProgress,
-                    OutputMode: options.OutputMode,
-                    NoColor: options.NoColor,
-                    Quiet: options.Quiet,
-                    Verbose: options.Verbose || options.Trace,
-                    Trace: options.Trace)))
-            .ToArray();
-        result = new ApplyParseResult(validateOnly ? options.Check ? "check" : "plan" : "execute", commands);
-        return true;
+                null,
+                new ApplyCopyTaskPlan(
+                    copy.SourcePath ?? string.Empty,
+                    copy.DestinationPath ?? string.Empty,
+                    copy.Overwrite,
+                    targets,
+                    transport));
+        }
+
+        return new ApplyTaskCommand(
+            task.Index,
+            task.Type,
+            task.Value,
+            task.Tags,
+            new DispatchRunCommand(
+                DryRun: validateOnly,
+                Payload: CreatePayload(task, job.Variables),
+                Targets: targets,
+                Transport: transport,
+                ConfigPath: options.ConfigPath,
+                ExpectedExitCodes: expectedExitCodes,
+                Throttle: options.Serial ?? options.Concurrency ?? job.Serial,
+                LocalRunRoot: null,
+                RemoteRunRoot: null,
+                ArtifactPaths: [],
+                CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
+                RunAsSystem: false,
+                NoDashboard: validateOnly || options.NoProgress,
+                OutputMode: options.OutputMode,
+                NoColor: options.NoColor,
+                Quiet: options.Quiet,
+                Verbose: options.Verbose || options.Trace,
+                Trace: options.Trace),
+            null);
     }
 
     private static bool TryReadJob(string jobPath, out ParsedApplyJob job, out string error)
@@ -218,7 +268,7 @@ internal static class DispatchApplyJobParser
                 && currentTaskIndent.HasValue
                 && indent > currentTaskIndent.Value)
             {
-                if (!TryApplyTaskMetadata(jobPath, lineNumber, trimmed, ref job, out error))
+                if (!TryApplyTaskMetadata(jobPath, lineNumber, trimmed, Path.GetDirectoryName(Path.GetFullPath(jobPath))!, ref job, out error))
                 {
                     return false;
                 }
@@ -315,6 +365,7 @@ internal static class DispatchApplyJobParser
         string jobPath,
         int lineNumber,
         string taskField,
+        string jobDirectory,
         ref ParsedApplyJob job,
         out string error)
     {
@@ -339,27 +390,54 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (!key.Equals("tags", StringComparison.OrdinalIgnoreCase))
+        if (key.Equals("tags", StringComparison.OrdinalIgnoreCase))
         {
-            error = $"{jobPath}:{lineNumber}: task field '{key}' is not supported in this apply slice.";
-            return false;
+            if (!TryParseTagList(value, out var tags))
+            {
+                error = $"{jobPath}:{lineNumber}: task tags must contain one or more names.";
+                return false;
+            }
+
+            var tasks = job.Tasks.ToArray();
+            if (tasks.Length == 0)
+            {
+                error = $"{jobPath}:{lineNumber}: task metadata must follow a task entry.";
+                return false;
+            }
+
+            tasks[^1] = tasks[^1] with { Tags = tags };
+            job = job with { Tasks = tasks };
+            return true;
         }
 
-        if (!TryParseTagList(value, out var tags))
-        {
-            error = $"{jobPath}:{lineNumber}: task tags must contain one or more names.";
-            return false;
-        }
-
-        var tasks = job.Tasks.ToArray();
-        if (tasks.Length == 0)
+        var existingTasks = job.Tasks.ToArray();
+        if (existingTasks.Length == 0)
         {
             error = $"{jobPath}:{lineNumber}: task metadata must follow a task entry.";
             return false;
         }
 
-        tasks[^1] = tasks[^1] with { Tags = tags };
-        job = job with { Tasks = tasks };
+        if (!existingTasks[^1].Type.Equals("copy", StringComparison.OrdinalIgnoreCase))
+        {
+            error = $"{jobPath}:{lineNumber}: task field '{key}' is not supported in this apply slice.";
+            return false;
+        }
+
+        if (!TryApplyCopyTaskField(
+                jobPath,
+                lineNumber,
+                key,
+                value,
+                jobDirectory,
+                existingTasks[^1],
+                out var updatedTask,
+                out error))
+        {
+            return false;
+        }
+
+        existingTasks[^1] = updatedTask;
+        job = job with { Tasks = existingTasks };
         return true;
     }
 
@@ -390,10 +468,22 @@ internal static class DispatchApplyJobParser
 
         if (!taskType.Equals("ps", StringComparison.OrdinalIgnoreCase)
             && !taskType.Equals("cmd", StringComparison.OrdinalIgnoreCase)
-            && !taskType.Equals("exe", StringComparison.OrdinalIgnoreCase))
+            && !taskType.Equals("exe", StringComparison.OrdinalIgnoreCase)
+            && !taskType.Equals("copy", StringComparison.OrdinalIgnoreCase))
         {
             error = $"{jobPath}:{lineNumber}: task type '{taskType}' is planned but not implemented in this apply slice.";
             return false;
+        }
+
+        if (taskType.Equals("copy", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryReadCopyTask(jobPath, lineNumber, taskIndex, value, jobDirectory, out var copyTask, out error))
+            {
+                return false;
+            }
+
+            job = job with { Tasks = [.. job.Tasks, copyTask] };
+            return true;
         }
 
         if (string.IsNullOrWhiteSpace(value))
@@ -414,10 +504,164 @@ internal static class DispatchApplyJobParser
             : value;
         job = job with
         {
-            Tasks = [.. job.Tasks, new ParsedApplyTask(taskIndex, taskType.ToLowerInvariant(), taskValue, [])]
+            Tasks = [.. job.Tasks, new ParsedApplyTask(taskIndex, taskType.ToLowerInvariant(), taskValue, [], null)]
         };
         return true;
     }
+
+    private static bool TryReadCopyTask(
+        string jobPath,
+        int lineNumber,
+        int taskIndex,
+        string value,
+        string jobDirectory,
+        out ParsedApplyTask task,
+        out string error)
+    {
+        task = new ParsedApplyTask(taskIndex, "copy", string.Empty, [], null);
+        error = string.Empty;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return true;
+        }
+
+        if (!value.StartsWith("{", StringComparison.Ordinal) || !value.EndsWith("}", StringComparison.Ordinal))
+        {
+            error = $"{jobPath}:{lineNumber}: copy task must use mapping syntax with src and dest fields.";
+            return false;
+        }
+
+        var body = value[1..^1].Trim();
+        if (body.Length == 0)
+        {
+            error = $"{jobPath}:{lineNumber}: copy task requires src and dest fields.";
+            return false;
+        }
+
+        if (!TrySplitInlineMapEntries(body, out var items))
+        {
+            error = $"{jobPath}:{lineNumber}: copy task inline entries must use balanced quotes.";
+            return false;
+        }
+
+        foreach (var item in items)
+        {
+            var separator = IndexOfInlineMapSeparator(item);
+            if (separator <= 0)
+            {
+                error = $"{jobPath}:{lineNumber}: copy task inline entries must use 'name: value' syntax.";
+                return false;
+            }
+
+            var key = item[..separator].Trim();
+            var rawValue = item[(separator + 1)..].Trim();
+            if (!TryApplyCopyTaskField(jobPath, lineNumber, key, rawValue, jobDirectory, task, out task, out error))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryApplyCopyTaskField(
+        string jobPath,
+        int lineNumber,
+        string key,
+        string rawValue,
+        string jobDirectory,
+        ParsedApplyTask task,
+        out ParsedApplyTask updatedTask,
+        out string error)
+    {
+        updatedTask = task;
+        error = string.Empty;
+        var value = NormalizeScalar(rawValue);
+        var copy = task.Copy ?? new ParsedApplyCopyTask(null, null, false);
+        switch (key.ToLowerInvariant())
+        {
+            case "src":
+            case "source":
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    error = $"{jobPath}:{lineNumber}: copy task src requires a local file path.";
+                    return false;
+                }
+
+                var sourcePath = Path.IsPathRooted(value)
+                    ? value
+                    : Path.GetFullPath(Path.Combine(jobDirectory, value));
+
+                updatedTask = task with { Copy = copy with { SourcePath = sourcePath } };
+                return true;
+            case "dest":
+            case "destination":
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    error = $"{jobPath}:{lineNumber}: copy task dest requires a remote destination path.";
+                    return false;
+                }
+
+                if (!IsRootedWindowsPath(value))
+                {
+                    error = $"{jobPath}:{lineNumber}: copy task dest '{value}' must be a rooted Windows path.";
+                    return false;
+                }
+
+                updatedTask = task with { Copy = copy with { DestinationPath = value } };
+                return true;
+            case "overwrite":
+                if (!bool.TryParse(value, out var overwrite))
+                {
+                    error = $"{jobPath}:{lineNumber}: copy task overwrite must be true or false.";
+                    return false;
+                }
+
+                updatedTask = task with { Copy = copy with { Overwrite = overwrite } };
+                return true;
+            default:
+                error = $"{jobPath}:{lineNumber}: copy task field '{key}' is not supported in this apply slice.";
+                return false;
+        }
+    }
+
+    private static bool TryValidateCopyTasks(
+        string jobPath,
+        IReadOnlyList<ParsedApplyTask> tasks,
+        bool requireExistingSource,
+        out string error)
+    {
+        foreach (var task in tasks.Where(static task => task.Type.Equals("copy", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (task.Copy is null || string.IsNullOrWhiteSpace(task.Copy.SourcePath))
+            {
+                error = $"{jobPath}: copy task {task.Index} requires src.";
+                return false;
+            }
+
+            if (requireExistingSource && !File.Exists(task.Copy.SourcePath))
+            {
+                error = $"{jobPath}: copy task {task.Index} source file '{task.Copy.SourcePath}' does not exist.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(task.Copy.DestinationPath))
+            {
+                error = $"{jobPath}: copy task {task.Index} requires dest.";
+                return false;
+            }
+        }
+
+        error = string.Empty;
+        return true;
+    }
+
+    private static bool IsRootedWindowsPath(string value) =>
+        value.StartsWith(@"\\", StringComparison.Ordinal)
+        || (value.Length >= 3
+            && char.IsLetter(value[0])
+            && value[1] == ':'
+            && (value[2] == '\\' || value[2] == '/'));
 
     private static DispatchPayload CreatePayload(ParsedApplyTask task, IReadOnlyList<ParsedApplyVariable> variables) =>
         task.Type is "cmd" or "exe"
@@ -1028,14 +1272,24 @@ internal static class DispatchApplyJobParser
 
     internal sealed record ApplyParseResult(
         string Mode,
-        IReadOnlyList<ApplyTaskCommand> Tasks);
+        IReadOnlyList<ApplyTaskCommand> Tasks,
+        DispatchOutputMode OutputMode,
+        bool Quiet);
 
     internal sealed record ApplyTaskCommand(
         int Index,
         string Type,
         string Value,
         IReadOnlyList<string> Tags,
-        DispatchRunCommand Command);
+        DispatchRunCommand? Command,
+        ApplyCopyTaskPlan? Copy);
+
+    internal sealed record ApplyCopyTaskPlan(
+        string SourcePath,
+        string DestinationPath,
+        bool Overwrite,
+        IReadOnlyList<TargetSpec> Targets,
+        TransportKind Transport);
 
     private sealed record ParsedApplyJob
     {
@@ -1062,7 +1316,13 @@ internal static class DispatchApplyJobParser
         int Index,
         string Type,
         string Value,
-        IReadOnlyList<string> Tags);
+        IReadOnlyList<string> Tags,
+        ParsedApplyCopyTask? Copy);
+
+    internal sealed record ParsedApplyCopyTask(
+        string? SourcePath,
+        string? DestinationPath,
+        bool Overwrite);
 
     private sealed record DispatchRunConfig
     {

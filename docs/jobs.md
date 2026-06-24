@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs in YAML order. Additional task types remain planned v1.
+Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs in YAML order. `copy` tasks are supported for plan/check rendering only. Additional task types remain planned v1.
 
 ## Purpose
 
@@ -27,6 +27,11 @@ tasks:
     tags: [audit]
   - exe: .\tools\repair.exe /quiet
     tags: [install]
+  - copy:
+      src: .\payloads\agent.msi
+      dest: C:\ProgramData\Dispatch\Payloads\agent.msi
+      overwrite: true
+      tags: [stage]
 ```
 
 Run:
@@ -43,7 +48,7 @@ dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 ```
 
-The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by `dispatch run`.
+The current implementation converts executable `ps`, `cmd`, and `exe` tasks into the same planner, credential resolution, executor, live-rendering, and result-output path used by `dispatch run`. `copy` tasks are preview records only for `--plan` and `--check`.
 
 `--check` validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.
 
@@ -53,7 +58,9 @@ The current implementation converts the supported job subset into the same plann
 
 Transport selection follows the apply precedence contract: explicit CLI `--transport` values other than `auto` win, `--transport auto` falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. If selected inventory hosts resolve to conflicting transport policies and no explicit concrete transport is supplied, validation fails before planning.
 
-Task tags are optional on `ps`, `cmd`, and `exe` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
+Task tags are optional on `ps`, `cmd`, `exe`, and plan/check `copy` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
+
+`copy` supports block or inline mapping syntax with required `src` and `dest` fields plus optional `overwrite`, which defaults to `false`. Relative `src` paths resolve from the job file directory and must exist for selected `--plan` / `--check` tasks. `dest` must be a rooted Windows path. Normal `dispatch apply` rejects selected `copy` tasks before endpoint planning until file transfer execution is implemented.
 
 `--no-progress` disables live progress for apply execution, `--quiet` suppresses rich non-error output, and `--verbose` / `--trace` control NDJSON diagnostic detail. `--diff` is recognized but fails before planning until the diff behavior slice is implemented.
 
@@ -79,4 +86,4 @@ Planned v1 task vocabulary:
 - `wait`
 - `reboot`
 
-The current implementation accepts multiple selected `ps`, `cmd`, and `exe` tasks for `--plan`, `--check`, and execution. Unsupported task types fail validation before endpoint work.
+The current implementation accepts multiple selected `ps`, `cmd`, and `exe` tasks for `--plan`, `--check`, and execution, plus selected `copy` tasks for `--plan` and `--check` only. Unsupported task types fail validation before endpoint work.

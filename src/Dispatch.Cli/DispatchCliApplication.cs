@@ -454,7 +454,7 @@ public sealed class DispatchCliApplication(
 
         if (apply!.Mode == "execute" && apply.Tasks.Count == 1)
         {
-            return await RunParsedCommandAsync(apply.Tasks[0].Command, cancellationToken).ConfigureAwait(false);
+            return await RunParsedCommandAsync(apply.Tasks[0].Command!, cancellationToken).ConfigureAwait(false);
         }
 
         if (apply.Mode == "execute")
@@ -471,12 +471,13 @@ public sealed class DispatchCliApplication(
     {
         var executedTasks = new List<DispatchApplyExecutedTask>();
         var exitCode = 0;
-        var firstCommand = apply.Tasks[0].Command;
+        var firstCommand = apply.Tasks.Select(static task => task.Command).First(static command => command is not null)!;
 
         foreach (var task in apply.Tasks)
         {
             var renderTaskOutput = firstCommand.OutputMode == DispatchOutputMode.Ndjson;
-            var outcome = await RunParsedCommandAsync(task.Command, renderTaskOutput, cancellationToken).ConfigureAwait(false);
+            var command = task.Command!;
+            var outcome = await RunParsedCommandAsync(command, renderTaskOutput, cancellationToken).ConfigureAwait(false);
             if (outcome.Result is null)
             {
                 return outcome.ExitCode;
@@ -485,8 +486,8 @@ public sealed class DispatchCliApplication(
             executedTasks.Add(new DispatchApplyExecutedTask(
                 task.Index,
                 task.Type,
-                GetApplyTaskScriptPath(task.Command.Payload),
-                GetApplyTaskCommandLine(task.Command.Payload),
+                GetApplyTaskScriptPath(command.Payload),
+                GetApplyTaskCommandLine(command.Payload),
                 task.Tags,
                 outcome.Result));
             if (outcome.ExitCode != 0)
@@ -513,7 +514,8 @@ public sealed class DispatchCliApplication(
     {
         foreach (var task in apply.Tasks)
         {
-            if (!await TryValidateCredentialReferenceAsync(task.Command, cancellationToken).ConfigureAwait(false))
+            if (task.Command is not null
+                && !await TryValidateCredentialReferenceAsync(task.Command, cancellationToken).ConfigureAwait(false))
             {
                 return 1;
             }
@@ -524,14 +526,37 @@ public sealed class DispatchCliApplication(
         {
             foreach (var task in apply.Tasks)
             {
+                if (task.Copy is { } copy)
+                {
+                    plannedTasks.Add(new DispatchApplyPlannedTask(
+                        task.Index,
+                        task.Type,
+                        null,
+                        null,
+                        copy.SourcePath,
+                        copy.DestinationPath,
+                        copy.Overwrite,
+                        copy.Transport,
+                        copy.Targets.Select(static target => target.Name).ToArray(),
+                        task.Tags,
+                        null));
+                    continue;
+                }
+
+                var command = task.Command!;
                 var plan = await planner
-                    .CreatePlanAsync(task.Command.ToRequest(), cancellationToken)
+                    .CreatePlanAsync(command.ToRequest(), cancellationToken)
                     .ConfigureAwait(false);
                 plannedTasks.Add(new DispatchApplyPlannedTask(
                     task.Index,
                     task.Type,
-                    GetApplyTaskScriptPath(task.Command.Payload),
-                    GetApplyTaskCommandLine(task.Command.Payload),
+                    GetApplyTaskScriptPath(command.Payload),
+                    GetApplyTaskCommandLine(command.Payload),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     task.Tags,
                     plan));
             }
@@ -546,17 +571,19 @@ public sealed class DispatchCliApplication(
             return 1;
         }
 
-        var firstCommand = apply.Tasks[0].Command;
-        if (!ShouldSuppressOutput(firstCommand))
+        if (!ShouldSuppressApplyOutput(apply))
         {
             DispatchStructuredOutputRenderer.RenderApplyPlan(
                 Console.Out,
                 new DispatchApplyPlan(apply.Mode, plannedTasks),
-                firstCommand.OutputMode);
+                apply.OutputMode);
         }
 
         return 0;
     }
+
+    private static bool ShouldSuppressApplyOutput(DispatchApplyJobParser.ApplyParseResult apply) =>
+        apply.Quiet && apply.OutputMode is DispatchOutputMode.Rich or DispatchOutputMode.Table;
 
     private static string? GetApplyTaskScriptPath(DispatchPayload payload) =>
         payload is ScriptPayload script ? script.ScriptPath : null;

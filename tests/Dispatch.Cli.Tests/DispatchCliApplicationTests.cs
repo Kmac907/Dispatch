@@ -3222,6 +3222,189 @@ credentials:
         }
     }
 
+    [Theory]
+    [InlineData("--plan", "plan")]
+    [InlineData("--check", "check")]
+    public async Task ApplyPlanAndCheckRenderCopyTaskWithoutPlanningExecution(string validationMode, string expectedMode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var jobPath = Path.Combine(root, "job.yml");
+        await File.WriteAllTextAsync(sourcePath, "payload");
+        await File.WriteAllTextAsync(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - copy:
+                src: .\payload.txt
+                dest: C:\ProgramData\Dispatch\Payloads\payload.txt
+                overwrite: true
+                tags: [stage]
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, validationMode, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(planner.Requests);
+            Assert.Null(executor.LastPlan);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal(expectedMode, json.RootElement.GetProperty("mode").GetString());
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(1, task.GetProperty("index").GetInt32());
+            Assert.Equal("copy", task.GetProperty("type").GetString());
+            Assert.Equal(sourcePath, task.GetProperty("sourcePath").GetString());
+            Assert.Equal(@"C:\ProgramData\Dispatch\Payloads\payload.txt", task.GetProperty("destinationPath").GetString());
+            Assert.True(task.GetProperty("overwrite").GetBoolean());
+            Assert.Equal("psrp", task.GetProperty("transport").GetString());
+            Assert.Equal("PC001", task.GetProperty("targets")[0].GetString());
+            Assert.Equal("stage", task.GetProperty("tags")[0].GetString());
+            Assert.False(task.TryGetProperty("plan", out _));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRendersInlineCopyTask()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var jobPath = Path.Combine(root, "job.yml");
+        await File.WriteAllTextAsync(sourcePath, "payload");
+        await File.WriteAllTextAsync(
+            jobPath,
+            """
+            hosts: PC001
+            transport: winrm
+            tasks:
+              - copy: { src: .\payload.txt, dest: C:\Temp\payload.txt, overwrite: false }
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(planner.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(sourcePath, task.GetProperty("sourcePath").GetString());
+            Assert.Equal(@"C:\Temp\payload.txt", task.GetProperty("destinationPath").GetString());
+            Assert.False(task.GetProperty("overwrite").GetBoolean());
+            Assert.Equal("winrm", task.GetProperty("transport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyExecutionRejectsCopyTaskBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var jobPath = Path.Combine(root, "job.yml");
+        await File.WriteAllTextAsync(sourcePath, "payload");
+        await File.WriteAllTextAsync(
+            jobPath,
+            """
+            hosts: PC001
+            tasks:
+              - copy:
+                src: .\payload.txt
+                dest: C:\Temp\payload.txt
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Empty(planner.Requests);
+            Assert.Contains("copy task execution is planned but not implemented", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("missing-dest", "copy task 1 requires dest")]
+    [InlineData("missing-src", "copy task 1 requires src")]
+    [InlineData("missing-file", "does not exist")]
+    [InlineData("relative-dest", "must be a rooted")]
+    public async Task ApplyPlanRejectsInvalidCopyTaskBeforePlanning(string copyCase, string expectedError)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var jobPath = Path.Combine(root, "job.yml");
+        await File.WriteAllTextAsync(sourcePath, "payload");
+        var copyYaml = copyCase switch
+        {
+            "missing-dest" => "    src: .\\payload.txt",
+            "missing-src" => "    dest: C:\\Temp\\payload.txt",
+            "missing-file" => "    src: .\\missing.txt" + Environment.NewLine + "    dest: C:\\Temp\\payload.txt",
+            "relative-dest" => "    src: .\\payload.txt" + Environment.NewLine + "    dest: relative\\payload.txt",
+            _ => throw new ArgumentOutOfRangeException(nameof(copyCase), copyCase, null)
+        };
+        await File.WriteAllTextAsync(
+            jobPath,
+            $"""
+            hosts: PC001
+            tasks:
+              - copy:
+            {copyYaml}
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Empty(planner.Requests);
+            Assert.Contains(expectedError, error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ApplyPlanRendersMixedPsCmdAndExeTasksInYamlOrder()
     {
@@ -4027,6 +4210,186 @@ credentials:
             Assert.Null(planner.LastRequest);
             Assert.Contains("Invalid Dispatch Job", error);
             Assert.Contains("exe task requires a command line", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("--plan", "plan")]
+    [InlineData("--check", "check")]
+    public async Task ApplyPlanAndCheckRenderCopyTaskWithoutDispatchRequest(string validationMode, string expectedMode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        var payloadRoot = Path.Combine(root, "payloads");
+        Directory.CreateDirectory(payloadRoot);
+        var sourcePath = Path.Combine(payloadRoot, "agent.msi");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - copy:
+                  src: .\payloads\agent.msi
+                  dest: C:\ProgramData\Dispatch\Payloads\agent.msi
+                  overwrite: true
+                  tags: [stage]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner, executor: new ThrowingExecutor());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, validationMode, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(planner.Requests);
+            Assert.Null(planner.LastRequest);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.Equal(expectedMode, json.RootElement.GetProperty("mode").GetString());
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(1, task.GetProperty("index").GetInt32());
+            Assert.Equal("copy", task.GetProperty("type").GetString());
+            Assert.Equal(sourcePath, task.GetProperty("sourcePath").GetString());
+            Assert.Equal(@"C:\ProgramData\Dispatch\Payloads\agent.msi", task.GetProperty("destinationPath").GetString());
+            Assert.True(task.GetProperty("overwrite").GetBoolean());
+            Assert.Equal("psrp", task.GetProperty("transport").GetString());
+            Assert.Equal(["PC001"], task.GetProperty("targets").EnumerateArray().Select(static target => target.GetString()).ToArray());
+            Assert.Equal(["stage"], task.GetProperty("tags").EnumerateArray().Select(static tag => tag.GetString()).ToArray());
+            Assert.False(task.TryGetProperty("plan", out _));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanFiltersCopyTasksBeforeValidatingLocalSourceFiles()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        var payloadRoot = Path.Combine(root, "payloads");
+        Directory.CreateDirectory(payloadRoot);
+        var sourcePath = Path.Combine(payloadRoot, "agent.msi");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: winrm
+            tasks:
+              - copy: { src: .\payloads\agent.msi, dest: C:\Temp\agent.msi }
+                tags: [stage]
+              - copy: { src: .\payloads\missing.msi, dest: C:\Temp\missing.msi }
+                tags: [skip]
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner, executor: new ThrowingExecutor());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan", "--tags", "stage", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(planner.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
+            Assert.Equal(sourcePath, task.GetProperty("sourcePath").GetString());
+            Assert.Equal(@"C:\Temp\agent.msi", task.GetProperty("destinationPath").GetString());
+            Assert.False(task.GetProperty("overwrite").GetBoolean());
+            Assert.Equal("winrm", task.GetProperty("transport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanRejectsCopyDestThatIsNotRootedWindowsPath()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "agent.msi");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - copy:
+                  src: .\agent.msi
+                  dest: Payloads\agent.msi
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("must be a rooted", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyExecutionRejectsCopyTasksBeforeEndpointPlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "agent.msi");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - copy:
+                  src: .\agent.msi
+                  dest: C:\Temp\agent.msi
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner, executor: new ThrowingExecutor());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Invalid Dispatch Job", error);
+            Assert.Contains("copy task execution is planned but not implemented", error);
         }
         finally
         {
