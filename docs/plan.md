@@ -1354,6 +1354,8 @@ Reference:
 
 Scope:
 - Implement `dispatch push <source> --dest <remote-path>` with `--recurse`, `--checksum`, `--overwrite`, `--backup`, `--execute`, `--execute-as`, and `--cleanup` settings.
+- Implement push transfer through raw WinRM first, then PSRP and `--transport auto` selection in v1. PsExec push is not v1-required unless the SMB/admin-share staging boundary is explicitly reopened.
+- Treat `--overwrite` as replacement permission, not as permission to run: without `--overwrite`, Dispatch must create missing remote files and fail a target when the destination file already exists; with `--overwrite`, Dispatch may replace existing remote files.
 - Implement `dispatch hosts list|test|validate|graph|vars`.
 - Update `dispatch doctor` to accept `--transport psexec|psrp|winrm|auto` and check local prerequisites relevant to the selected transport.
 - Implement `dispatch init config|hosts|job|all` scaffolding.
@@ -1371,8 +1373,8 @@ Definition of done:
 - Init commands generate valid starter YAML files.
 
 Current implementation boundary:
-- `dispatch push <source> --dest <remote-path>` supports single-file raw WinRM transfer with explicit `--overwrite`, target/inventory selection, and `--plan` / `--check` preview.
-- Push directory recursion, checksum comparison, backup, execute-after-copy, cleanup, and non-WinRM push transports remain later `6.6` work.
+- `dispatch push <source> --dest <remote-path>` supports single-file raw WinRM transfer and recursive directory raw WinRM transfer, optional replacement through `--overwrite`, target/inventory selection, and `--plan` / `--check` preview.
+- Push PSRP transfer, `--transport auto` push selection, checksum comparison, backup, execute-after-copy, and cleanup remain later `6.6` work. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 - `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
 - Init scaffolding refuses to overwrite existing starter files.
 - `hosts` and expanded transport-aware `doctor` behavior remain later `6.6` work.

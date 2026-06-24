@@ -875,10 +875,50 @@ public sealed class WinRmExecutionTests
         Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", uploaderScript, StringComparison.Ordinal);
         Assert.Contains("$ErrorActionPreference = 'Stop'", uploaderScript, StringComparison.Ordinal);
         Assert.Contains("[System.IO.Path]::GetDirectoryName($path)", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("$overwrite = $true", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("[System.IO.FileMode]::Create", uploaderScript, StringComparison.Ordinal);
+        Assert.Equal("True", result.Metadata?["uploadOverwrite"]);
         Assert.DoesNotContain("Split-Path -Parent -LiteralPath", uploaderScript, StringComparison.Ordinal);
         Assert.Equal("completed", result.Metadata?["uploadStage"]);
         Assert.Equal("abcd1234", result.Metadata?["uploadExpectedSha256"]);
         Assert.Equal("abcd1234", result.Metadata?["uploadReportedSha256"]);
+    }
+
+    [Fact]
+    public async Task ScriptTransferClientUsesCreateNewWhenOverwriteIsFalse()
+    {
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "abcd1234\n",
+            string.Empty,
+            null));
+        var client = new WinRmScriptTransferClient(shellClient);
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 4,
+            ContentSha256: "abcd1234",
+            ChunkSizeBytes: 4,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA==")
+            ]);
+
+        var result = await client.UploadAsync(
+            new WinRmScriptTransferRequest(
+                "PC001",
+                @"C:\ProgramData\Dispatch\Payloads\agent.txt",
+                transferPlan,
+                Overwrite: false),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var request = Assert.Single(shellClient.Requests);
+        var encodedCommandIndex = request.Arguments.ToList().IndexOf("-EncodedCommand");
+        var uploaderScript = Encoding.Unicode.GetString(Convert.FromBase64String(request.Arguments[encodedCommandIndex + 1]));
+        Assert.Contains("$overwrite = $false", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("[System.IO.FileMode]::CreateNew", uploaderScript, StringComparison.Ordinal);
+        Assert.Equal("False", result.Metadata?["uploadOverwrite"]);
     }
 
     [Fact]

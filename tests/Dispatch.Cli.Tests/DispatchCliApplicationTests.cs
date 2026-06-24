@@ -2533,6 +2533,7 @@ credentials:
             var request = Assert.Single(uploader.Requests);
             Assert.Equal("PC001", request.Target);
             Assert.Equal(@"C:\Temp\payload.txt", request.RemoteScriptPath);
+            Assert.True(request.Overwrite);
             Assert.Equal("payload", DecodeTransferPlan(request.TransferPlan));
 
             using var json = JsonDocument.Parse(output);
@@ -2549,7 +2550,72 @@ credentials:
     }
 
     [Fact]
-    public async Task PushExecutionWithoutOverwriteFailsBeforeUpload()
+    public async Task PushExecutionUploadsDirectoryFilesThroughWinRmWhenRecurseIsSet()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        var sourceRoot = Path.Combine(root, "payloads");
+        var nestedRoot = Path.Combine(sourceRoot, "nested");
+        Directory.CreateDirectory(nestedRoot);
+        var firstFile = Path.Combine(sourceRoot, "agent.txt");
+        var secondFile = Path.Combine(nestedRoot, "config.txt");
+        File.WriteAllText(firstFile, "agent");
+        File.WriteAllText(secondFile, "config");
+        var uploader = new RecordingWinRmTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourceRoot,
+                    "--dest",
+                    @"C:\Temp\Payloads",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--overwrite",
+                    "--recurse",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Collection(
+                uploader.Requests.OrderBy(static request => request.RemoteScriptPath, StringComparer.OrdinalIgnoreCase),
+                request =>
+                {
+                    Assert.Equal("PC001", request.Target);
+                    Assert.Equal(@"C:\Temp\Payloads\agent.txt", request.RemoteScriptPath);
+                    Assert.True(request.Overwrite);
+                    Assert.Equal("agent", DecodeTransferPlan(request.TransferPlan));
+                },
+                request =>
+                {
+                    Assert.Equal("PC001", request.Target);
+                    Assert.Equal(@"C:\Temp\Payloads\nested\config.txt", request.RemoteScriptPath);
+                    Assert.True(request.Overwrite);
+                    Assert.Equal("config", DecodeTransferPlan(request.TransferPlan));
+                });
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(11, json.RootElement.GetProperty("plan").GetProperty("sourceBytes").GetInt64());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.Equal(11, target.GetProperty("bytesUploaded").GetInt64());
+            Assert.Equal("2", target.GetProperty("metadata").GetProperty("pushFileCount").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionWithoutOverwriteUsesCreateNewUploadMode()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -2564,10 +2630,13 @@ credentials:
                 ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--target", "PC001", "--transport", "winrm"],
                 CancellationToken.None));
 
-            Assert.Equal(1, exitCode);
-            Assert.Empty(output);
-            Assert.Empty(uploader.Requests);
-            Assert.Contains("requires --overwrite", error);
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            var request = Assert.Single(uploader.Requests);
+            Assert.Equal("PC001", request.Target);
+            Assert.Equal(@"C:\Temp\payload.txt", request.RemoteScriptPath);
+            Assert.False(request.Overwrite);
+            Assert.Equal("payload", DecodeTransferPlan(request.TransferPlan));
         }
         finally
         {
@@ -2577,8 +2646,11 @@ credentials:
 
     [Theory]
     [InlineData("--transport", "psrp", "raw WinRM only")]
-    [InlineData("--recurse", null, "--recurse is planned")]
+    [InlineData("--checksum", null, "--checksum comparison is planned")]
+    [InlineData("--backup", null, "--backup is planned")]
     [InlineData("--execute", null, "--execute is planned")]
+    [InlineData("--execute-as", "system", "--execute-as is planned")]
+    [InlineData("--cleanup", null, "--cleanup is planned")]
     [InlineData("--concurrency", "2", "--concurrency greater than 1 is planned")]
     public async Task PushRejectsUnsupportedSliceOptions(string option, string? value, string expected)
     {
@@ -2659,6 +2731,31 @@ credentials:
             Assert.Equal(1, exitCode);
             Assert.Empty(output);
             Assert.Contains("Directory push requires --recurse", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushRecurseRejectsEmptyDirectoryBeforeUpload()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var uploader = new RecordingWinRmTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["push", root, "--dest", @"C:\Temp\payload", "--target", "PC001", "--transport", "winrm", "--overwrite", "--recurse"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Empty(uploader.Requests);
+            Assert.Contains("contains no files", error);
         }
         finally
         {

@@ -96,15 +96,15 @@ dispatch push <source> --dest <remote-path> [--target <selector>] [--transport w
 
 Status: partial current.
 
-Current support: single-file push over raw WinRM with `--overwrite`, target selection, inventory selection, and structured output. `--plan` and `--check` preview the transfer without writing. Directory recursion, checksum comparison, backup, execute-after-copy, cleanup, and non-WinRM push transports remain planned.
+Current support: single-file push and recursive directory push over raw WinRM, target selection, inventory selection, optional replacement through `--overwrite`, and structured output. `--plan` and `--check` preview the transfer without writing. PSRP push and `--transport auto` push selection are planned v1 work in `6.6`; checksum comparison, backup, execute-after-copy, cleanup, and PsExec push remain planned or deferred.
 
 Options and behavior:
 
-- `<source>` is the local file to transfer. Current support is files only; directory transfer requires later `--recurse` work.
+- `<source>` is the local file or directory to transfer. Directory transfer requires `--recurse` and preserves relative file paths under `--dest`.
 - `--dest <remote-path>` is the drive-qualified Windows path to write on each target, such as `C:\ProgramData\Dispatch\Payloads\agent.msi`.
-- `--overwrite` is required for real transfer in the current slice because remote existence preflight/backup behavior is not implemented yet.
-- `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing the file.
-- `--transport winrm` is the only current real push transport. `psrp`, `psexec`, and `auto` expansion remain planned for this command.
+- `--overwrite` allows replacing an existing remote file. Without it, Dispatch creates the remote file only if it does not already exist; an existing remote file fails that target instead of being replaced. For directory push, this applies independently to each file under `--dest`.
+- `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing files.
+- `--transport winrm` is the only current real push transport. `psrp` and `auto` expansion are v1 `6.6` work for this command. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 
 ## Hosts
 

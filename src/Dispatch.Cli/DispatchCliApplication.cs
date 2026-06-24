@@ -464,15 +464,6 @@ public sealed class DispatchCliApplication(
             return 0;
         }
 
-        if (!pushPlan!.Overwrite)
-        {
-            SpectreConsoleRenderer.RenderError(
-                Console.Error,
-                "Dispatch Push Failed",
-                "Real push execution currently requires --overwrite because remote existence preflight is not implemented in this push slice. Use --plan or --check to preview without writing.");
-            return 1;
-        }
-
         if (winRmTransferClient is null)
         {
             SpectreConsoleRenderer.RenderError(
@@ -1198,12 +1189,6 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        if (recurse)
-        {
-            error = "--recurse is planned for push directories but is not implemented in this push slice.";
-            return false;
-        }
-
         if (checksum)
         {
             error = "--checksum comparison is planned for push but is not implemented in this push slice.";
@@ -1247,13 +1232,14 @@ public sealed class DispatchCliApplication(
         }
 
         var sourcePath = Path.GetFullPath(source);
-        if (Directory.Exists(sourcePath))
+        var sourceIsDirectory = Directory.Exists(sourcePath);
+        if (sourceIsDirectory && !recurse)
         {
-            error = "Directory push requires --recurse and is not implemented in this push slice.";
+            error = "Directory push requires --recurse.";
             return false;
         }
 
-        if (!File.Exists(sourcePath))
+        if (!sourceIsDirectory && !File.Exists(sourcePath))
         {
             error = $"Push source file '{sourcePath}' does not exist.";
             return false;
@@ -1309,10 +1295,28 @@ public sealed class DispatchCliApplication(
                 .ToArray();
         }
 
-        var fileInfo = new FileInfo(sourcePath);
-        if (fileInfo.Length > int.MaxValue)
+        var sourceFiles = sourceIsDirectory
+            ? EnumeratePushSourceFiles(sourcePath)
+            : [sourcePath];
+        if (sourceFiles.Count == 0)
         {
-            error = $"Push source file '{sourcePath}' is too large for the current WinRM chunked upload path.";
+            error = $"Push source directory '{sourcePath}' contains no files to upload.";
+            return false;
+        }
+
+        foreach (var sourceFile in sourceFiles)
+        {
+            if (new FileInfo(sourceFile).Length > int.MaxValue)
+            {
+                error = $"Push source file '{sourceFile}' is too large for the current WinRM chunked upload path.";
+                return false;
+            }
+        }
+
+        var sourceBytes = sourceFiles.Sum(static item => new FileInfo(item).Length);
+        if (sourceBytes < 0)
+        {
+            error = $"Push source '{sourcePath}' is too large.";
             return false;
         }
 
@@ -1320,7 +1324,7 @@ public sealed class DispatchCliApplication(
             Mode: "push",
             SourcePath: sourcePath,
             DestinationPath: destinationPath,
-            SourceBytes: fileInfo.Length,
+            SourceBytes: sourceBytes,
             Transport: resolvedTransport,
             Targets: targets,
             Overwrite: overwrite,
@@ -1335,7 +1339,7 @@ public sealed class DispatchCliApplication(
         CancellationToken cancellationToken)
     {
         var startedAt = DateTimeOffset.UtcNow;
-        var transferPlan = await CreatePushTransferPlanAsync(plan.SourcePath, cancellationToken).ConfigureAwait(false);
+        var pushItems = await CreatePushTransferItemsAsync(plan, cancellationToken).ConfigureAwait(false);
         var credentials = await ResolvePushCredentialsAsync(plan, cancellationToken).ConfigureAwait(false);
         if (!credentials.Succeeded)
         {
@@ -1351,7 +1355,10 @@ public sealed class DispatchCliApplication(
                         FailureCategory: FailureCategory.AuthenticationFailed,
                         FailureMessage: credentials.FailureMessage ?? "Credential resolution failed.",
                         BytesUploaded: 0,
-                        Metadata: new Dictionary<string, string>())
+                        Metadata: new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                        {
+                            ["pushFileCount"] = pushItems.Count.ToString()
+                        })
                 ]);
         }
 
@@ -1366,23 +1373,51 @@ public sealed class DispatchCliApplication(
                         ? resolvedCredential
                         : null;
 
-                var upload = await winRmTransferClient!.UploadAsync(
-                        new WinRmScriptTransferRequest(
-                            target.Name,
-                            plan.DestinationPath,
-                            transferPlan,
-                            null,
-                            credential),
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                var bytesUploaded = 0L;
+                var uploadMetadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["pushFileCount"] = pushItems.Count.ToString()
+                };
+                WinRmScriptTransferResult? failedUpload = null;
+                foreach (var item in pushItems)
+                {
+                    var upload = await winRmTransferClient!.UploadAsync(
+                            new WinRmScriptTransferRequest(
+                                target.Name,
+                                item.RemotePath,
+                                item.TransferPlan,
+                                ProgressReporter: null,
+                                Credential: credential,
+                                Overwrite: plan.Overwrite),
+                            cancellationToken)
+                        .ConfigureAwait(false);
+
+                    if (upload.Metadata is not null)
+                    {
+                        foreach (var pair in upload.Metadata)
+                        {
+                            uploadMetadata[pair.Key] = pair.Value;
+                        }
+                    }
+
+                    if (!upload.Succeeded)
+                    {
+                        uploadMetadata["pushFailedSourcePath"] = item.SourcePath;
+                        uploadMetadata["pushFailedRemotePath"] = item.RemotePath;
+                        failedUpload = upload;
+                        break;
+                    }
+
+                    bytesUploaded += item.TransferPlan.TotalBytes;
+                }
 
                 targetResults.Add(new DispatchPushTargetResult(
                     target.Name,
-                    upload.Succeeded,
-                    upload.FailureCategory,
-                    upload.FailureMessage,
-                    upload.Succeeded ? plan.SourceBytes : 0,
-                    upload.Metadata ?? new Dictionary<string, string>()));
+                    failedUpload is null,
+                    failedUpload?.FailureCategory ?? FailureCategory.None,
+                    failedUpload?.FailureMessage,
+                    failedUpload is null ? bytesUploaded : 0,
+                    uploadMetadata));
             }
 
             return new DispatchPushResult(
@@ -1416,6 +1451,37 @@ public sealed class DispatchCliApplication(
             : await runtimeCredentialResolver.ResolveAsync(references, cancellationToken).ConfigureAwait(false);
     }
 
+    private static async Task<IReadOnlyList<DispatchPushTransferItem>> CreatePushTransferItemsAsync(
+        DispatchPushPlan plan,
+        CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(plan.SourcePath))
+        {
+            return
+            [
+                new DispatchPushTransferItem(
+                    plan.SourcePath,
+                    plan.DestinationPath,
+                    await CreatePushTransferPlanAsync(plan.SourcePath, cancellationToken).ConfigureAwait(false))
+            ];
+        }
+
+        var items = new List<DispatchPushTransferItem>();
+        foreach (var sourceFile in EnumeratePushSourceFiles(plan.SourcePath))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var relativePath = Path.GetRelativePath(plan.SourcePath, sourceFile)
+                .Replace(Path.DirectorySeparatorChar, '\\')
+                .Replace(Path.AltDirectorySeparatorChar, '\\');
+            items.Add(new DispatchPushTransferItem(
+                sourceFile,
+                CombineRemotePushPath(plan.DestinationPath, relativePath),
+                await CreatePushTransferPlanAsync(sourceFile, cancellationToken).ConfigureAwait(false)));
+        }
+
+        return items;
+    }
+
     private static async Task<ScriptTransferPlan> CreatePushTransferPlanAsync(
         string sourcePath,
         CancellationToken cancellationToken)
@@ -1445,6 +1511,24 @@ public sealed class DispatchCliApplication(
 
     private static string ComputeSha256(byte[] bytes) =>
         Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static IReadOnlyList<string> EnumeratePushSourceFiles(string sourceDirectory) =>
+        Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static string CombineRemotePushPath(string remoteRoot, string relativePath)
+    {
+        var normalizedRoot = remoteRoot.Replace('/', '\\').TrimEnd('\\');
+        if (normalizedRoot.EndsWith(":", StringComparison.Ordinal))
+        {
+            normalizedRoot += "\\";
+        }
+
+        return normalizedRoot.EndsWith('\\')
+            ? normalizedRoot + relativePath
+            : normalizedRoot + "\\" + relativePath;
+    }
 
     private static bool ContainsInvalidPushDestinationCharacter(string path)
     {
@@ -1671,3 +1755,8 @@ internal sealed record PushCommandConfig(
     string? Target,
     string? Exclude,
     TransportKind? DefaultTransport);
+
+internal sealed record DispatchPushTransferItem(
+    string SourcePath,
+    string RemotePath,
+    ScriptTransferPlan TransferPlan);

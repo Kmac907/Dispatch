@@ -25,7 +25,7 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
                         "-ExecutionPolicy",
                         "Bypass",
                         "-EncodedCommand",
-                        BuildUploaderEncodedCommand(request.RemoteScriptPath)
+                        BuildUploaderEncodedCommand(request.RemoteScriptPath, request.Overwrite)
                     ],
                     frames,
                     ProgressReporter: progress =>
@@ -52,7 +52,8 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
             ["uploadTarget"] = request.Target,
             ["uploadRemoteScriptPath"] = request.RemoteScriptPath,
             ["uploadChunkCount"] = request.TransferPlan.ChunkCount.ToString(),
-            ["uploadChunkSizeBytes"] = request.TransferPlan.ChunkSizeBytes.ToString()
+            ["uploadChunkSizeBytes"] = request.TransferPlan.ChunkSizeBytes.ToString(),
+            ["uploadOverwrite"] = request.Overwrite.ToString()
         };
 
         if (shellResult.Metadata is not null)
@@ -104,16 +105,19 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
         return WinRmScriptTransferResult.Success(metadata);
     }
 
-    private static string BuildUploaderEncodedCommand(string remoteScriptPath)
+    private static string BuildUploaderEncodedCommand(string remoteScriptPath, bool overwrite)
     {
         var remoteScriptPathBase64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(remoteScriptPath));
+        var overwriteLiteral = overwrite ? "$true" : "$false";
         var script = $$"""
 try {
 $ErrorActionPreference = 'Stop'
 $path = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('{{remoteScriptPathBase64}}'))
+$overwrite = {{overwriteLiteral}}
 $directory = [System.IO.Path]::GetDirectoryName($path)
 [System.IO.Directory]::CreateDirectory($directory) | Out-Null
-$stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+$fileMode = if ($overwrite) { [System.IO.FileMode]::Create } else { [System.IO.FileMode]::CreateNew }
+$stream = [System.IO.File]::Open($path, $fileMode, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
 try {
     while (($line = [Console]::In.ReadLine()) -ne $null) {
         if ([string]::IsNullOrWhiteSpace($line)) {
