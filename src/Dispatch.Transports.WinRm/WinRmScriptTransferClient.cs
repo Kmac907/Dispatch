@@ -88,6 +88,10 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
             metadata["uploadStage"] = "hash-verify";
             metadata["uploadReportedSha256"] = reportedSha ?? string.Empty;
             metadata["uploadExpectedSha256"] = request.TransferPlan.ContentSha256;
+            if (!string.IsNullOrWhiteSpace(shellResult.Stderr))
+            {
+                metadata["uploadStderr"] = shellResult.Stderr.Trim();
+            }
             return WinRmScriptTransferResult.Failed(
                 FailureCategory.ScriptTransferFailed,
                 $"Raw WinRM upload reported SHA-256 '{reportedSha ?? "<empty>"}' for '{request.Target}', expected '{request.TransferPlan.ContentSha256}'.",
@@ -104,8 +108,10 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
     {
         var remoteScriptPathBase64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(remoteScriptPath));
         var script = $$"""
+try {
+$ErrorActionPreference = 'Stop'
 $path = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('{{remoteScriptPathBase64}}'))
-$directory = Split-Path -Parent -LiteralPath $path
+$directory = [System.IO.Path]::GetDirectoryName($path)
 [System.IO.Directory]::CreateDirectory($directory) | Out-Null
 $stream = [System.IO.File]::Open($path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
 try {
@@ -122,8 +128,27 @@ finally {
     $stream.Dispose()
 }
 
-$hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+$sha256 = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $readStream = [System.IO.File]::OpenRead($path)
+    try {
+        $hashBytes = $sha256.ComputeHash($readStream)
+    }
+    finally {
+        $readStream.Dispose()
+    }
+}
+finally {
+    $sha256.Dispose()
+}
+
+$hash = -join ($hashBytes | ForEach-Object { $_.ToString('x2') })
 [Console]::Out.WriteLine($hash)
+}
+catch {
+    [Console]::Error.WriteLine($_.Exception.Message)
+    exit 1
+}
 """;
 
         return Convert.ToBase64String(Encoding.Unicode.GetBytes(script));

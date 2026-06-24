@@ -872,7 +872,10 @@ public sealed class WinRmExecutionTests
         Assert.DoesNotContain(remotePath, uploaderScript, StringComparison.Ordinal);
         Assert.Contains(Convert.ToBase64String(Encoding.Unicode.GetBytes(remotePath)), uploaderScript, StringComparison.Ordinal);
         Assert.Contains("FromBase64String", uploaderScript, StringComparison.Ordinal);
-        Assert.Contains("Get-FileHash", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("[System.Security.Cryptography.SHA256]::Create()", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("$ErrorActionPreference = 'Stop'", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("[System.IO.Path]::GetDirectoryName($path)", uploaderScript, StringComparison.Ordinal);
+        Assert.DoesNotContain("Split-Path -Parent -LiteralPath", uploaderScript, StringComparison.Ordinal);
         Assert.Equal("completed", result.Metadata?["uploadStage"]);
         Assert.Equal("abcd1234", result.Metadata?["uploadExpectedSha256"]);
         Assert.Equal("abcd1234", result.Metadata?["uploadReportedSha256"]);
@@ -907,6 +910,37 @@ public sealed class WinRmExecutionTests
         Assert.Equal("hash-verify", result.Metadata?["uploadStage"]);
         Assert.Equal("wronghash", result.Metadata?["uploadReportedSha256"]);
         Assert.Equal("expectedhash", result.Metadata?["uploadExpectedSha256"]);
+    }
+
+    [Fact]
+    public async Task ScriptTransferClientPreservesRemoteStderrWhenHashVerificationFails()
+    {
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "\n",
+            "Get-FileHash is not recognized",
+            null));
+        var client = new WinRmScriptTransferClient(shellClient);
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 4,
+            ContentSha256: "expectedhash",
+            ChunkSizeBytes: 4,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA==")
+            ]);
+
+        var result = await client.UploadAsync(
+            new WinRmScriptTransferRequest("PC001", @"C:\ProgramData\Dispatch\Runs\run-001\script\Fix.ps1", transferPlan),
+            CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("hash-verify", result.Metadata?["uploadStage"]);
+        Assert.Equal(string.Empty, result.Metadata?["uploadReportedSha256"]);
+        Assert.Equal("expectedhash", result.Metadata?["uploadExpectedSha256"]);
+        Assert.Equal("Get-FileHash is not recognized", result.Metadata?["uploadStderr"]);
     }
 
     [Fact]
