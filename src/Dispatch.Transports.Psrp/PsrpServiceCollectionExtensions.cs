@@ -15,6 +15,7 @@ public static class PsrpServiceCollectionExtensions
         services.AddSingleton<IPsrpPortProbe, PsrpPortProbe>();
         services.AddSingleton<IPsrpArtifactClient, PsrpArtifactClient>();
         services.AddSingleton<IPsrpCommandClient, PsrpCommandClient>();
+        services.AddSingleton<IPsrpFileTransferClient, PsrpFileTransferClient>();
         services.AddSingleton<IPsrpScriptClient, PsrpScriptClient>();
         services.AddSingleton<ITransportArtifactCollector, PsrpArtifactCollector>();
         services.AddSingleton<ITransportEndpointProbe, PsrpEndpointProbe>();

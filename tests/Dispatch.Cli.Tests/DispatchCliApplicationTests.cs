@@ -4,6 +4,7 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
+using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -2550,6 +2551,57 @@ credentials:
     }
 
     [Fact]
+    public async Task PushExecutionUploadsSingleFileThroughExplicitPsrp()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var psrpUploader = new RecordingPsrpFileTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), psrpFileTransferClient: psrpUploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--overwrite",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            var request = Assert.Single(psrpUploader.Requests);
+            Assert.Equal("PC001", request.Target);
+            Assert.Equal(@"C:\Temp\payload.txt", request.RemotePath);
+            Assert.True(request.Overwrite);
+            Assert.Equal("payload", DecodeTransferPlan(request.TransferPlan));
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("psrp", json.RootElement.GetProperty("plan").GetProperty("transport").GetString());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.Equal("PC001", target.GetProperty("target").GetString());
+            Assert.True(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(7, target.GetProperty("bytesUploaded").GetInt64());
+            Assert.Equal("psrp", target.GetProperty("metadata").GetProperty("uploadTransport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PushExecutionUploadsDirectoryFilesThroughWinRmWhenRecurseIsSet()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
@@ -2645,7 +2697,7 @@ credentials:
     }
 
     [Theory]
-    [InlineData("--transport", "psrp", "raw WinRM only")]
+    [InlineData("--transport", "psexec", "raw WinRM and explicit PSRP only")]
     [InlineData("--checksum", null, "--checksum comparison is planned")]
     [InlineData("--backup", null, "--backup is planned")]
     [InlineData("--execute", null, "--execute is planned")]
@@ -2681,6 +2733,41 @@ credentials:
             Assert.Equal(1, exitCode);
             Assert.Empty(output);
             Assert.Contains(expected, error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushRejectsInventoryPsrpSelectionUntilAutoSlice()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            inventoryPath,
+            """
+            hosts:
+              PC001:
+                transport: psrp
+            """);
+        var psrpUploader = new RecordingPsrpFileTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), psrpFileTransferClient: psrpUploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--inventory", inventoryPath],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Empty(psrpUploader.Requests);
+            Assert.Contains("push --transport auto selection for PSRP is planned", error);
         }
         finally
         {
@@ -6378,7 +6465,8 @@ credentials:
         ICredentialProvider? credentialProvider = null,
         IRuntimeCredentialResolver? runtimeCredentialResolver = null,
         IRuntimeCredentialPrompt? runtimeCredentialPrompt = null,
-        IWinRmScriptTransferClient? winRmTransferClient = null) =>
+        IWinRmScriptTransferClient? winRmTransferClient = null,
+        IPsrpFileTransferClient? psrpFileTransferClient = null) =>
         new(
             Options.Create(options ?? new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
@@ -6389,7 +6477,8 @@ credentials:
             credentialProvider,
             runtimeCredentialResolver,
             runtimeCredentialPrompt,
-            winRmTransferClient);
+            winRmTransferClient,
+            psrpFileTransferClient);
 
     private static IReadOnlyList<JsonDocument> ParseNdjson(string output) =>
         output
@@ -6536,6 +6625,24 @@ credentials:
             return Task.FromResult(result ?? WinRmScriptTransferResult.Success(new Dictionary<string, string>
             {
                 ["uploadStage"] = "completed"
+            }));
+        }
+    }
+
+    private sealed class RecordingPsrpFileTransferClient(
+        PsrpFileTransferResult? result = null) : IPsrpFileTransferClient
+    {
+        public List<PsrpFileTransferRequest> Requests { get; } = [];
+
+        public Task<PsrpFileTransferResult> UploadAsync(
+            PsrpFileTransferRequest request,
+            CancellationToken cancellationToken)
+        {
+            Requests.Add(request);
+            return Task.FromResult(result ?? PsrpFileTransferResult.Success(new Dictionary<string, string>
+            {
+                ["uploadStage"] = "completed",
+                ["uploadTransport"] = "psrp"
             }));
         }
     }

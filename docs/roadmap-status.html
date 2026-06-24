@@ -72,7 +72,7 @@
 <h2>Partial</h2>
 <ul>
 <li><code>doctor</code> exists but the full v1 transport-aware diagnostics surface is still expanding.</li>
-  <li><code>push</code> is limited to file and recursive directory raw WinRM transfer; PSRP push and <code>--transport auto</code> push selection, checksum comparison, backup, execute-after-copy, and cleanup remain planned. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.</li>
+  <li><code>push</code> supports file and recursive directory transfer over raw WinRM or explicit PSRP; <code>--transport auto</code> push selection, checksum comparison, backup, execute-after-copy, and cleanup remain planned. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.</li>
 <li><code>hosts</code> command group is registered/planned but not fully implemented.</li>
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
 <li>YAML task execution beyond <code>ps</code>/<code>cmd</code>/<code>exe</code>, including real <code>copy</code> transfer execution, remains planned.</li>

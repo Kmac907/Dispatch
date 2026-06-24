@@ -5,6 +5,7 @@ using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Core.Targeting;
 using Dispatch.Transports.PsExec;
+using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -24,7 +25,8 @@ public sealed class DispatchCliApplication(
     ICredentialProvider? credentialProvider = null,
     IRuntimeCredentialResolver? runtimeCredentialResolver = null,
     IRuntimeCredentialPrompt? runtimeCredentialPrompt = null,
-    IWinRmScriptTransferClient? winRmTransferClient = null)
+    IWinRmScriptTransferClient? winRmTransferClient = null,
+    IPsrpFileTransferClient? psrpFileTransferClient = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
@@ -36,6 +38,7 @@ public sealed class DispatchCliApplication(
     private readonly IRuntimeCredentialPrompt runtimeCredentialPrompt =
         runtimeCredentialPrompt ?? new UnavailableRuntimeCredentialPrompt();
     private readonly IWinRmScriptTransferClient? winRmTransferClient = winRmTransferClient;
+    private readonly IPsrpFileTransferClient? psrpFileTransferClient = psrpFileTransferClient;
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -464,7 +467,7 @@ public sealed class DispatchCliApplication(
             return 0;
         }
 
-        if (winRmTransferClient is null)
+        if (pushPlan!.Transport == TransportKind.WinRm && winRmTransferClient is null)
         {
             SpectreConsoleRenderer.RenderError(
                 Console.Error,
@@ -473,7 +476,16 @@ public sealed class DispatchCliApplication(
             return 1;
         }
 
-        var result = await ExecutePushPlanAsync(pushPlan!, noProgress, cancellationToken).ConfigureAwait(false);
+        if (pushPlan.Transport == TransportKind.Psrp && psrpFileTransferClient is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Push Failed",
+                "PSRP upload support is unavailable in this Dispatch runtime.");
+            return 1;
+        }
+
+        var result = await ExecutePushPlanAsync(pushPlan, noProgress, cancellationToken).ConfigureAwait(false);
         DispatchStructuredOutputRenderer.RenderPushResult(Console.Out, result, outputMode);
         return result.Succeeded ? 0 : 2;
     }
@@ -1281,9 +1293,19 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        if (resolvedTransport != TransportKind.WinRm)
+        var requestedTransport = NormalizeOptionalValue(transport);
+        var explicitConcreteTransport = !string.IsNullOrWhiteSpace(requestedTransport)
+            && !requestedTransport.Equals("auto", StringComparison.OrdinalIgnoreCase);
+
+        if (resolvedTransport == TransportKind.Psrp && !explicitConcreteTransport)
         {
-            error = $"push currently supports raw WinRM only. Transport '{resolvedTransport.ToDispatchString()}' is planned but not implemented in this push slice.";
+            error = "push --transport auto selection for PSRP is planned but is not implemented in this push slice. Use --transport psrp to request PSRP push explicitly.";
+            return false;
+        }
+
+        if (resolvedTransport is not (TransportKind.WinRm or TransportKind.Psrp))
+        {
+            error = $"push currently supports raw WinRM and explicit PSRP only. Transport '{resolvedTransport.ToDispatchString()}' is planned or deferred for a later push slice.";
             return false;
         }
 
@@ -1378,19 +1400,10 @@ public sealed class DispatchCliApplication(
                 {
                     ["pushFileCount"] = pushItems.Count.ToString()
                 };
-                WinRmScriptTransferResult? failedUpload = null;
+                PushUploadFailure? failedUpload = null;
                 foreach (var item in pushItems)
                 {
-                    var upload = await winRmTransferClient!.UploadAsync(
-                            new WinRmScriptTransferRequest(
-                                target.Name,
-                                item.RemotePath,
-                                item.TransferPlan,
-                                ProgressReporter: null,
-                                Credential: credential,
-                                Overwrite: plan.Overwrite),
-                            cancellationToken)
-                        .ConfigureAwait(false);
+                    var upload = await UploadPushItemAsync(plan, target.Name, item, credential, cancellationToken).ConfigureAwait(false);
 
                     if (upload.Metadata is not null)
                     {
@@ -1404,7 +1417,7 @@ public sealed class DispatchCliApplication(
                     {
                         uploadMetadata["pushFailedSourcePath"] = item.SourcePath;
                         uploadMetadata["pushFailedRemotePath"] = item.RemotePath;
-                        failedUpload = upload;
+                        failedUpload = new PushUploadFailure(upload.FailureCategory, upload.FailureMessage);
                         break;
                     }
 
@@ -1434,6 +1447,57 @@ public sealed class DispatchCliApplication(
                 credential.Dispose();
             }
         }
+    }
+
+    private async Task<PushUploadResult> UploadPushItemAsync(
+        DispatchPushPlan plan,
+        string targetName,
+        DispatchPushTransferItem item,
+        DispatchResolvedCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        if (plan.Transport == TransportKind.WinRm)
+        {
+            if (winRmTransferClient is null)
+            {
+                return PushUploadResult.Failed(
+                    FailureCategory.TransportUnavailable,
+                    "Raw WinRM push transfer is unavailable because the raw WinRM transfer client is not registered.",
+                    null);
+            }
+
+            var upload = await winRmTransferClient.UploadAsync(
+                    new WinRmScriptTransferRequest(
+                        targetName,
+                        item.RemotePath,
+                        item.TransferPlan,
+                        ProgressReporter: null,
+                        Credential: credential,
+                        Overwrite: plan.Overwrite),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return new PushUploadResult(upload.Succeeded, upload.FailureCategory, upload.FailureMessage, upload.Metadata);
+        }
+
+        if (psrpFileTransferClient is null)
+        {
+            return PushUploadResult.Failed(
+                FailureCategory.TransportUnavailable,
+                "PSRP push transfer is unavailable because the PSRP transfer client is not registered.",
+                null);
+        }
+
+        var psrpUpload = await psrpFileTransferClient.UploadAsync(
+                new PsrpFileTransferRequest(
+                    targetName,
+                    item.RemotePath,
+                    item.TransferPlan,
+                    ProgressReporter: null,
+                    Credential: credential,
+                    Overwrite: plan.Overwrite),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new PushUploadResult(psrpUpload.Succeeded, psrpUpload.FailureCategory, psrpUpload.FailureMessage, psrpUpload.Metadata);
     }
 
     private async Task<RuntimeCredentialResolutionResult> ResolvePushCredentialsAsync(
@@ -1760,3 +1824,20 @@ internal sealed record DispatchPushTransferItem(
     string SourcePath,
     string RemotePath,
     ScriptTransferPlan TransferPlan);
+
+internal sealed record PushUploadResult(
+    bool Succeeded,
+    FailureCategory FailureCategory,
+    string? FailureMessage,
+    IReadOnlyDictionary<string, string>? Metadata)
+{
+    public static PushUploadResult Failed(
+        FailureCategory failureCategory,
+        string failureMessage,
+        IReadOnlyDictionary<string, string>? metadata) =>
+        new(false, failureCategory, failureMessage, metadata);
+}
+
+internal sealed record PushUploadFailure(
+    FailureCategory FailureCategory,
+    string? FailureMessage);
