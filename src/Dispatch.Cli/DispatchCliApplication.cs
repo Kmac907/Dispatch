@@ -484,8 +484,9 @@ public sealed class DispatchCliApplication(
 
             executedTasks.Add(new DispatchApplyExecutedTask(
                 task.Index,
-                "ps",
-                ((ScriptPayload)task.Command.Payload).ScriptPath,
+                task.Type,
+                GetApplyTaskScriptPath(task.Command.Payload),
+                GetApplyTaskCommandLine(task.Command.Payload),
                 task.Tags,
                 outcome.Result));
             if (outcome.ExitCode != 0)
@@ -528,8 +529,9 @@ public sealed class DispatchCliApplication(
                     .ConfigureAwait(false);
                 plannedTasks.Add(new DispatchApplyPlannedTask(
                     task.Index,
-                    "ps",
-                    ((ScriptPayload)task.Command.Payload).ScriptPath,
+                    task.Type,
+                    GetApplyTaskScriptPath(task.Command.Payload),
+                    GetApplyTaskCommandLine(task.Command.Payload),
                     task.Tags,
                     plan));
             }
@@ -555,6 +557,12 @@ public sealed class DispatchCliApplication(
 
         return 0;
     }
+
+    private static string? GetApplyTaskScriptPath(DispatchPayload payload) =>
+        payload is ScriptPayload script ? script.ScriptPath : null;
+
+    private static string? GetApplyTaskCommandLine(DispatchPayload payload) =>
+        payload is CommandPayload command ? command.CommandLine : null;
 
     internal int RunLogsListCommand(string? outputValue)
     {

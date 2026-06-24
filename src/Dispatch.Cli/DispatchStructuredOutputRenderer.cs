@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Dispatch.Core;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
@@ -74,7 +75,7 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Apply {plan.Mode}: {plan.Tasks.Count} selected tasks");
                 foreach (var task in plan.Tasks)
                 {
-                    writer.WriteLine($"Task {task.Index}: ps {task.ScriptPath}");
+                    writer.WriteLine($"Task {task.Index}: {task.Type} {task.DisplayValue}");
                     SpectreConsoleRenderer.RenderDryRunPlan(writer, task.Plan);
                 }
 
@@ -103,7 +104,7 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Apply {execution.Mode}: {execution.Tasks.Count} executed tasks");
                 foreach (var task in execution.Tasks)
                 {
-                    writer.WriteLine($"Task {task.Index}: ps {task.ScriptPath}");
+                    writer.WriteLine($"Task {task.Index}: {task.Type} {task.DisplayValue}");
                     SpectreConsoleRenderer.RenderRunResult(writer, task.Result);
                 }
 
@@ -336,9 +337,15 @@ internal sealed record DispatchApplyPlan(
 internal sealed record DispatchApplyPlannedTask(
     int Index,
     string Type,
-    string ScriptPath,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ScriptPath,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? CommandLine,
     IReadOnlyList<string> Tags,
-    ExecutionPlan Plan);
+    ExecutionPlan Plan)
+{
+    internal string DisplayValue => ScriptPath ?? CommandLine ?? string.Empty;
+}
 
 internal sealed record DispatchApplyExecution(
     string Mode,
@@ -347,9 +354,15 @@ internal sealed record DispatchApplyExecution(
 internal sealed record DispatchApplyExecutedTask(
     int Index,
     string Type,
-    string ScriptPath,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ScriptPath,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? CommandLine,
     IReadOnlyList<string> Tags,
-    DispatchRunResult Result);
+    DispatchRunResult Result)
+{
+    internal string DisplayValue => ScriptPath ?? CommandLine ?? string.Empty;
+}
 
 internal sealed record DispatchRunCommandOutcome(
     int ExitCode,

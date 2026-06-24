@@ -157,14 +157,15 @@ internal static class DispatchApplyJobParser
         var expectedExitCodes = job.ExpectedExitCodes.Count > 0
             ? job.ExpectedExitCodes
             : defaultExpectedExitCodes.Count > 0 ? defaultExpectedExitCodes : [0];
-        var scriptArguments = BuildJobVariableArguments(job.Variables);
         var commands = selectedTasks
             .Select(task => new ApplyTaskCommand(
                 task.Index,
+                task.Type,
+                task.Value,
                 task.Tags,
                 new DispatchRunCommand(
                     DryRun: validateOnly,
-                    Payload: new ScriptPayload(task.PowerShellScriptPath, scriptArguments),
+                    Payload: CreatePayload(task, job.Variables),
                     Targets: targetResolution.Targets,
                     Transport: transport,
                     ConfigPath: options.ConfigPath,
@@ -303,7 +304,7 @@ internal static class DispatchApplyJobParser
 
         if (job.Tasks.Count == 0)
         {
-            error = "This apply slice requires exactly one tasks entry with 'ps: <script.ps1>'.";
+            error = "This apply slice requires at least one tasks entry with 'ps: <script.ps1>' or 'cmd: <command>'.";
             return false;
         }
 
@@ -375,7 +376,7 @@ internal static class DispatchApplyJobParser
         var separator = task.IndexOf(':', StringComparison.Ordinal);
         if (separator <= 0)
         {
-            error = $"{jobPath}:{lineNumber}: expected task syntax '- ps: <script.ps1>'.";
+            error = $"{jobPath}:{lineNumber}: expected task syntax such as '- ps: <script.ps1>' or '- cmd: <command>'.";
             return false;
         }
 
@@ -387,7 +388,8 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (!taskType.Equals("ps", StringComparison.OrdinalIgnoreCase))
+        if (!taskType.Equals("ps", StringComparison.OrdinalIgnoreCase)
+            && !taskType.Equals("cmd", StringComparison.OrdinalIgnoreCase))
         {
             error = $"{jobPath}:{lineNumber}: task type '{taskType}' is planned but not implemented in this apply slice.";
             return false;
@@ -395,19 +397,28 @@ internal static class DispatchApplyJobParser
 
         if (string.IsNullOrWhiteSpace(value))
         {
-            error = $"{jobPath}:{lineNumber}: ps task requires a script path.";
+            error = taskType.Equals("cmd", StringComparison.OrdinalIgnoreCase)
+                ? $"{jobPath}:{lineNumber}: cmd task requires a command line."
+                : $"{jobPath}:{lineNumber}: ps task requires a script path.";
             return false;
         }
 
-        var scriptPath = Path.IsPathRooted(value)
-            ? value
-            : Path.GetFullPath(Path.Combine(jobDirectory, value));
+        var taskValue = taskType.Equals("ps", StringComparison.OrdinalIgnoreCase)
+            ? Path.IsPathRooted(value)
+                ? value
+                : Path.GetFullPath(Path.Combine(jobDirectory, value))
+            : value;
         job = job with
         {
-            Tasks = [.. job.Tasks, new ParsedApplyTask(taskIndex, scriptPath, [])]
+            Tasks = [.. job.Tasks, new ParsedApplyTask(taskIndex, taskType.ToLowerInvariant(), taskValue, [])]
         };
         return true;
     }
+
+    private static DispatchPayload CreatePayload(ParsedApplyTask task, IReadOnlyList<ParsedApplyVariable> variables) =>
+        task.Type.Equals("cmd", StringComparison.OrdinalIgnoreCase)
+            ? new CommandPayload(task.Value, "cmd", null)
+            : new ScriptPayload(task.Value, BuildJobVariableArguments(variables));
 
     private static bool TryParseTagFilter(
         string? value,
@@ -1017,6 +1028,8 @@ internal static class DispatchApplyJobParser
 
     internal sealed record ApplyTaskCommand(
         int Index,
+        string Type,
+        string Value,
         IReadOnlyList<string> Tags,
         DispatchRunCommand Command);
 
@@ -1043,7 +1056,8 @@ internal static class DispatchApplyJobParser
 
     private sealed record ParsedApplyTask(
         int Index,
-        string PowerShellScriptPath,
+        string Type,
+        string Value,
         IReadOnlyList<string> Tags);
 
     private sealed record DispatchRunConfig

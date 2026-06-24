@@ -2,7 +2,7 @@
 
 `dispatch apply <job.yml>` is the declared-job surface for v1.
 
-Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps` jobs in YAML order. Additional task types remain planned v1.
+Status: partial/current. `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` support selected multi-task script-first `ps` and scalar `cmd` jobs in YAML order. Additional task types remain planned v1.
 
 ## Purpose
 
@@ -23,6 +23,8 @@ vars:
 tasks:
   - ps: .\Fix.ps1
     tags: [prod, fix]
+  - cmd: whoami
+    tags: [audit]
 ```
 
 Run:
@@ -39,7 +41,7 @@ dispatch apply .\job.yml --plan --credential breakglass-admin
 dispatch apply .\job.yml --credential breakglass-admin
 ```
 
-The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by `dispatch run ps`.
+The current implementation converts the supported job subset into the same planner, credential resolution, executor, live-rendering, and result-output path used by `dispatch run`.
 
 `--check` validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.
 
@@ -49,7 +51,7 @@ The current implementation converts the supported job subset into the same plann
 
 Transport selection follows the apply precedence contract: explicit CLI `--transport` values other than `auto` win, `--transport auto` falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. If selected inventory hosts resolve to conflicting transport policies and no explicit concrete transport is supplied, validation fails before planning.
 
-Task tags are optional on `ps` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
+Task tags are optional on `ps` and `cmd` tasks. `--tags <tags>` selects tasks when at least one tag matches, and `--skip-tags <tags>` excludes tasks when any tag matches. If filters remove every supported task, validation fails before endpoint work.
 
 `--no-progress` disables live progress for apply execution, `--quiet` suppresses rich non-error output, and `--verbose` / `--trace` control NDJSON diagnostic detail. `--diff` is recognized but fails before planning until the diff behavior slice is implemented.
 
@@ -75,4 +77,4 @@ Planned v1 task vocabulary:
 - `wait`
 - `reboot`
 
-The current implementation accepts multiple selected `ps` tasks for `--plan`, `--check`, and execution. Unsupported task types fail validation before endpoint work.
+The current implementation accepts multiple selected `ps` and `cmd` tasks for `--plan`, `--check`, and execution. Unsupported task types fail validation before endpoint work.
