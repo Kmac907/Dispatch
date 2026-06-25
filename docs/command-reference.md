@@ -96,13 +96,14 @@ dispatch push <source> --dest <remote-path> [--inventory <path>] [--target <sele
 
 Status: partial current.
 
-Current support: single-file push and recursive directory push over raw WinRM or PSRP, target selection, inventory selection, `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, explicit push-result SHA-256 enforcement/reporting through `--checksum`, and structured output. `--plan` and `--check` preview the transfer without writing. Backup, execute-after-copy, cleanup, and PsExec push remain planned or deferred.
+Current support: single-file push and recursive directory push over raw WinRM or PSRP, target selection, inventory selection, `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, target-local pre-replacement backup through `--backup`, explicit push-result SHA-256 enforcement/reporting through `--checksum`, and structured output. `--plan` and `--check` preview the transfer without writing. Execute-after-copy, cleanup, and PsExec push remain planned or deferred.
 
 Options and behavior:
 
 - `<source>` is the local file or directory to transfer. Directory transfer requires `--recurse` and preserves relative file paths under `--dest`.
 - `--dest <remote-path>` is the drive-qualified Windows path to write on each target, such as `C:\ProgramData\Dispatch\Payloads\agent.msi`.
 - `--overwrite` allows replacing an existing remote file. Without it, Dispatch creates the remote file only if it does not already exist; an existing remote file fails that target instead of being replaced. For directory push, this applies independently to each file under `--dest`.
+- `--backup` requires `--overwrite`. When the destination file already exists, Dispatch creates a target-local copy beside the destination before replacing it and reports the backup path in result metadata. If the destination file does not exist, the push succeeds without creating a backup.
 - `--checksum` requires the selected transfer transport to include SHA-256 metadata in the push result and fails the target if the reported remote hash does not match the local source hash. The current raw WinRM and PSRP upload clients already compare the remote SHA-256 before reporting upload success; this flag makes that verification explicit in push output and failure policy.
 - `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing files.
 - `--transport winrm` and `--transport psrp` are the current real push transports. Omitted transport or `--transport auto` follows inventory transport policy first, then configured/default transport; the resolved transport must be WinRM or PSRP for push. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.

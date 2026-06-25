@@ -25,7 +25,7 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
                         "-ExecutionPolicy",
                         "Bypass",
                         "-EncodedCommand",
-                        BuildUploaderEncodedCommand(request.RemoteScriptPath, request.Overwrite)
+                        BuildUploaderEncodedCommand(request.RemoteScriptPath, request.Overwrite, request.Backup)
                     ],
                     frames,
                     ProgressReporter: progress =>
@@ -53,7 +53,8 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
             ["uploadRemoteScriptPath"] = request.RemoteScriptPath,
             ["uploadChunkCount"] = request.TransferPlan.ChunkCount.ToString(),
             ["uploadChunkSizeBytes"] = request.TransferPlan.ChunkSizeBytes.ToString(),
-            ["uploadOverwrite"] = request.Overwrite.ToString()
+            ["uploadOverwrite"] = request.Overwrite.ToString(),
+            ["uploadBackupRequested"] = request.Backup.ToString()
         };
 
         if (shellResult.Metadata is not null)
@@ -102,20 +103,34 @@ public sealed class WinRmScriptTransferClient(IWinRmShellClient shellClient) : I
         metadata["uploadStage"] = "completed";
         metadata["uploadReportedSha256"] = reportedSha!;
         metadata["uploadExpectedSha256"] = request.TransferPlan.ContentSha256;
+        var backupPath = ExtractPrefixedLine(shellResult.Stdout, "DISPATCH_BACKUP_PATH=");
+        metadata["uploadBackupCreated"] = string.IsNullOrWhiteSpace(backupPath) ? "False" : "True";
+        if (!string.IsNullOrWhiteSpace(backupPath))
+        {
+            metadata["uploadBackupPath"] = backupPath;
+        }
+
         return WinRmScriptTransferResult.Success(metadata);
     }
 
-    private static string BuildUploaderEncodedCommand(string remoteScriptPath, bool overwrite)
+    private static string BuildUploaderEncodedCommand(string remoteScriptPath, bool overwrite, bool backup)
     {
         var remoteScriptPathBase64 = Convert.ToBase64String(Encoding.Unicode.GetBytes(remoteScriptPath));
         var overwriteLiteral = overwrite ? "$true" : "$false";
+        var backupLiteral = backup ? "$true" : "$false";
         var script = $$"""
 try {
 $ErrorActionPreference = 'Stop'
 $path = [System.Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('{{remoteScriptPathBase64}}'))
 $overwrite = {{overwriteLiteral}}
+$backup = {{backupLiteral}}
 $directory = [System.IO.Path]::GetDirectoryName($path)
 [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+if ($backup -and [System.IO.File]::Exists($path)) {
+    $backupPath = $path + '.dispatch-backup.' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff')
+    [System.IO.File]::Copy($path, $backupPath, $false)
+    [Console]::Out.WriteLine('DISPATCH_BACKUP_PATH=' + $backupPath)
+}
 $fileMode = if ($overwrite) { [System.IO.FileMode]::Create } else { [System.IO.FileMode]::CreateNew }
 $stream = [System.IO.File]::Open($path, $fileMode, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
 try {
@@ -161,4 +176,8 @@ catch {
     private static string? ExtractLastNonEmptyLine(string value) =>
         value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .LastOrDefault();
+
+    private static string? ExtractPrefixedLine(string value, string prefix) =>
+        value.Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .LastOrDefault(line => line.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))?[prefix.Length..];
 }

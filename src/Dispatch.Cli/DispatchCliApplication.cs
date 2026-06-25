@@ -1201,9 +1201,9 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        if (backup)
+        if (backup && !overwrite)
         {
-            error = "--backup is planned for push but is not implemented in this push slice.";
+            error = "--backup requires --overwrite because backup only applies when replacing an existing remote file.";
             return false;
         }
 
@@ -1335,6 +1335,7 @@ public sealed class DispatchCliApplication(
             Targets: targets,
             Overwrite: overwrite,
             Checksum: checksum,
+            Backup: backup,
             Concurrency: 1,
             OutputMode: outputMode);
         return true;
@@ -1384,10 +1385,12 @@ public sealed class DispatchCliApplication(
                 var uploadMetadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["pushFileCount"] = pushItems.Count.ToString(),
-                    ["checksumRequested"] = plan.Checksum.ToString()
+                    ["checksumRequested"] = plan.Checksum.ToString(),
+                    ["backupRequested"] = plan.Backup.ToString()
                 };
                 PushUploadFailure? failedUpload = null;
                 var checksumVerifiedCount = 0;
+                var backupCreatedCount = 0;
                 foreach (var item in pushItems)
                 {
                     var upload = await UploadPushItemAsync(plan, target.Name, item, credential, cancellationToken).ConfigureAwait(false);
@@ -1423,6 +1426,15 @@ public sealed class DispatchCliApplication(
                         checksumVerifiedCount++;
                     }
 
+                    if (plan.Backup
+                        && upload.Metadata is not null
+                        && upload.Metadata.TryGetValue("uploadBackupCreated", out var backupCreated)
+                        && bool.TryParse(backupCreated, out var didCreateBackup)
+                        && didCreateBackup)
+                    {
+                        backupCreatedCount++;
+                    }
+
                     bytesUploaded += item.TransferPlan.TotalBytes;
                 }
 
@@ -1430,6 +1442,11 @@ public sealed class DispatchCliApplication(
                 {
                     uploadMetadata["checksumMode"] = "sha256";
                     uploadMetadata["checksumVerifiedFileCount"] = checksumVerifiedCount.ToString();
+                }
+
+                if (plan.Backup)
+                {
+                    uploadMetadata["backupCreatedFileCount"] = backupCreatedCount.ToString();
                 }
 
                 targetResults.Add(new DispatchPushTargetResult(
@@ -1481,7 +1498,8 @@ public sealed class DispatchCliApplication(
                         item.TransferPlan,
                         ProgressReporter: null,
                         Credential: credential,
-                        Overwrite: plan.Overwrite),
+                        Overwrite: plan.Overwrite,
+                        Backup: plan.Backup),
                     cancellationToken)
                 .ConfigureAwait(false);
             return new PushUploadResult(upload.Succeeded, upload.FailureCategory, upload.FailureMessage, upload.Metadata);
@@ -1502,7 +1520,8 @@ public sealed class DispatchCliApplication(
                     item.TransferPlan,
                     ProgressReporter: null,
                     Credential: credential,
-                    Overwrite: plan.Overwrite),
+                    Overwrite: plan.Overwrite,
+                    Backup: plan.Backup),
                 cancellationToken)
             .ConfigureAwait(false);
         return new PushUploadResult(psrpUpload.Succeeded, psrpUpload.FailureCategory, psrpUpload.FailureMessage, psrpUpload.Metadata);

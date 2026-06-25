@@ -17,7 +17,8 @@ public sealed record WinRmScriptTransferRequest(
     ScriptTransferPlan TransferPlan,
     Action<WinRmUploadProgress>? ProgressReporter = null,
     DispatchResolvedCredential? Credential = null,
-    bool Overwrite = true);
+    bool Overwrite = true,
+    bool Backup = false);
 
 public sealed record WinRmUploadProgress(
     string Target,

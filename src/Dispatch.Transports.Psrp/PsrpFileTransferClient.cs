@@ -16,7 +16,8 @@ public sealed class PsrpFileTransferClient : IPsrpFileTransferClient
 param(
   [string]$RemotePath,
   [string[]]$Chunks,
-  [bool]$Overwrite
+  [bool]$Overwrite,
+  [bool]$Backup
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,12 @@ try {
   $directory = [System.IO.Path]::GetDirectoryName($RemotePath)
   if (-not [string]::IsNullOrWhiteSpace($directory)) {
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+  }
+
+  $backupPath = $null
+  if ($Backup -and [System.IO.File]::Exists($RemotePath)) {
+    $backupPath = $RemotePath + '.dispatch-backup.' + [DateTime]::UtcNow.ToString('yyyyMMddHHmmssfff')
+    [System.IO.File]::Copy($RemotePath, $backupPath, $false)
   }
 
   $fileMode = if ($Overwrite) { [System.IO.FileMode]::Create } else { [System.IO.FileMode]::CreateNew }
@@ -61,6 +68,7 @@ try {
   [pscustomobject]@{
     succeeded = $true
     sha256 = $hash
+    backupPath = $backupPath
     failureMessage = $null
   } | ConvertTo-Json -Compress
 }
@@ -68,6 +76,7 @@ catch {
   [pscustomobject]@{
     succeeded = $false
     sha256 = $null
+    backupPath = $null
     failureMessage = $_.Exception.Message
   } | ConvertTo-Json -Compress
 }
@@ -108,6 +117,7 @@ catch {
                 powerShell.AddParameter("RemotePath", request.RemotePath);
                 powerShell.AddParameter("Chunks", request.TransferPlan.Chunks.Select(static chunk => chunk.Base64Data).ToArray());
                 powerShell.AddParameter("Overwrite", request.Overwrite);
+                powerShell.AddParameter("Backup", request.Backup);
 
                 var output = powerShell.Invoke();
                 var errorText = string.Join(
@@ -200,6 +210,15 @@ catch {
         metadata["uploadStage"] = "completed";
         metadata["uploadReportedSha256"] = reportedSha!;
         metadata["uploadExpectedSha256"] = request.TransferPlan.ContentSha256;
+        var backupPath = root.TryGetProperty("backupPath", out var backupProperty)
+            ? backupProperty.GetString()
+            : null;
+        metadata["uploadBackupCreated"] = string.IsNullOrWhiteSpace(backupPath) ? "False" : "True";
+        if (!string.IsNullOrWhiteSpace(backupPath))
+        {
+            metadata["uploadBackupPath"] = backupPath;
+        }
+
         request.ProgressReporter?.Invoke(new PsrpUploadProgress(
             request.Target,
             request.RemotePath,
@@ -224,6 +243,7 @@ catch {
         metadata["uploadChunkCount"] = request.TransferPlan.ChunkCount.ToString();
         metadata["uploadChunkSizeBytes"] = request.TransferPlan.ChunkSizeBytes.ToString();
         metadata["uploadOverwrite"] = request.Overwrite.ToString();
+        metadata["uploadBackupRequested"] = request.Backup.ToString();
         metadata["uploadTransport"] = "psrp";
         return metadata;
     }

@@ -2494,6 +2494,7 @@ credentials:
             Assert.Equal("winrm", json.RootElement.GetProperty("transport").GetString());
             Assert.False(json.RootElement.GetProperty("overwrite").GetBoolean());
             Assert.False(json.RootElement.GetProperty("checksum").GetBoolean());
+            Assert.False(json.RootElement.GetProperty("backup").GetBoolean());
             Assert.Equal(["PC001", "PC002"], json.RootElement.GetProperty("targetNames").EnumerateArray().Select(static item => item.GetString()).ToArray());
         }
         finally
@@ -2545,6 +2546,50 @@ credentials:
     }
 
     [Fact]
+    public async Task PushPlanRendersBackupSelection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var uploader = new RecordingWinRmTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--overwrite",
+                    "--backup",
+                    "--plan",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(uploader.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("overwrite").GetBoolean());
+            Assert.True(json.RootElement.GetProperty("backup").GetBoolean());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PushExecutionUploadsSingleFileThroughWinRm()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
@@ -2578,6 +2623,7 @@ credentials:
             Assert.Equal("PC001", request.Target);
             Assert.Equal(@"C:\Temp\payload.txt", request.RemoteScriptPath);
             Assert.True(request.Overwrite);
+            Assert.False(request.Backup);
             Assert.Equal("payload", DecodeTransferPlan(request.TransferPlan));
 
             using var json = JsonDocument.Parse(output);
@@ -2586,6 +2632,108 @@ credentials:
             Assert.Equal("PC001", target.GetProperty("target").GetString());
             Assert.True(target.GetProperty("succeeded").GetBoolean());
             Assert.Equal(7, target.GetProperty("bytesUploaded").GetInt64());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionRequestsBackupThroughWinRm()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var uploader = new RecordingWinRmTransferClient(request => WinRmScriptTransferResult.Success(new Dictionary<string, string>
+        {
+            ["uploadStage"] = "completed",
+            ["uploadExpectedSha256"] = request.TransferPlan.ContentSha256,
+            ["uploadReportedSha256"] = request.TransferPlan.ContentSha256,
+            ["uploadBackupRequested"] = request.Backup.ToString(),
+            ["uploadBackupCreated"] = "True",
+            ["uploadBackupPath"] = @"C:\Temp\payload.txt.dispatch-backup.20260624010101001"
+        }));
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--overwrite",
+                    "--backup",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            var request = Assert.Single(uploader.Requests);
+            Assert.True(request.Overwrite);
+            Assert.True(request.Backup);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("plan").GetProperty("backup").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            var metadata = target.GetProperty("metadata");
+            Assert.Equal("True", metadata.GetProperty("backupRequested").GetString());
+            Assert.Equal("1", metadata.GetProperty("backupCreatedFileCount").GetString());
+            Assert.Equal("True", metadata.GetProperty("uploadBackupCreated").GetString());
+            Assert.Equal(@"C:\Temp\payload.txt.dispatch-backup.20260624010101001", metadata.GetProperty("uploadBackupPath").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionRequestsBackupThroughPsrp()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var psrpUploader = new RecordingPsrpFileTransferClient();
+        var application = CreateApplication(new CapturingPlanner(), psrpFileTransferClient: psrpUploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--overwrite",
+                    "--backup",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            var request = Assert.Single(psrpUploader.Requests);
+            Assert.True(request.Overwrite);
+            Assert.True(request.Backup);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("plan").GetProperty("backup").GetBoolean());
         }
         finally
         {
@@ -2842,7 +2990,6 @@ credentials:
 
     [Theory]
     [InlineData("--transport", "psexec", "raw WinRM and PSRP")]
-    [InlineData("--backup", null, "--backup is planned")]
     [InlineData("--execute", null, "--execute is planned")]
     [InlineData("--execute-as", "system", "--execute-as is planned")]
     [InlineData("--cleanup", null, "--cleanup is planned")]
@@ -2876,6 +3023,31 @@ credentials:
             Assert.Equal(1, exitCode);
             Assert.Empty(output);
             Assert.Contains(expected, error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushRejectsBackupWithoutOverwrite()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: new RecordingWinRmTransferClient());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["push", sourcePath, "--dest", @"C:\Temp\payload.txt", "--target", "PC001", "--transport", "winrm", "--backup"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("--backup requires --overwrite", error);
         }
         finally
         {

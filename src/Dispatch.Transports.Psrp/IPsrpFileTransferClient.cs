@@ -17,7 +17,8 @@ public sealed record PsrpFileTransferRequest(
     ScriptTransferPlan TransferPlan,
     Action<PsrpUploadProgress>? ProgressReporter = null,
     DispatchResolvedCredential? Credential = null,
-    bool Overwrite = true);
+    bool Overwrite = true,
+    bool Backup = false);
 
 public sealed record PsrpUploadProgress(
     string Target,

@@ -922,6 +922,49 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task ScriptTransferClientRequestsBackupBeforeOverwrite()
+    {
+        var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
+            true,
+            0,
+            "DISPATCH_BACKUP_PATH=C:\\ProgramData\\Dispatch\\Payloads\\agent.txt.dispatch-backup.20260624010101001\r\nabcd1234\r\n",
+            string.Empty,
+            null));
+        var client = new WinRmScriptTransferClient(shellClient);
+        var transferPlan = new ScriptTransferPlan(
+            ScriptTransferMode.WinRmChunkedBase64,
+            TotalBytes: 4,
+            ContentSha256: "abcd1234",
+            ChunkSizeBytes: 4,
+            Chunks:
+            [
+                new ScriptTransferChunk(0, 0, 4, "hash-1", "QUJDRA==")
+            ]);
+
+        var result = await client.UploadAsync(
+            new WinRmScriptTransferRequest(
+                "PC001",
+                @"C:\ProgramData\Dispatch\Payloads\agent.txt",
+                transferPlan,
+                Overwrite: true,
+                Backup: true),
+            CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        var request = Assert.Single(shellClient.Requests);
+        var encodedCommandIndex = request.Arguments.ToList().IndexOf("-EncodedCommand");
+        var uploaderScript = Encoding.Unicode.GetString(Convert.FromBase64String(request.Arguments[encodedCommandIndex + 1]));
+        Assert.Contains("$backup = $true", uploaderScript, StringComparison.Ordinal);
+        Assert.Contains("[System.IO.File]::Copy($path, $backupPath, $false)", uploaderScript, StringComparison.Ordinal);
+        Assert.True(
+            uploaderScript.IndexOf("[System.IO.File]::Copy($path, $backupPath, $false)", StringComparison.Ordinal)
+            < uploaderScript.IndexOf("[System.IO.File]::Open($path, $fileMode", StringComparison.Ordinal));
+        Assert.Equal("True", result.Metadata?["uploadBackupRequested"]);
+        Assert.Equal("True", result.Metadata?["uploadBackupCreated"]);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Payloads\agent.txt.dispatch-backup.20260624010101001", result.Metadata?["uploadBackupPath"]);
+    }
+
+    [Fact]
     public async Task ScriptTransferClientFailsWhenReportedHashDoesNotMatch()
     {
         var shellClient = new RecordingShellClient(new WinRmShellCommandResult(
