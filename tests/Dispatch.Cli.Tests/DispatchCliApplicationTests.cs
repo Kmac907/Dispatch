@@ -5203,10 +5203,8 @@ credentials:
         }
     }
 
-    [Theory]
-    [InlineData("--serial")]
-    [InlineData("--concurrency")]
-    public async Task ApplyPlanCliBatchSizeOverridesJobSerial(string optionName)
+    [Fact]
+    public async Task ApplyPlanSerialOverridesJobSerial()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -5229,7 +5227,7 @@ credentials:
         try
         {
             var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
-                ["apply", jobPath, "--plan", optionName, "4", "--output", "json"],
+                ["apply", jobPath, "--plan", "--serial", "4", "--output", "json"],
                 CancellationToken.None));
 
             Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
@@ -5246,7 +5244,7 @@ credentials:
     }
 
     [Fact]
-    public async Task ApplyPlanRejectsSerialAndConcurrencyTogetherBeforePlanning()
+    public async Task ApplyPlanRejectsConcurrencyOptionBeforePlanning()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -5267,14 +5265,15 @@ credentials:
         try
         {
             var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
-                ["apply", jobPath, "--plan", "--serial", "2", "--concurrency", "3"],
+                ["apply", jobPath, "--plan", "--concurrency", "3"],
                 CancellationToken.None));
 
             Assert.Equal(1, exitCode);
             Assert.Empty(output);
             Assert.Null(planner.LastRequest);
-            Assert.Contains("Invalid Dispatch Job", error);
-            Assert.Contains("--serial and --concurrency cannot be used together", error);
+            Assert.Contains("Invalid Dispatch Command", error);
+            Assert.Contains("does not support --concurrency", error);
+            Assert.Contains("Use --serial", error);
         }
         finally
         {

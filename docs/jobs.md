@@ -52,7 +52,7 @@ The current implementation converts executable `ps`, `cmd`, and `exe` tasks into
 
 `--check` validates the supported job subset and renders the resolved plan without endpoint work. It does not simulate PowerShell script side effects.
 
-`--serial <n>` or `--concurrency <n>` overrides `strategy.serial` for the supported apply subset. They are aliases for the same batch-size control and cannot be used together.
+`--serial <n>` overrides `strategy.serial` for the supported apply subset. It controls how many selected targets Dispatch includes in each apply batch.
 
 `--target <selector>` overrides the job `hosts` selector for the current run. `--inventory <path>` overrides the configured inventory path. `--exclude <selector>` filters the selected targets after the job or CLI target selector is resolved.
 

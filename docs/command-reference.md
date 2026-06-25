@@ -43,7 +43,7 @@ Use root help when discovering available command groups or checking whether the 
 ## Apply
 
 ```powershell
-dispatch apply <job.yml> [--inventory <hosts.yml>] [--target <selector>] [--exclude <selector>] [--config <path>] [--credential <name>] [--transport auto|psrp|winrm|psexec] [--tags <tags>] [--skip-tags <tags>] [--serial <n>|--concurrency <n>] [--plan|--check] [--diff] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
+dispatch apply <job.yml> [--inventory <hosts.yml>] [--target <selector>] [--exclude <selector>] [--config <path>] [--credential <name>] [--transport auto|psrp|winrm|psexec] [--tags <tags>] [--skip-tags <tags>] [--serial <n>] [--plan|--check] [--diff] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
 ```
 
 Status: partial/current. Plan, check, and execution are implemented for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs in YAML order. Plan/check-only rendering is implemented for selected `copy` tasks. Additional task types remain planned v1.
@@ -62,7 +62,7 @@ Use `--tags <tags>` to select `ps`, `cmd`, `exe`, and plan/check `copy` tasks wh
 
 Use `--plan` to inspect the resolved plan. Use `--check` to validate and render the supported job subset without endpoint work. The current check mode does not simulate task side effects.
 
-Use `--serial <n>` or `--concurrency <n>` to override `strategy.serial` for the supported apply subset. These two options control the same batch-size setting and cannot be used together.
+Use `--serial <n>` to override `strategy.serial` for the supported apply subset. This controls how many targets Dispatch includes in each apply batch.
 
 Use `--no-progress` to disable live widgets, `--quiet` to suppress rich non-error output, and `--verbose` / `--trace` for more detailed NDJSON diagnostics. `--diff` is accepted as an explicit planned setting but fails before planning until the diff behavior slice is implemented.
 

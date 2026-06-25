@@ -8,6 +8,12 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 {
     public Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
+        if (ContainsRemovedApplyConcurrencyOption(args))
+        {
+            return Task.FromResult(DispatchCliApplication.RenderInvalidCommand(
+                "dispatch apply does not support --concurrency. Use --serial <n> to override strategy.serial."));
+        }
+
         var commandApp = new CommandApp(new DispatchTypeRegistrar(application));
         commandApp.Configure(config =>
         {
@@ -267,7 +273,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     settings.Tags,
                     settings.SkipTags,
                     settings.Serial,
-                    settings.Concurrency,
                     settings.Diff,
                     settings.Output,
                     settings.NoColor,
@@ -520,9 +525,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--serial <n>")]
         public int? Serial { get; init; }
-
-        [CommandOption("--concurrency <n>")]
-        public int? Concurrency { get; init; }
 
         [CommandOption("--diff")]
         public bool Diff { get; init; }
@@ -962,4 +964,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
     private static string CreateUnexpectedArgumentsMessage(IReadOnlyList<string> remaining) =>
         $"Unexpected argument or option for credential command: {string.Join(" ", remaining)}.";
+
+    private static bool ContainsRemovedApplyConcurrencyOption(IReadOnlyList<string> args)
+    {
+        if (args.Count < 2 || !string.Equals(args[0], "apply", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return args
+            .Skip(1)
+            .Any(arg =>
+                string.Equals(arg, "--concurrency", StringComparison.OrdinalIgnoreCase)
+                || arg.StartsWith("--concurrency=", StringComparison.OrdinalIgnoreCase));
+    }
 }

@@ -56,21 +56,9 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
-        if (options.Serial.HasValue && options.Concurrency.HasValue)
-        {
-            error = "--serial and --concurrency cannot be used together.";
-            return false;
-        }
-
         if (options.Serial is <= 0)
         {
             error = "--serial must be a positive integer.";
-            return false;
-        }
-
-        if (options.Concurrency is <= 0)
-        {
-            error = "--concurrency must be a positive integer.";
             return false;
         }
 
@@ -222,7 +210,7 @@ internal static class DispatchApplyJobParser
                 Transport: transport,
                 ConfigPath: options.ConfigPath,
                 ExpectedExitCodes: expectedExitCodes,
-                Throttle: options.Serial ?? options.Concurrency ?? job.Serial,
+                Throttle: options.Serial ?? job.Serial,
                 LocalRunRoot: null,
                 RemoteRunRoot: null,
                 ArtifactPaths: [],
@@ -1261,7 +1249,6 @@ internal static class DispatchApplyJobParser
         string? Tags,
         string? SkipTags,
         int? Serial,
-        int? Concurrency,
         bool Diff,
         DispatchOutputMode OutputMode,
         bool NoColor,

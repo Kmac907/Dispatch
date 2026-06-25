@@ -69,7 +69,6 @@ These options should be consistent across host-targeting commands as implementat
 --exclude <selector>
 --transport <auto|psrp|winrm|psexec>
 --credential <name>
---concurrency <n>
 --timeout <duration>
 --config <path>
 --log-dir <path>
@@ -81,6 +80,8 @@ These options should be consistent across host-targeting commands as implementat
 --verbose
 --trace
 ```
+
+Command-specific batching options should use the vocabulary of the command surface. For `dispatch apply`, YAML `strategy.serial` is overridden by CLI `--serial <n>`.
 
 Transport selection precedence:
 

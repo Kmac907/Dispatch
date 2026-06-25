@@ -63,7 +63,7 @@ credentials:
 - `credential_store_path` for legacy metadata catalog support where still present
 - `run_root`
 - `remote_run_root`
-- throttle/concurrency defaults where implemented
+- throttle/batching defaults where implemented
 
 `credentials.<name>` keys depend on provider:
 

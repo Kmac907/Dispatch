@@ -1074,7 +1074,7 @@ Scope:
 - Implement `dispatch run ps <script.ps1>` as the v1 supported ad-hoc execution path and map it to the existing `DispatchRequest`/planner/executor.
 - Keep a compatibility adapter for the current `dispatch run --script <path> --computer-name <names>` shape until the PowerShell module and packaging are migrated.
 - Implement root help and command help that match the CLI design: short, predictable, no more than three examples per command.
-- Implement global option parsing for inventory, target, exclude, transport, credential, concurrency, timeout, config, log directory, run ID, output mode, color/progress flags, quiet, verbose, and trace where supported by the current model.
+- Implement global option parsing for inventory, target, exclude, transport, credential, batching/throttle controls, timeout, config, log directory, run ID, output mode, color/progress flags, quiet, verbose, and trace where supported by the current model.
 - Unknown or not-yet-implemented commands must render explicit Spectre.Console errors that identify the roadmap item required; they must not silently pretend support exists.
 
 Current implementation note:
@@ -1310,7 +1310,7 @@ Scope:
   - runtime task/input variables come from inline `job.vars` in v1; inventory vars do not participate in that runtime-variable bag
 - Initial task vocabulary: `ps`, `cmd`, `exe`, `copy`, `fetch`, `wait`, and `reboot`, with only supported task types enabled by implementation slices.
 - Implement `--plan` and `--check` as distinct behaviors.
-- Implement `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--diff`, and common output/log options as planned settings.
+- Implement `--tags`, `--skip-tags`, `--serial`, `--diff`, and common output/log options as planned settings.
 - Convert selected YAML tasks into the same planning/execution contracts used by ad-hoc commands.
 
 Current implementation boundary:
@@ -1318,11 +1318,11 @@ Current implementation boundary:
 - `dispatch apply <job.yml> --check` validates and renders a no-endpoint-work plan for that same current subset; it is mutually exclusive with `--plan` and does not simulate task side effects.
 - `dispatch apply <job.yml>` executes selected script-first `ps`, scalar `cmd`, and scalar `exe` tasks in YAML order through the shared planner/executor path used by `dispatch run`, stopping after the first failed task run; selected `copy` tasks are rejected before endpoint planning until file transfer execution exists.
 - The current apply parser supports `hosts`, `transport`, `credential`, scalar `job.vars` runtime inputs, `defaults.expected_exit_codes`, and `strategy.serial` for plan, check, and execution paths.
-- `--serial <n>` and `--concurrency <n>` override `strategy.serial` for that same subset and cannot be used together.
+- `--serial <n>` overrides `strategy.serial` for that same subset.
 - Relative `ps` task paths resolve relative to the job file.
 - Task-level `tags` are supported on selected `ps`, `cmd`, `exe`, and plan/check `copy` tasks, and `--tags <tags>` / `--skip-tags <tags>` filter those tasks before planning or endpoint work.
 - `copy` tasks currently accept block or inline mapping syntax with required `src` and `dest` fields and optional `overwrite`; selected plan/check tasks require an existing local source file, resolve relative `src` paths from the job file directory, require `dest` to be a rooted Windows path, and render without creating a `DispatchRequest`.
-- `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--concurrency`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
+- `--config`, `--credential`, `--transport`, `--inventory`, `--target`, `--exclude`, `--tags`, `--skip-tags`, `--serial`, `--output`, `--no-color`, `--no-progress`, `--quiet`, `--verbose`, and `--trace` are accepted on the current apply plan, check, and execution paths.
 - `--diff` is accepted as an explicit apply setting but fails before planning until the diff behavior slice is implemented.
 - For the current apply subset, explicit CLI `--target` overrides `job.hosts`, explicit CLI `--inventory` overrides config inventory, and explicit CLI `--exclude` filters the selected target set after job/CLI target resolution.
 - For the current apply subset, explicit non-`auto` CLI transport overrides job and inventory transport policy; omitted or `auto` CLI transport falls through to non-`auto` `job.transport`, then inventory transport policy, then config/default transport. Mixed selected inventory transport policies fail before planning unless a concrete CLI/job transport resolves the conflict.
