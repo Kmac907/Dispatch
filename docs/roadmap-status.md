@@ -19,7 +19,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Structured output modes on current paths.
 - Inventory subset for current run paths.
 - `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs, plus plan/check-only `copy` task rendering.
-- `dispatch push <source> --dest <remote-path>` for single-file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, optional post-upload SHA-256 verification through `--checksum`, plus push `--plan` / `--check` preview.
+- `dispatch push <source> --dest <remote-path>` for single-file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, explicit push-result SHA-256 enforcement/reporting through `--checksum`, plus push `--plan` / `--check` preview.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -27,7 +27,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 ## Partial
 
 - `doctor` exists but the full v1 transport-aware diagnostics surface is still expanding.
-- `push` supports file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy and `--checksum` post-upload SHA-256 verification. Backup, execute-after-copy, and cleanup remain planned. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
+- `push` supports file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy and `--checksum` push-result SHA-256 enforcement/reporting. Backup, execute-after-copy, and cleanup remain planned. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 - `hosts` command group is registered/planned but not fully implemented.
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
