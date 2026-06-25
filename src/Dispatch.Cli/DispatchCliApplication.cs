@@ -26,7 +26,9 @@ public sealed class DispatchCliApplication(
     IRuntimeCredentialResolver? runtimeCredentialResolver = null,
     IRuntimeCredentialPrompt? runtimeCredentialPrompt = null,
     IWinRmScriptTransferClient? winRmTransferClient = null,
-    IPsrpFileTransferClient? psrpFileTransferClient = null)
+    IPsrpFileTransferClient? psrpFileTransferClient = null,
+    IWinRmShellClient? winRmShellClient = null,
+    IPsrpCommandClient? psrpCommandClient = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
@@ -39,6 +41,8 @@ public sealed class DispatchCliApplication(
         runtimeCredentialPrompt ?? new UnavailableRuntimeCredentialPrompt();
     private readonly IWinRmScriptTransferClient? winRmTransferClient = winRmTransferClient;
     private readonly IPsrpFileTransferClient? psrpFileTransferClient = psrpFileTransferClient;
+    private readonly IWinRmShellClient? winRmShellClient = winRmShellClient;
+    private readonly IPsrpCommandClient? psrpCommandClient = psrpCommandClient;
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -1204,12 +1208,6 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        if (execute)
-        {
-            error = "--execute is planned for push but is not implemented in this push slice.";
-            return false;
-        }
-
         if (cleanup)
         {
             error = "--cleanup is planned for push execution but is not implemented in this push slice.";
@@ -1301,6 +1299,18 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
+        if (execute && sourceIsDirectory)
+        {
+            error = "--execute currently supports single-file PowerShell script pushes only; directory execute remains later push work.";
+            return false;
+        }
+
+        if (execute && !string.Equals(Path.GetExtension(sourcePath), ".ps1", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "--execute currently supports pushed PowerShell script files with a .ps1 extension.";
+            return false;
+        }
+
         foreach (var sourceFile in sourceFiles)
         {
             if (new FileInfo(sourceFile).Length > int.MaxValue)
@@ -1327,6 +1337,7 @@ public sealed class DispatchCliApplication(
             Overwrite: overwrite,
             Checksum: checksum,
             Backup: backup,
+            Execute: execute,
             Concurrency: 1,
             OutputMode: outputMode);
         return true;
@@ -1377,9 +1388,10 @@ public sealed class DispatchCliApplication(
                 {
                     ["pushFileCount"] = pushItems.Count.ToString(),
                     ["checksumRequested"] = plan.Checksum.ToString(),
-                    ["backupRequested"] = plan.Backup.ToString()
+                    ["backupRequested"] = plan.Backup.ToString(),
+                    ["executeRequested"] = plan.Execute.ToString()
                 };
-                PushUploadFailure? failedUpload = null;
+                PushTargetFailure? targetFailure = null;
                 var checksumVerifiedCount = 0;
                 var backupCreatedCount = 0;
                 foreach (var item in pushItems)
@@ -1398,7 +1410,7 @@ public sealed class DispatchCliApplication(
                     {
                         uploadMetadata["pushFailedSourcePath"] = item.SourcePath;
                         uploadMetadata["pushFailedRemotePath"] = item.RemotePath;
-                        failedUpload = new PushUploadFailure(upload.FailureCategory, upload.FailureMessage);
+                        targetFailure = new PushTargetFailure(upload.FailureCategory, upload.FailureMessage, ResetBytesUploaded: true);
                         break;
                     }
 
@@ -1408,7 +1420,7 @@ public sealed class DispatchCliApplication(
                         uploadMetadata["checksumStage"] = "verify";
                         uploadMetadata["checksumFailedSourcePath"] = item.SourcePath;
                         uploadMetadata["checksumFailedRemotePath"] = item.RemotePath;
-                        failedUpload = new PushUploadFailure(FailureCategory.ScriptTransferFailed, checksumFailure);
+                        targetFailure = new PushTargetFailure(FailureCategory.ScriptTransferFailed, checksumFailure, ResetBytesUploaded: true);
                         break;
                     }
 
@@ -1429,6 +1441,20 @@ public sealed class DispatchCliApplication(
                     bytesUploaded += item.TransferPlan.TotalBytes;
                 }
 
+                if (targetFailure is null && plan.Execute)
+                {
+                    var execution = await ExecutePushedScriptAsync(plan, target.Name, pushItems[0], credential, cancellationToken).ConfigureAwait(false);
+                    foreach (var pair in execution.Metadata)
+                    {
+                        uploadMetadata[pair.Key] = pair.Value;
+                    }
+
+                    if (!execution.Succeeded)
+                    {
+                        targetFailure = new PushTargetFailure(execution.FailureCategory, execution.FailureMessage, ResetBytesUploaded: false);
+                    }
+                }
+
                 if (plan.Checksum)
                 {
                     uploadMetadata["checksumMode"] = "sha256";
@@ -1442,10 +1468,10 @@ public sealed class DispatchCliApplication(
 
                 targetResults.Add(new DispatchPushTargetResult(
                     target.Name,
-                    failedUpload is null,
-                    failedUpload?.FailureCategory ?? FailureCategory.None,
-                    failedUpload?.FailureMessage,
-                    failedUpload is null ? bytesUploaded : 0,
+                    targetFailure is null,
+                    targetFailure?.FailureCategory ?? FailureCategory.None,
+                    targetFailure?.FailureMessage,
+                    targetFailure is { ResetBytesUploaded: true } ? 0 : bytesUploaded,
                     uploadMetadata));
             }
 
@@ -1516,6 +1542,158 @@ public sealed class DispatchCliApplication(
                 cancellationToken)
             .ConfigureAwait(false);
         return new PushUploadResult(psrpUpload.Succeeded, psrpUpload.FailureCategory, psrpUpload.FailureMessage, psrpUpload.Metadata);
+    }
+
+    private async Task<PushExecutionResult> ExecutePushedScriptAsync(
+        DispatchPushPlan plan,
+        string targetName,
+        DispatchPushTransferItem item,
+        DispatchResolvedCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var command = CreatePushedPowerShellCommand(item.RemotePath);
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["executionRequested"] = "True",
+            ["executionRemotePath"] = item.RemotePath,
+            ["executionTransport"] = plan.Transport.ToDispatchString(),
+            ["executionCommand"] = command.RenderedCommand,
+            ["executionStatus"] = "pending"
+        };
+
+        if (plan.Transport == TransportKind.WinRm)
+        {
+            if (winRmShellClient is null)
+            {
+                return PushExecutionResult.Failed(
+                    FailureCategory.TransportUnavailable,
+                    "Raw WinRM push execute is unavailable because the raw WinRM shell client is not registered.",
+                    metadata);
+            }
+
+            var result = await winRmShellClient.ExecuteAsync(
+                    new WinRmShellCommandRequest(
+                        targetName,
+                        command.Executable,
+                        command.Arguments,
+                        [],
+                        Credential: credential),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            MergeMetadata(metadata, result.Metadata);
+            return CreatePushExecutionResult(metadata, result.Succeeded, result.ExitCode, result.Stdout, result.Stderr, result.FailureCategory, result.FailureMessage, result.TimedOut);
+        }
+
+        if (psrpCommandClient is null)
+        {
+            return PushExecutionResult.Failed(
+                FailureCategory.TransportUnavailable,
+                "PSRP push execute is unavailable because the PSRP command client is not registered.",
+                metadata);
+        }
+
+        var psrpResult = await psrpCommandClient.ExecuteAsync(
+                new PsrpCommandRequest(
+                    targetName,
+                    command.Executable,
+                    RenderCommandArguments(command.Arguments),
+                    WorkingDirectory: null,
+                    ExecutionTimeout: null,
+                    ConfigurationName: null,
+                    PsrpConnectionKind.WsMan,
+                    PsrpAuthenticationKind.Default,
+                    CertificateThumbprint: null,
+                    Credential: credential),
+                cancellationToken)
+            .ConfigureAwait(false);
+        MergeMetadata(metadata, psrpResult.Metadata);
+        return CreatePushExecutionResult(metadata, psrpResult.Succeeded, psrpResult.ExitCode, psrpResult.Stdout, psrpResult.Stderr, psrpResult.FailureCategory, psrpResult.FailureMessage, timedOut: false);
+    }
+
+    private static DirectExecutionCommand CreatePushedPowerShellCommand(string remotePath) =>
+        new("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", remotePath]);
+
+    private static PushExecutionResult CreatePushExecutionResult(
+        Dictionary<string, string> metadata,
+        bool transportSucceeded,
+        int? exitCode,
+        string stdout,
+        string stderr,
+        FailureCategory failureCategory,
+        string? failureMessage,
+        bool timedOut)
+    {
+        if (exitCode is not null)
+        {
+            metadata["executionExitCode"] = exitCode.Value.ToString();
+        }
+
+        if (!string.IsNullOrWhiteSpace(stdout))
+        {
+            metadata["executionStdout"] = stdout;
+        }
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            metadata["executionStderr"] = stderr;
+        }
+
+        if (!transportSucceeded)
+        {
+            var category = timedOut
+                ? FailureCategory.TimedOut
+                : failureCategory == FailureCategory.None
+                    ? FailureCategory.ExecutionFailed
+                    : failureCategory;
+            metadata["executionStatus"] = timedOut ? "timed-out" : "failed";
+            metadata["executionFailureCategory"] = category.ToString();
+            return PushExecutionResult.Failed(
+                category,
+                failureMessage ?? "Push execute failed after upload.",
+                metadata);
+        }
+
+        if (exitCode is not 0)
+        {
+            metadata["executionStatus"] = "failed";
+            metadata["executionFailureCategory"] = FailureCategory.UnexpectedExitCode.ToString();
+            return PushExecutionResult.Failed(
+                FailureCategory.UnexpectedExitCode,
+                $"Push execute exited with code {exitCode}; expected 0.",
+                metadata);
+        }
+
+        metadata["executionStatus"] = "completed";
+        metadata["executionFailureCategory"] = FailureCategory.None.ToString();
+        return PushExecutionResult.Success(metadata);
+    }
+
+    private static void MergeMetadata(IDictionary<string, string> metadata, IReadOnlyDictionary<string, string>? additionalMetadata)
+    {
+        if (additionalMetadata is null)
+        {
+            return;
+        }
+
+        foreach (var pair in additionalMetadata)
+        {
+            metadata[pair.Key] = pair.Value;
+        }
+    }
+
+    private static string RenderCommandArguments(IReadOnlyList<string> arguments) =>
+        string.Join(" ", arguments.Select(QuoteCommandArgumentIfNeeded));
+
+    private static string QuoteCommandArgumentIfNeeded(string value)
+    {
+        if (value.Length == 0)
+        {
+            return "\"\"";
+        }
+
+        return value.Any(char.IsWhiteSpace)
+            ? $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\""
+            : value;
     }
 
     private static bool TryVerifyPushChecksum(
@@ -1897,6 +2075,23 @@ internal sealed record PushUploadResult(
         new(false, failureCategory, failureMessage, metadata);
 }
 
-internal sealed record PushUploadFailure(
+internal sealed record PushExecutionResult(
+    bool Succeeded,
     FailureCategory FailureCategory,
-    string? FailureMessage);
+    string? FailureMessage,
+    IReadOnlyDictionary<string, string> Metadata)
+{
+    public static PushExecutionResult Success(IReadOnlyDictionary<string, string> metadata) =>
+        new(true, FailureCategory.None, null, metadata);
+
+    public static PushExecutionResult Failed(
+        FailureCategory failureCategory,
+        string failureMessage,
+        IReadOnlyDictionary<string, string> metadata) =>
+        new(false, failureCategory, failureMessage, metadata);
+}
+
+internal sealed record PushTargetFailure(
+    FailureCategory FailureCategory,
+    string? FailureMessage,
+    bool ResetBytesUploaded);

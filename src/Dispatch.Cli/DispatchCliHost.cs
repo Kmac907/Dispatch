@@ -48,7 +48,9 @@ public static class DispatchCliHost
             runtimeCredentialResolver: services.GetRequiredService<IRuntimeCredentialResolver>(),
             runtimeCredentialPrompt: services.GetRequiredService<IRuntimeCredentialPrompt>(),
             winRmTransferClient: services.GetRequiredService<IWinRmScriptTransferClient>(),
-            psrpFileTransferClient: services.GetRequiredService<IPsrpFileTransferClient>()));
+            psrpFileTransferClient: services.GetRequiredService<IPsrpFileTransferClient>(),
+            winRmShellClient: services.GetRequiredService<IWinRmShellClient>(),
+            psrpCommandClient: services.GetRequiredService<IPsrpCommandClient>()));
 
         return builder.Build();
     }
