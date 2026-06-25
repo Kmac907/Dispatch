@@ -1696,7 +1696,10 @@ public sealed class DispatchCliApplication(
     private static DirectExecutionCommand CreatePushedCleanupCommand(string remotePath) =>
         new(
             "powershell.exe",
-            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Remove-Item -LiteralPath $args[0] -Force -ErrorAction Stop", remotePath]);
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", $"Remove-Item -LiteralPath {QuotePowerShellSingleQuotedString(remotePath)} -Force -ErrorAction Stop"]);
+
+    private static string QuotePowerShellSingleQuotedString(string value) =>
+        $"'{value.Replace("'", "''", StringComparison.Ordinal)}'";
 
     private static PushExecutionResult CreatePushExecutionResult(
         Dictionary<string, string> metadata,

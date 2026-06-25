@@ -2836,7 +2836,7 @@ credentials:
                 {
                     Assert.Equal("powershell.exe", cleanupRequest.Executable);
                     Assert.Equal(
-                        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Remove-Item -LiteralPath $args[0] -Force -ErrorAction Stop", @"C:\Temp\payload.ps1"],
+                        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", @"Remove-Item -LiteralPath 'C:\Temp\payload.ps1' -Force -ErrorAction Stop"],
                         cleanupRequest.Arguments);
                 });
 
@@ -3070,7 +3070,7 @@ credentials:
                 {
                     Assert.Equal("powershell.exe", cleanupRequest.Executable);
                     Assert.Equal(
-                        @"-NoProfile -ExecutionPolicy Bypass -Command ""Remove-Item -LiteralPath $args[0] -Force -ErrorAction Stop"" C:\Temp\payload.ps1",
+                        @"-NoProfile -ExecutionPolicy Bypass -Command ""Remove-Item -LiteralPath 'C:\Temp\payload.ps1' -Force -ErrorAction Stop""",
                         cleanupRequest.Arguments);
                 });
 
