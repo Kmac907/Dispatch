@@ -1353,7 +1353,7 @@ Reference:
 - `docs/cli-design.md` defines the `push`, `hosts`, `doctor`, and `init` command groups and their global option behavior for this roadmap item.
 
 Scope:
-- Implement `dispatch push <source> --dest <remote-path>` with `--recurse`, `--checksum`, `--overwrite`, `--backup`, `--execute`, `--execute-as`, and `--cleanup` settings.
+- Implement `dispatch push <source> --dest <remote-path>` with `--recurse`, `--checksum`, `--overwrite`, `--backup`, `--execute`, and `--cleanup` settings.
 - Implement push transfer through raw WinRM first, then PSRP and `--transport auto` selection in v1. PsExec push is not v1-required unless the SMB/admin-share staging boundary is explicitly reopened.
 - Treat `--overwrite` as replacement permission, not as permission to run: without `--overwrite`, Dispatch must create missing remote files and fail a target when the destination file already exists; with `--overwrite`, Dispatch may replace existing remote files.
 - Implement `dispatch hosts list|test|validate|graph|vars`.

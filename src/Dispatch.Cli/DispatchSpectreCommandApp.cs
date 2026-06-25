@@ -296,7 +296,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                     settings.Overwrite,
                     settings.Backup,
                     settings.Execute,
-                    settings.ExecuteAs,
                     settings.Cleanup,
                     settings.Inventory,
                     settings.Target,
@@ -575,9 +574,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--execute")]
         public bool Execute { get; init; }
-
-        [CommandOption("--execute-as <mode>")]
-        public string? ExecuteAs { get; init; }
 
         [CommandOption("--cleanup")]
         public bool Cleanup { get; init; }

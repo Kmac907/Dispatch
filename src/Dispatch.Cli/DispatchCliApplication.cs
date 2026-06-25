@@ -407,7 +407,6 @@ public sealed class DispatchCliApplication(
         bool overwrite,
         bool backup,
         bool execute,
-        string? executeAs,
         bool cleanup,
         string? inventory,
         string? target,
@@ -444,7 +443,6 @@ public sealed class DispatchCliApplication(
                 overwrite,
                 backup,
                 execute,
-                executeAs,
                 cleanup,
                 inventory,
                 target,
@@ -1173,7 +1171,6 @@ public sealed class DispatchCliApplication(
         bool overwrite,
         bool backup,
         bool execute,
-        string? executeAs,
         bool cleanup,
         string? inventory,
         string? target,
@@ -1210,12 +1207,6 @@ public sealed class DispatchCliApplication(
         if (execute)
         {
             error = "--execute is planned for push but is not implemented in this push slice.";
-            return false;
-        }
-
-        if (!string.IsNullOrWhiteSpace(executeAs))
-        {
-            error = "--execute-as is planned for push execution but is not implemented in this push slice.";
             return false;
         }
 

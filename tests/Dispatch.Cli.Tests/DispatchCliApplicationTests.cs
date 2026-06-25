@@ -2991,7 +2991,6 @@ credentials:
     [Theory]
     [InlineData("--transport", "psexec", "raw WinRM and PSRP")]
     [InlineData("--execute", null, "--execute is planned")]
-    [InlineData("--execute-as", "system", "--execute-as is planned")]
     [InlineData("--cleanup", null, "--cleanup is planned")]
     [InlineData("--concurrency", "2", "--concurrency greater than 1 is planned")]
     public async Task PushRejectsUnsupportedSliceOptions(string option, string? value, string expected)

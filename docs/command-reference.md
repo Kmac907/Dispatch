@@ -91,7 +91,7 @@ The compatibility shape `dispatch run --script <path> --computer-name <names>` s
 ## Push
 
 ```powershell
-dispatch push <source> --dest <remote-path> [--inventory <path>] [--target <selector>] [--exclude <selector>] [--transport auto|winrm|psrp] [--credential <name>] [--config <path>] [--concurrency <n>] [--overwrite] [--plan|--check] [--recurse] [--checksum] [--backup] [--execute] [--execute-as <mode>] [--cleanup] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
+dispatch push <source> --dest <remote-path> [--inventory <path>] [--target <selector>] [--exclude <selector>] [--transport auto|winrm|psrp] [--credential <name>] [--config <path>] [--concurrency <n>] [--overwrite] [--plan|--check] [--recurse] [--checksum] [--backup] [--execute] [--cleanup] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
 ```
 
 Status: partial current.
