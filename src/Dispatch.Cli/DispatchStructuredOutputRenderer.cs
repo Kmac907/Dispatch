@@ -150,6 +150,7 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Checksum: {plan.Checksum}");
                 writer.WriteLine($"Backup: {plan.Backup}");
                 writer.WriteLine($"Execute: {plan.Execute}");
+                writer.WriteLine($"Cleanup: {plan.Cleanup}");
                 writer.WriteLine($"Concurrency: {plan.Concurrency}");
                 break;
         }
@@ -483,6 +484,7 @@ internal sealed record DispatchPushPlan(
     bool Checksum,
     bool Backup,
     bool Execute,
+    bool Cleanup,
     int Concurrency,
     [property: JsonIgnore]
     DispatchOutputMode OutputMode)

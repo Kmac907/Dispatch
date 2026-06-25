@@ -1373,8 +1373,8 @@ Definition of done:
 - Init commands generate valid starter YAML files.
 
 Current implementation boundary:
-- `dispatch push <source> --dest <remote-path>` supports single-file and recursive directory transfer over raw WinRM or PSRP, omitted/`--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, target-local pre-replacement backup through `--backup`, explicit push-result SHA-256 enforcement/reporting through `--checksum`, single-file `.ps1` execute-after-copy through `--execute`, target/inventory selection, and `--plan` / `--check` preview.
-- Push cleanup remains later `6.6` work. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
+- `dispatch push <source> --dest <remote-path>` supports single-file and recursive directory transfer over raw WinRM or PSRP, omitted/`--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, target-local pre-replacement backup through `--backup`, explicit push-result SHA-256 enforcement/reporting through `--checksum`, single-file `.ps1` execute-after-copy through `--execute`, post-execute script removal through `--cleanup`, target/inventory selection, and `--plan` / `--check` preview.
+- Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.
 - `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
 - Init scaffolding refuses to overwrite existing starter files.
 - `hosts` and expanded transport-aware `doctor` behavior remain later `6.6` work.

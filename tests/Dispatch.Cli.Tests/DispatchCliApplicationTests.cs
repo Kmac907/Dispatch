@@ -2634,6 +2634,52 @@ credentials:
     }
 
     [Fact]
+    public async Task PushPlanRendersCleanupSelection()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.ps1");
+        File.WriteAllText(sourcePath, "Write-Output 'payload'");
+        var uploader = new RecordingWinRmTransferClient();
+        var shellClient = new RecordingWinRmShellClient();
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader, winRmShellClient: shellClient);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.ps1",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--execute",
+                    "--cleanup",
+                    "--plan",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Empty(uploader.Requests);
+            Assert.Empty(shellClient.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("execute").GetBoolean());
+            Assert.True(json.RootElement.GetProperty("cleanup").GetBoolean());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PushExecutionUploadsSingleFileThroughWinRm()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
@@ -2741,6 +2787,76 @@ credentials:
     }
 
     [Fact]
+    public async Task PushExecutionCleansUpSinglePowerShellFileThroughWinRm()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.ps1");
+        File.WriteAllText(sourcePath, "Write-Output 'payload'");
+        var uploader = new RecordingWinRmTransferClient();
+        var shellClient = new RecordingWinRmShellClient(request =>
+            request.Arguments.Contains("-File", StringComparer.Ordinal)
+                ? WinRmShellCommandResult.SucceededResult(stdout: "payload")
+                : WinRmShellCommandResult.SucceededResult());
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            winRmTransferClient: uploader,
+            winRmShellClient: shellClient);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.ps1",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--execute",
+                    "--cleanup",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Single(uploader.Requests);
+            Assert.Collection(
+                shellClient.Requests,
+                executeRequest =>
+                {
+                    Assert.Equal("powershell.exe", executeRequest.Executable);
+                    Assert.Equal(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", @"C:\Temp\payload.ps1"], executeRequest.Arguments);
+                },
+                cleanupRequest =>
+                {
+                    Assert.Equal("powershell.exe", cleanupRequest.Executable);
+                    Assert.Equal(
+                        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Remove-Item -LiteralPath $args[0] -Force -ErrorAction Stop", @"C:\Temp\payload.ps1"],
+                        cleanupRequest.Arguments);
+                });
+
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("plan").GetProperty("cleanup").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.True(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(22, target.GetProperty("bytesUploaded").GetInt64());
+            var metadata = target.GetProperty("metadata");
+            Assert.Equal("True", metadata.GetProperty("cleanupRequested").GetString());
+            Assert.Equal("completed", metadata.GetProperty("cleanupStatus").GetString());
+            Assert.Equal("0", metadata.GetProperty("cleanupExitCode").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task PushExecutionFailsWhenWinRmExecuteReturnsUnexpectedExitCode()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
@@ -2785,6 +2901,64 @@ credentials:
             Assert.Contains("expected 0", target.GetProperty("failureMessage").GetString(), StringComparison.OrdinalIgnoreCase);
             Assert.Equal(6, target.GetProperty("bytesUploaded").GetInt64());
             Assert.Equal("5", target.GetProperty("metadata").GetProperty("executionExitCode").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionFailsWhenCleanupReturnsUnexpectedExitCode()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.ps1");
+        File.WriteAllText(sourcePath, "Write-Output 'payload'");
+        var uploader = new RecordingWinRmTransferClient();
+        var shellClient = new RecordingWinRmShellClient(request =>
+            request.Arguments.Contains("-File", StringComparer.Ordinal)
+                ? WinRmShellCommandResult.SucceededResult(stdout: "payload")
+                : WinRmShellCommandResult.SucceededResult(exitCode: 1, stderr: "cannot remove"));
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            winRmTransferClient: uploader,
+            winRmShellClient: shellClient);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.ps1",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--execute",
+                    "--cleanup",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(2, exitCode);
+            Assert.Empty(error);
+            Assert.Single(uploader.Requests);
+            Assert.Equal(2, shellClient.Requests.Count);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.False(json.RootElement.GetProperty("succeeded").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.False(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("cleanupFailed", target.GetProperty("failureCategory").GetString());
+            Assert.Contains("expected 0", target.GetProperty("failureMessage").GetString(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(22, target.GetProperty("bytesUploaded").GetInt64());
+            Assert.Equal("failed", target.GetProperty("metadata").GetProperty("cleanupStatus").GetString());
+            Assert.Equal("1", target.GetProperty("metadata").GetProperty("cleanupExitCode").GetString());
+            Assert.Equal("cannot remove", target.GetProperty("metadata").GetProperty("cleanupStderr").GetString());
         }
         finally
         {
@@ -2839,6 +3013,71 @@ credentials:
             Assert.True(target.GetProperty("succeeded").GetBoolean());
             Assert.Equal("completed", target.GetProperty("metadata").GetProperty("executionStatus").GetString());
             Assert.Equal("payload", target.GetProperty("metadata").GetProperty("executionStdout").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushExecutionCleansUpSinglePowerShellFileThroughPsrp()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.ps1");
+        File.WriteAllText(sourcePath, "Write-Output 'payload'");
+        var psrpUploader = new RecordingPsrpFileTransferClient();
+        var commandClient = new RecordingPsrpCommandClient(request =>
+            request.Arguments.Contains("-File", StringComparison.Ordinal)
+                ? PsrpCommandResult.Success(0, "payload", string.Empty)
+                : PsrpCommandResult.Success(0, string.Empty, string.Empty));
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            psrpFileTransferClient: psrpUploader,
+            psrpCommandClient: commandClient);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.ps1",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--execute",
+                    "--cleanup",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.Empty(error);
+            Assert.Single(psrpUploader.Requests);
+            Assert.Collection(
+                commandClient.Requests,
+                executeRequest =>
+                {
+                    Assert.Equal("powershell.exe", executeRequest.Executable);
+                    Assert.Equal(@"-NoProfile -ExecutionPolicy Bypass -File C:\Temp\payload.ps1", executeRequest.Arguments);
+                },
+                cleanupRequest =>
+                {
+                    Assert.Equal("powershell.exe", cleanupRequest.Executable);
+                    Assert.Equal(
+                        @"-NoProfile -ExecutionPolicy Bypass -Command ""Remove-Item -LiteralPath $args[0] -Force -ErrorAction Stop"" C:\Temp\payload.ps1",
+                        cleanupRequest.Arguments);
+                });
+
+            using var json = JsonDocument.Parse(output);
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.True(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal("completed", target.GetProperty("metadata").GetProperty("cleanupStatus").GetString());
         }
         finally
         {
@@ -3197,7 +3436,6 @@ credentials:
 
     [Theory]
     [InlineData("--transport", "psexec", "raw WinRM and PSRP")]
-    [InlineData("--cleanup", null, "--cleanup is planned")]
     [InlineData("--concurrency", "2", "--concurrency greater than 1 is planned")]
     public async Task PushRejectsUnsupportedSliceOptions(string option, string? value, string expected)
     {
@@ -3228,6 +3466,31 @@ credentials:
             Assert.Equal(1, exitCode);
             Assert.Empty(output);
             Assert.Contains(expected, error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task PushRejectsCleanupWithoutExecute()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.ps1");
+        File.WriteAllText(sourcePath, "Write-Output 'payload'");
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: new RecordingWinRmTransferClient());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["push", sourcePath, "--dest", @"C:\Temp\payload.ps1", "--target", "PC001", "--transport", "winrm", "--cleanup"],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("--cleanup requires --execute", error);
         }
         finally
         {

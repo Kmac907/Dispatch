@@ -1208,12 +1208,6 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
-        if (cleanup)
-        {
-            error = "--cleanup is planned for push execution but is not implemented in this push slice.";
-            return false;
-        }
-
         if (concurrency is <= 0)
         {
             error = "--concurrency must be a positive integer.";
@@ -1311,6 +1305,12 @@ public sealed class DispatchCliApplication(
             return false;
         }
 
+        if (cleanup && !execute)
+        {
+            error = "--cleanup requires --execute so Dispatch only removes a pushed script after it has run.";
+            return false;
+        }
+
         foreach (var sourceFile in sourceFiles)
         {
             if (new FileInfo(sourceFile).Length > int.MaxValue)
@@ -1338,6 +1338,7 @@ public sealed class DispatchCliApplication(
             Checksum: checksum,
             Backup: backup,
             Execute: execute,
+            Cleanup: cleanup,
             Concurrency: 1,
             OutputMode: outputMode);
         return true;
@@ -1389,7 +1390,8 @@ public sealed class DispatchCliApplication(
                     ["pushFileCount"] = pushItems.Count.ToString(),
                     ["checksumRequested"] = plan.Checksum.ToString(),
                     ["backupRequested"] = plan.Backup.ToString(),
-                    ["executeRequested"] = plan.Execute.ToString()
+                    ["executeRequested"] = plan.Execute.ToString(),
+                    ["cleanupRequested"] = plan.Cleanup.ToString()
                 };
                 PushTargetFailure? targetFailure = null;
                 var checksumVerifiedCount = 0;
@@ -1452,6 +1454,20 @@ public sealed class DispatchCliApplication(
                     if (!execution.Succeeded)
                     {
                         targetFailure = new PushTargetFailure(execution.FailureCategory, execution.FailureMessage, ResetBytesUploaded: false);
+                    }
+                }
+
+                if (targetFailure is null && plan.Cleanup)
+                {
+                    var cleanup = await CleanupPushedScriptAsync(plan, target.Name, pushItems[0], credential, cancellationToken).ConfigureAwait(false);
+                    foreach (var pair in cleanup.Metadata)
+                    {
+                        uploadMetadata[pair.Key] = pair.Value;
+                    }
+
+                    if (!cleanup.Succeeded)
+                    {
+                        targetFailure = new PushTargetFailure(cleanup.FailureCategory, cleanup.FailureMessage, ResetBytesUploaded: false);
                     }
                 }
 
@@ -1613,6 +1629,75 @@ public sealed class DispatchCliApplication(
     private static DirectExecutionCommand CreatePushedPowerShellCommand(string remotePath) =>
         new("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", remotePath]);
 
+    private async Task<PushCleanupResult> CleanupPushedScriptAsync(
+        DispatchPushPlan plan,
+        string targetName,
+        DispatchPushTransferItem item,
+        DispatchResolvedCredential? credential,
+        CancellationToken cancellationToken)
+    {
+        var command = CreatePushedCleanupCommand(item.RemotePath);
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["cleanupRequested"] = "True",
+            ["cleanupRemotePath"] = item.RemotePath,
+            ["cleanupTransport"] = plan.Transport.ToDispatchString(),
+            ["cleanupCommand"] = command.RenderedCommand,
+            ["cleanupStatus"] = "pending"
+        };
+
+        if (plan.Transport == TransportKind.WinRm)
+        {
+            if (winRmShellClient is null)
+            {
+                return PushCleanupResult.Failed(
+                    "Raw WinRM push cleanup is unavailable because the raw WinRM shell client is not registered.",
+                    metadata);
+            }
+
+            var result = await winRmShellClient.ExecuteAsync(
+                    new WinRmShellCommandRequest(
+                        targetName,
+                        command.Executable,
+                        command.Arguments,
+                        [],
+                        Credential: credential),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            MergeMetadata(metadata, result.Metadata);
+            return CreatePushCleanupResult(metadata, result.Succeeded, result.ExitCode, result.Stdout, result.Stderr, result.FailureCategory, result.FailureMessage, result.TimedOut);
+        }
+
+        if (psrpCommandClient is null)
+        {
+            return PushCleanupResult.Failed(
+                "PSRP push cleanup is unavailable because the PSRP command client is not registered.",
+                metadata);
+        }
+
+        var psrpResult = await psrpCommandClient.ExecuteAsync(
+                new PsrpCommandRequest(
+                    targetName,
+                    command.Executable,
+                    RenderCommandArguments(command.Arguments),
+                    WorkingDirectory: null,
+                    ExecutionTimeout: null,
+                    ConfigurationName: null,
+                    PsrpConnectionKind.WsMan,
+                    PsrpAuthenticationKind.Default,
+                    CertificateThumbprint: null,
+                    Credential: credential),
+                cancellationToken)
+            .ConfigureAwait(false);
+        MergeMetadata(metadata, psrpResult.Metadata);
+        return CreatePushCleanupResult(metadata, psrpResult.Succeeded, psrpResult.ExitCode, psrpResult.Stdout, psrpResult.Stderr, psrpResult.FailureCategory, psrpResult.FailureMessage, timedOut: false);
+    }
+
+    private static DirectExecutionCommand CreatePushedCleanupCommand(string remotePath) =>
+        new(
+            "powershell.exe",
+            ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "Remove-Item -LiteralPath $args[0] -Force -ErrorAction Stop", remotePath]);
+
     private static PushExecutionResult CreatePushExecutionResult(
         Dictionary<string, string> metadata,
         bool transportSucceeded,
@@ -1666,6 +1751,47 @@ public sealed class DispatchCliApplication(
         metadata["executionStatus"] = "completed";
         metadata["executionFailureCategory"] = FailureCategory.None.ToString();
         return PushExecutionResult.Success(metadata);
+    }
+
+    private static PushCleanupResult CreatePushCleanupResult(
+        Dictionary<string, string> metadata,
+        bool transportSucceeded,
+        int? exitCode,
+        string stdout,
+        string stderr,
+        FailureCategory failureCategory,
+        string? failureMessage,
+        bool timedOut)
+    {
+        if (exitCode is not null)
+        {
+            metadata["cleanupExitCode"] = exitCode.Value.ToString();
+        }
+
+        if (!string.IsNullOrWhiteSpace(stdout))
+        {
+            metadata["cleanupStdout"] = stdout;
+        }
+
+        if (!string.IsNullOrWhiteSpace(stderr))
+        {
+            metadata["cleanupStderr"] = stderr;
+        }
+
+        if (!transportSucceeded || exitCode is not 0)
+        {
+            metadata["cleanupStatus"] = timedOut ? "timed-out" : "failed";
+            metadata["cleanupFailureCategory"] = FailureCategory.CleanupFailed.ToString();
+            var message = failureMessage
+                ?? (exitCode is not null
+                    ? $"Push cleanup exited with code {exitCode}; expected 0."
+                    : "Push cleanup failed after upload.");
+            return PushCleanupResult.Failed(message, metadata);
+        }
+
+        metadata["cleanupStatus"] = "completed";
+        metadata["cleanupFailureCategory"] = FailureCategory.None.ToString();
+        return PushCleanupResult.Success(metadata);
     }
 
     private static void MergeMetadata(IDictionary<string, string> metadata, IReadOnlyDictionary<string, string>? additionalMetadata)
@@ -2089,6 +2215,21 @@ internal sealed record PushExecutionResult(
         string failureMessage,
         IReadOnlyDictionary<string, string> metadata) =>
         new(false, failureCategory, failureMessage, metadata);
+}
+
+internal sealed record PushCleanupResult(
+    bool Succeeded,
+    FailureCategory FailureCategory,
+    string? FailureMessage,
+    IReadOnlyDictionary<string, string> Metadata)
+{
+    public static PushCleanupResult Success(IReadOnlyDictionary<string, string> metadata) =>
+        new(true, FailureCategory.None, null, metadata);
+
+    public static PushCleanupResult Failed(
+        string failureMessage,
+        IReadOnlyDictionary<string, string> metadata) =>
+        new(false, FailureCategory.CleanupFailed, failureMessage, metadata);
 }
 
 internal sealed record PushTargetFailure(
