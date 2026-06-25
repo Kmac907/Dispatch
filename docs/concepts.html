@@ -67,6 +67,16 @@
 <p>A plan is the validated execution shape before endpoint work starts. Planning validates local inputs, target selection, supported transport/payload combinations, output paths, expected exit codes, and credential references where possible.</p>
 <h2>Run</h2>
 <p>A run is the actual execution of a plan. A run creates a local run folder, emits events, updates target states, captures output, collects artifacts, and writes a final summary.</p>
+<h2>Command Intent</h2>
+<p>The main command groups map to different operator intents:</p>
+<ul>
+<li><code>run</code> is execution-first. Use it when Dispatch should run a script, command, or executable as a managed execution and collect the result.</li>
+<li><code>apply</code> is declaration-first. Use it when work should live in a YAML job with ordered tasks, target policy, tags, and repeatable review.</li>
+<li><code>push</code> is transfer-first. Use it when the important outcome is copying a file or directory to an exact remote path. <code>push --execute</code> can run a pushed single <code>.ps1</code>, but the command still owns file placement rather than the full job authoring model.</li>
+<li><code>logs</code> is history-first. Use it after a run to inspect local result files without contacting endpoints.</li>
+<li><code>creds</code> is reference-first. Use it to manage provider-backed credential state selected by config, inventory, jobs, or CLI options.</li>
+<li><code>hosts</code> is inventory-first. Use it to inspect and validate host data before execution once the planned host command group is implemented.</li>
+</ul>
 <h2>Result</h2>
 <p>A result is the final machine-readable outcome. <code>Admin\results.json</code> contains the reduced run summary and each target result.</p>
 <h2>Artifact</h2>

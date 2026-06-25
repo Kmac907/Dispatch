@@ -50,6 +50,9 @@
 <p>Transport comes from explicit CLI options, job files, inventory metadata, global config, then built-in defaults. Dispatch should not silently fall back to another transport.</p>
 <h2>Why did plan pass but run fail?</h2>
 <p>Planning validates local inputs and supported combinations. The actual run can still fail because endpoints are offline, remoting is disabled, policy blocks access, credentials fail, or a script returns an unexpected exit code.</p>
+<h2>What is the difference between run, apply, and push?</h2>
+<p><code>dispatch run</code> is execution-first: Dispatch runs a script, command, or executable and owns the run lifecycle, events, results, stdout/stderr, and artifacts. <code>dispatch apply</code> is declaration-first: it runs supported YAML job tasks in order so repeatable work can live in source control. <code>dispatch push</code> is transfer-first: it copies files to a remote destination, and <code>--execute</code> is an optional follow-up for a pushed single <code>.ps1</code> file.</p>
+<p>Use <code>run ps</code> for normal ad-hoc script execution. Use <code>apply</code> for repeatable job files. Use <code>push</code> when the remote file placement is the primary outcome.</p>
 <h2>Why can&#39;t I pass a password directly?</h2>
 <p>Command-line secrets are visible to process inspection, shell history, logs, and automation wrappers. Dispatch uses credential references and provider-backed resolution instead.</p>
 <h2>Why did target selection not match what I expected?</h2>

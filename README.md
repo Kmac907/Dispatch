@@ -23,6 +23,13 @@ Project site: https://kmac907.github.io/Dispatch/
 - Machine-wide YAML config at `C:\ProgramData\Dispatch\config.yml`.
 - Planned PowerShell module wrapper over the same `dispatch.exe` command surface.
 
+## Choosing Commands
+
+- Use `dispatch run` when the goal is ad-hoc execution with Dispatch-owned run history, results, stdout/stderr, and artifacts.
+- Use `dispatch apply` when the work should be declared as a repeatable YAML job.
+- Use `dispatch push` when the goal is copying a file or directory to a specific remote path; `--execute` is only a follow-up for pushed single `.ps1` files.
+- Use `dispatch logs`, `dispatch creds`, `dispatch hosts`, `dispatch doctor`, and `dispatch init` for history, credential references, inventory inspection, diagnostics, and starter YAML.
+
 ## Get Started
 
 ### Run From Source

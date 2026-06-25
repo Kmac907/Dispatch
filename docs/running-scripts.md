@@ -2,6 +2,12 @@
 
 `dispatch run ps` is the primary operator workflow for ad-hoc PowerShell script execution.
 
+Use `dispatch run ps` when the goal is to execute a script and collect Dispatch results. It creates a managed run, captures stdout/stderr, writes local result files, and records per-target state.
+
+Use `dispatch push <script.ps1> --dest <remote-path> --execute` only when the remote destination path matters. `push` copies the file first, then optionally runs that copied file. It is useful for file-placement workflows; it is not the normal replacement for `run ps`.
+
+Use `dispatch apply <job.yml>` when the same work should be declared in YAML, reviewed, tagged, and repeated as a job.
+
 ## Single Host
 
 ```powershell

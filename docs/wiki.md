@@ -82,6 +82,7 @@ Must include:
 - defaults
 - examples
 - implemented vs planned surfaces clearly marked
+- command intent, including when to use one command instead of an overlapping command such as `run`, `apply`, or `push --execute`
 
 ## Operator documentation
 
@@ -445,9 +446,10 @@ As of the current repo state, every Markdown document listed above exists in `do
 Current maintenance priorities:
 
 1. Keep `docs/command-reference.md` and `docs/command-reference.html` aligned with the real command surface.
-2. Keep `docs/roadmap-status.md` and `docs/roadmap-status.html` aligned with completed slices and known blockers.
-3. Keep focused operator docs, such as `docs/credentials.md`, `docs/logs.md`, `docs/jobs.md`, and transport docs, aligned with command-reference status.
-4. Keep planned or deferred pages explicit about what is not implemented yet.
+2. Keep command intent and command-difference explanations aligned across `docs/command-reference.md`, operator guides, examples, and FAQ entries.
+3. Keep `docs/roadmap-status.md` and `docs/roadmap-status.html` aligned with completed slices and known blockers.
+4. Keep focused operator docs, such as `docs/credentials.md`, `docs/logs.md`, `docs/jobs.md`, and transport docs, aligned with command-reference status.
+5. Keep planned or deferred pages explicit about what is not implemented yet.
 
 ## Notes
 

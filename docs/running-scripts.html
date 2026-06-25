@@ -47,6 +47,9 @@
   <article class="doc-content">
 <h1>Running Scripts</h1>
 <p><code>dispatch run ps</code> is the primary operator workflow for ad-hoc PowerShell script execution.</p>
+<p>Use <code>dispatch run ps</code> when the goal is to execute a script and collect Dispatch results. It creates a managed run, captures stdout/stderr, writes local result files, and records per-target state.</p>
+<p>Use <code>dispatch push &lt;script.ps1&gt; --dest &lt;remote-path&gt; --execute</code> only when the remote destination path matters. <code>push</code> copies the file first, then optionally runs that copied file. It is useful for file-placement workflows; it is not the normal replacement for <code>run ps</code>.</p>
+<p>Use <code>dispatch apply &lt;job.yml&gt;</code> when the same work should be declared in YAML, reviewed, tagged, and repeated as a job.</p>
 <h2>Single Host</h2>
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp

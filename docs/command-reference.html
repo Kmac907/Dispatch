@@ -53,6 +53,23 @@
 <li>Planned v1: required by the v1 roadmap but not fully implemented yet.</li>
 <li>Deferred: explicitly outside v1.</li>
 </ul>
+<h2>Command Model At A Glance</h2>
+<p>Dispatch commands are grouped by operator intent:</p>
+<table>
+<thead><tr><th>Command</th><th>Primary intent</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td><code>apply</code></td><td>Declared job execution</td><td>The work should be repeatable, reviewable, and stored in YAML.</td></tr>
+<tr><td><code>run</code></td><td>Ad-hoc execution</td><td>You want Dispatch to execute a script or command as a managed run and collect run results.</td></tr>
+<tr><td><code>push</code></td><td>File placement</td><td>You need to copy a file or directory to an exact remote path, optionally executing a pushed <code>.ps1</code> afterward.</td></tr>
+<tr><td><code>hosts</code></td><td>Inventory inspection</td><td>You need to understand or validate host files, selectors, graph structure, or effective host metadata.</td></tr>
+<tr><td><code>logs</code></td><td>Local run-history inspection</td><td>You need to inspect, export, tail, or build a retry plan from previous Dispatch runs.</td></tr>
+<tr><td><code>creds</code></td><td>Credential-reference lifecycle</td><td>You need to enroll, test, list, or remove provider-backed credential reference state.</td></tr>
+<tr><td><code>doctor</code></td><td>Local prerequisite diagnostics</td><td>You need to check the admin workstation and local Dispatch configuration.</td></tr>
+<tr><td><code>init</code></td><td>Starter file scaffolding</td><td>You need starter config, inventory, or job YAML in the current directory.</td></tr>
+<tr><td><code>version</code></td><td>Build identity</td><td>You need the executable version/build identity for support or automation.</td></tr>
+</tbody>
+</table>
+<p><code>run</code>, <code>apply</code>, and <code>push --execute</code> can all result in remote execution, but they own different things. <code>run</code> owns an execution lifecycle and result set. <code>apply</code> owns a declared multi-task job file. <code>push</code> owns remote file placement; <code>--execute</code> is a follow-up step for a pushed single <code>.ps1</code> file.</p>
 <h2>Root</h2>
 <pre><code>
 dispatch --help
@@ -63,12 +80,14 @@ dispatch version
 <li><code>dispatch --help</code> prints the registered command tree and high-level examples.</li>
 <li><code>dispatch version</code> prints the CLI version/build identity available to the executable.</li>
 </ul>
+<p>Use root help when discovering available command groups or checking whether the executable is wired correctly. Use <code>version</code> when recording environment details for support, release validation, or automation logs.</p>
 <h2>Apply</h2>
 <pre><code>
 dispatch apply &lt;job.yml&gt; [--inventory &lt;hosts.yml&gt;] [--target &lt;selector&gt;] [--exclude &lt;selector&gt;] [--config &lt;path&gt;] [--credential &lt;name&gt;] [--transport auto|psrp|winrm|psexec] [--tags &lt;tags&gt;] [--skip-tags &lt;tags&gt;] [--serial &lt;n&gt;|--concurrency &lt;n&gt;] [--plan|--check] [--diff] [--output rich|table|json|ndjson|yaml] [--no-color] [--no-progress] [--quiet] [-v|--verbose] [--trace]
 </code></pre>
 <p>Status: partial/current. Plan, check, and execution are implemented for selected multi-task script-first <code>ps</code>, scalar <code>cmd</code>, and scalar <code>exe</code> jobs in YAML order. Plan/check-only rendering is implemented for selected <code>copy</code> tasks. Additional task types remain planned v1.</p>
 <p>Runs a declared YAML job. The v1 job model is script-first and converts supported tasks into the same planning/execution contracts used by ad-hoc commands.</p>
+<p>Use <code>apply</code> when the operation should be reviewed, repeated, checked into source control, or composed from multiple ordered tasks. Use <code>run</code> instead for a one-off script or command where a job file would add unnecessary ceremony. Use <code>push</code> instead when the main goal is to place files at a specific remote destination.</p>
 <p>Scalar <code>job.vars</code> entries are passed to selected <code>ps</code> tasks as named PowerShell script arguments in YAML order. Scalar <code>cmd</code> tasks run through the same command payload path as <code>dispatch run cmd</code>, and scalar <code>exe</code> tasks run through the same command payload path as <code>dispatch run exe</code>. Selected <code>copy</code> tasks are plan/check-only and use mapping syntax such as <code>copy: { src: .\payloads\agent.msi, dest: C:\ProgramData\Dispatch\Payloads\agent.msi, overwrite: true }</code> or a block with <code>src</code>, <code>dest</code>, <code>overwrite</code>, and <code>tags</code> fields. Inventory vars remain host/group metadata and do not become runtime task inputs.</p>
 <p>Use <code>--target &lt;selector&gt;</code> to override <code>hosts</code> from the job file for the current run. Use <code>--inventory &lt;path&gt;</code> to override the configured inventory path. Use <code>--exclude &lt;selector&gt;</code> to remove hosts from the selected set after the job or CLI target selector is resolved.</p>
 <p>Use <code>--transport &lt;value&gt;</code> to override job, inventory, and config transport policy. <code>--transport auto</code> is a fall-through value: Dispatch uses non-<code>auto</code> <code>job.transport</code>, then inventory transport policy, then config/default transport. If the selected inventory hosts resolve to conflicting transport policies and no explicit non-<code>auto</code> transport is supplied, validation fails before planning.</p>
@@ -83,6 +102,8 @@ dispatch run cmd &lt;command&gt; --target &lt;selector&gt; [--transport psrp|win
 dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm]
 </code></pre>
 <p>Status: <code>run ps</code>, <code>run cmd</code>, and <code>run exe</code> route through the shared planner/executor when the transport supports the payload. Compatibility routing for the older <code>dispatch run --script ...</code> shape remains for migration.</p>
+<p>Use <code>run</code> for execution-first automation. Dispatch stages or prepares whatever the selected transport needs, creates a run folder, emits events, captures stdout/stderr, writes <code>Admin\results.json</code>, and records target state. The remote payload is part of an execution job, not a file deployment.</p>
+<p>Use <code>push --execute</code> instead only when the remote file destination itself matters, such as placing <code>C:\Temp\Fix.ps1</code> and then running that exact copied file. Use <code>apply</code> instead when the same execution should live in a declared YAML job.</p>
 <p>Common options:</p>
 <ul>
 <li><code>--target</code></li>
@@ -108,9 +129,9 @@ dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 <p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
 <p>Subcommands:</p>
 <ul>
-<li><code>run ps &lt;script.ps1&gt;</code> runs a PowerShell script file. Extra arguments after the script path are passed through as script arguments. Use this for script-first automation and installer/remediation scripts.</li>
-<li><code>run cmd &lt;command&gt;</code> runs a shell command through the selected command-capable transport. Use this for short Windows command-line checks such as <code>whoami</code>.</li>
-<li><code>run exe &lt;path&gt;</code> runs an executable path through the selected command-capable transport. Use this for direct process execution when a script wrapper is not needed.</li>
+<li><code>run ps &lt;script.ps1&gt;</code> runs a local PowerShell script file as a Dispatch-managed execution. Extra arguments after the script path are passed through as script arguments. Use this for script-first automation, installer/remediation scripts, and any workflow where results/logs matter more than leaving the script at a specific remote path.</li>
+<li><code>run cmd &lt;command&gt;</code> runs a Windows command line through the selected command-capable transport. Use this for short checks such as <code>whoami</code>, <code>hostname</code>, or simple diagnostics. It is not a replacement for multi-step script logic.</li>
+<li><code>run exe &lt;path&gt;</code> runs an executable command through the selected command-capable transport. Use this when invoking a known executable directly is clearer than wrapping it in PowerShell. For complex argument handling, setup logic, or output shaping, prefer <code>run ps</code>.</li>
 </ul>
 <p>The compatibility shape <code>dispatch run --script &lt;path&gt; --computer-name &lt;names&gt;</code> still works for older callers, but new docs and automation should use <code>dispatch run ps</code>.</p>
 <h2>Push</h2>
@@ -119,6 +140,7 @@ dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--inventory &lt;path&gt
 </code></pre>
 <p>Status: partial current.</p>
 <p>Current support: single-file push and recursive directory push over raw WinRM or PSRP, target selection, inventory selection, <code>--transport auto</code> selection through inventory/config/default transport policy, optional replacement through <code>--overwrite</code>, target-local pre-replacement backup through <code>--backup</code>, explicit push-result SHA-256 enforcement/reporting through <code>--checksum</code>, single-file <code>.ps1</code> execute-after-copy through <code>--execute</code>, post-execute script removal through <code>--cleanup</code>, and structured output. <code>--plan</code> and <code>--check</code> preview the transfer without writing. PsExec push remains planned or deferred.</p>
+<p>Use <code>push</code> when the file or directory destination is the primary outcome. A successful push means Dispatch wrote the requested content to the requested remote path. <code>--execute</code> is intentionally secondary: it runs the uploaded single <code>.ps1</code> after transfer succeeds. If you only care about running a script and collecting results, prefer <code>dispatch run ps</code>.</p>
 <p>Options and behavior:</p>
 <ul>
   <li><code>&lt;source&gt;</code> is the local file or directory to transfer. Directory transfer requires <code>--recurse</code> and preserves relative file paths under <code>--dest</code>.</li>
@@ -140,13 +162,14 @@ dispatch hosts graph --inventory &lt;hosts.yml&gt;
 dispatch hosts vars --inventory &lt;hosts.yml&gt; --target &lt;host&gt;
 </code></pre>
 <p>Status: planned v1 command group. Inventory parsing and selector behavior are partially implemented on current run paths.</p>
+<p>Use <code>hosts</code> commands before execution when you need confidence in inventory structure or target selection. These commands are planned as inspection/validation tools, not as execution commands and not as endpoint remediation.</p>
 <p>Planned subcommands:</p>
 <ul>
-<li><code>hosts list</code> will read an inventory and print the hosts Dispatch can resolve, including group membership where available.</li>
-<li><code>hosts test</code> will test the selected remoting path for matching hosts. It is not an ICMP ping command and will not remediate endpoints.</li>
-<li><code>hosts validate</code> will validate inventory syntax/schema without running endpoint work.</li>
-<li><code>hosts graph</code> will show group/child relationships so nested inventory structure is easier to inspect.</li>
-<li><code>hosts vars</code> will show the effective host metadata Dispatch can derive for one target, including supported transport and credential reference fields.</li>
+<li><code>hosts list</code> will read an inventory and print the hosts Dispatch can resolve, including group membership where available. Use it to confirm names and selector expansion before running work.</li>
+<li><code>hosts test</code> will test the selected remoting path for matching hosts. It is not an ICMP ping command and will not remediate endpoints. Use it to prove the chosen transport path is reachable enough for Dispatch.</li>
+<li><code>hosts validate</code> will validate inventory syntax/schema without running endpoint work. Use it in pull requests or preflight checks for inventory files.</li>
+<li><code>hosts graph</code> will show group/child relationships so nested inventory structure is easier to inspect. Use it when group inheritance or child groups make selection hard to reason about.</li>
+<li><code>hosts vars</code> will show the effective host metadata Dispatch can derive for one target, including supported transport and credential reference fields. Use it to understand precedence across defaults, groups, host entries, config, and CLI overrides.</li>
 </ul>
 <h2>Logs</h2>
 <pre><code>
@@ -158,13 +181,14 @@ dispatch logs retry latest
 </code></pre>
 <p>Status: current.</p>
 <p>Reads local run history from <code>Admin\results.json</code> and <code>Admin\events.ndjson</code>.</p>
+<p>Use <code>logs</code> after a Dispatch run has already happened. These commands read local files; they do not contact endpoints and they do not start new remote work.</p>
 <p>Subcommands:</p>
 <ul>
-<li><code>logs list</code> enumerates local runs under the configured run root and shows reduced run summaries.</li>
-<li><code>logs show &lt;run-id|latest&gt;</code> prints a selected run summary, target outcomes, and output file locations.</li>
-<li><code>logs tail &lt;run-id|latest&gt; --count &lt;n&gt;</code> reads the durable NDJSON event stream and prints the latest events.</li>
-<li><code>logs export &lt;run-id|latest&gt; --dest &lt;path&gt;</code> copies the selected run's durable summary/event data to an export folder and generates a CSV summary where available.</li>
-<li><code>logs retry &lt;run-id|latest&gt;</code> builds a read-only retry plan for failed, timed-out, or cancelled targets. It does not rerun anything.</li>
+<li><code>logs list</code> enumerates local runs under the configured run root and shows reduced run summaries. Use it to find a run ID or confirm the latest run.</li>
+<li><code>logs show &lt;run-id|latest&gt;</code> prints a selected run summary, target outcomes, failure categories, and output file locations. Use it for a quick human review of one run.</li>
+<li><code>logs tail &lt;run-id|latest&gt; --count &lt;n&gt;</code> reads the durable NDJSON event stream and prints the latest events. Use it when you need recent phase/progress/error events without opening the event file manually.</li>
+<li><code>logs export &lt;run-id|latest&gt; --dest &lt;path&gt;</code> copies the selected run's durable summary/event data to an export folder and generates a CSV summary where available. Use it for handoff, ticket attachment, or offline review.</li>
+<li><code>logs retry &lt;run-id|latest&gt;</code> builds a read-only retry plan for failed, timed-out, or cancelled targets. It does not rerun anything. Use it to see which targets would be retried and what command shape can be reconstructed.</li>
 </ul>
 <h2>Credentials</h2>
 <pre><code>
@@ -175,6 +199,7 @@ dispatch creds remove &lt;name&gt;
 </code></pre>
 <p>Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper <code>PSCredential</code> handoff remains planned for the wrapper slice. PsExec explicit password handoff remains intentionally unsupported while the v1 PsExec boundary forbids plaintext <code>psexec -u/-p</code> password passing.</p>
 <p>Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.</p>
+<p>Use <code>creds</code> to manage provider-backed local credential state for references that are already defined in config. These commands do not add plaintext passwords to YAML, and <code>remove</code> does not delete the config entry itself.</p>
 <p>Subcommands:</p>
 <ul>
 <li><code>creds list</code> shows configured credential references and provider metadata that is safe to display. It does not reveal passwords or secret values.</li>
@@ -198,6 +223,7 @@ dispatch doctor [--output rich|json|table]
 <p>Status: partial/current diagnostics, with expanded transport-aware checks planned v1.</p>
 <p><code>doctor</code> reports local readiness. It does not remediate endpoints.</p>
 <p>Current diagnostics are local prerequisite checks only. Expanded <code>--transport psexec|psrp|winrm|auto</code> behavior is planned but not accepted by the current command, so operators cannot request transport-specific prerequisite checks yet.</p>
+<p>Use <code>doctor</code> when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use future <code>hosts test</code> behavior for endpoint-specific transport checks; <code>doctor</code> is not a fleet scan.</p>
 <h2>Init</h2>
 <pre><code>
 dispatch init config
@@ -207,6 +233,7 @@ dispatch init all
 </code></pre>
 <p>Status: current.</p>
 <p>Scaffolds starter YAML files in the current directory: <code>config.yml</code>, <code>hosts.yml</code>, and <code>job.yml</code>. <code>init all</code> creates all three files. Init refuses to overwrite an existing starter file.</p>
+<p>Use <code>init</code> to create examples that are valid enough to edit, not to discover an existing environment. Init writes only to the current directory and stops before overwriting existing files.</p>
 <p>Subcommands:</p>
 <ul>
 <li><code>init config</code> creates <code>config.yml</code> with starter Dispatch defaults and a prompt-based credential reference example.</li>

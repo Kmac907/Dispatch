@@ -6,6 +6,8 @@
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
 ```
 
+Use `run ps` when Dispatch should own execution, result capture, stdout/stderr, and run history.
+
 ## Preview A Script Run
 
 ```powershell
@@ -60,6 +62,22 @@ dispatch logs list
 dispatch logs show latest
 dispatch logs export latest --dest .\exports
 ```
+
+## Push A File
+
+```powershell
+dispatch push .\payloads\agent.msi --dest C:\ProgramData\Dispatch\Payloads\agent.msi --target PC001 --transport psrp --checksum
+```
+
+Use `push` when the remote destination path matters.
+
+## Push And Execute A Script
+
+```powershell
+dispatch push .\Fix.ps1 --dest C:\Temp\Fix.ps1 --target PC001 --transport psrp --execute --cleanup
+```
+
+This copies `Fix.ps1` to `C:\Temp\Fix.ps1`, runs that remote file, then removes it after successful execution. Use `dispatch run ps .\Fix.ps1` instead when the goal is simply managed script execution.
 
 ## Transport Examples
 

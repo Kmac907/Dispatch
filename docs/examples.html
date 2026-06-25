@@ -50,6 +50,7 @@
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
 </code></pre>
+<p>Use <code>run ps</code> when Dispatch should own execution, result capture, stdout/stderr, and run history.</p>
 <h2>Preview A Script Run</h2>
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json
@@ -92,6 +93,16 @@ dispatch logs list
 dispatch logs show latest
 dispatch logs export latest --dest .\exports
 </code></pre>
+<h2>Push A File</h2>
+<pre><code>
+dispatch push .\payloads\agent.msi --dest C:\ProgramData\Dispatch\Payloads\agent.msi --target PC001 --transport psrp --checksum
+</code></pre>
+<p>Use <code>push</code> when the remote destination path matters.</p>
+<h2>Push And Execute A Script</h2>
+<pre><code>
+dispatch push .\Fix.ps1 --dest C:\Temp\Fix.ps1 --target PC001 --transport psrp --execute --cleanup
+</code></pre>
+<p>This copies <code>Fix.ps1</code> to <code>C:\Temp\Fix.ps1</code>, runs that remote file, then removes it after successful execution. Use <code>dispatch run ps .\Fix.ps1</code> instead when the goal is simply managed script execution.</p>
 <h2>Transport Examples</h2>
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
