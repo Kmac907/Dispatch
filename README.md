@@ -20,7 +20,7 @@ Project site: https://kmac907.github.io/Dispatch/
 - Final run summary: `Admin\results.json`.
 - Per-target `stdout.txt`, `stderr.txt`, and collected script-created artifacts.
 - Current credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers on implemented PSRP and raw WinRM paths.
-- Planned script secret handoff is separate from endpoint credentials: `--credential <name>` selects the remoting credential, while the planned `dispatch run ps ... --secret name=reference` surface will bind resolved secrets to script parameters without putting secret values on the command line.
+- Script secret handoff is separate from endpoint credentials: `--credential <name>` selects the remoting credential, while `dispatch run ps ... --secret name=reference` describes a script input secret. Current plan/dry-run output shows only the redacted script parameter binding; a later real-execution slice will resolve the reference and bind the value to that script parameter without putting secret values on the command line.
 - Machine-wide YAML config at `C:\ProgramData\Dispatch\config.yml`.
 - Planned PowerShell module wrapper over the same `dispatch.exe` command surface.
 
@@ -96,7 +96,7 @@ credentials:
 
 Credential references may appear in `job.yml`, `hosts.yml`, or `--credential <name>`. Provider details, usernames, store paths, Key Vault URIs, and secret names live in `config.yml`. Passwords and secret values do not belong in YAML.
 
-Script secret handoff uses a different planned surface: `dispatch run ps ... --secret name=reference`. Its default handoff is script parameter binding: `name` becomes a script parameter such as `-packageSas`, and plan/dry-run output renders only `[redacted]`. Secret values must not appear in command lines, logs, result files, or structured output. Real safe parameter binding is later implementation work.
+Script secret handoff uses a different surface: `dispatch run ps ... --secret name=reference`. The script declares a matching parameter, such as `param([string]$packageSas)`, and Dispatch maps `name` to `-packageSas`. Current plan/dry-run output validates the option shape, rejects duplicate or plaintext-looking values, and renders only `-packageSas [redacted]`; real runs with `--secret` are blocked before endpoint work until the safe binding slice is implemented. In the final pass-off flow, Dispatch will resolve `reference` from a configured secret provider on the admin side, bind the resolved value to the script parameter through the selected transport, and keep the value out of command lines, logs, result files, traces, and structured output.
 
 See [Credentials](docs/credentials.md) for the operator-facing credential model.
 
@@ -186,6 +186,6 @@ The planned v1 source installer will also support running from an existing check
 
 - Do not pass passwords, SAS tokens, or secrets on the command line.
 - Store only credential references in job, host, and config YAML.
-- Do not use `--credential` for script inputs; planned script secrets use `--secret name=reference` and redacted script-parameter handoff.
+- Do not use `--credential` for script inputs; script secrets use `--secret name=reference` and redacted script-parameter handoff.
 - Keep validation host names in ignored local files such as `workflow/build/test-hosts.yml`.
 - Dispatch does not remediate WinRM, firewall, delegation, endpoint policy, or admin-share configuration.

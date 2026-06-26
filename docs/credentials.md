@@ -8,13 +8,13 @@ Reference names are safe to log. Resolved passwords are never serialized and mus
 
 `--credential <name>` selects the account used by a transport to authenticate to the endpoint. It is not a script input mechanism and must not be used for SAS tokens, API keys, installer secrets, or payload-download secrets.
 
-Script secret handoff is a separate planned surface:
+Script secret handoff is a separate surface:
 
 ```powershell
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The default script secret handoff is script parameter binding. Plan and dry-run paths may validate secret references and render redacted parameter bindings such as `-packageSas [redacted]`, but they must not resolve or print secret values. Real safe parameter binding is later implementation work.
+The default script secret handoff is script parameter binding. The script declares a matching parameter such as `param([string]$packageSas)`. Current plan and dry-run paths validate the option shape and render redacted parameter bindings such as `-packageSas [redacted]`, but they do not resolve or print secret values. Real runs with `--secret` are blocked before endpoint work until a later slice can resolve the configured secret reference and bind the value to the script parameter safely.
 
 ## Global Credential Catalog
 
@@ -113,7 +113,7 @@ dispatch apply .\job.yml --credential breakglass-admin
 
 Runtime credential resolution is implemented for PSRP and raw WinRM execution. Plan and dry-run paths validate references but do not prompt, decrypt DPAPI files, read Windows Credential Manager targets, or read Key Vault secrets.
 
-Script secrets follow their own `--secret name=reference` model. Secret values must never be passed as ordinary command-line script arguments or serialized into Dispatch logs or results.
+Script secrets follow their own `--secret name=reference` model. In the final pass-off flow, Dispatch resolves `reference` from the configured secret provider on the admin side and binds it to the script parameter named by `name`. Secret values must never be passed as ordinary command-line script arguments or serialized into Dispatch logs or results.
 
 ## Azure Key Vault Auth
 

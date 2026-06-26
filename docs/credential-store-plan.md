@@ -8,13 +8,13 @@ This plan covers endpoint credentials selected by credential references such as 
 
 It does not make Dispatch responsible for script secret handoff, SAS token delivery, Blob payload retrieval, or Azure Key Vault payload-secret retrieval. Those are separate concerns from endpoint authentication.
 
-The approved script secret handoff surface is separate and planned as:
+The approved script secret handoff surface is separate:
 
 ```powershell
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas
 ```
 
-`--credential <name>` selects the endpoint credential. `--secret name=reference` selects a script secret reference. The initial implementation boundary can validate those references and render redacted script-parameter bindings such as `-packageSas [redacted]` in plan/dry-run output. Real safe parameter binding is later implementation work. Secret values must not be placed on the command line, in logs, in results, in traces, or in artifacts.
+`--credential <name>` selects the endpoint credential. `--secret name=reference` selects a script secret reference. `name` becomes the PowerShell script parameter, so the script declares `param([string]$packageSas)` and plan output renders `-packageSas [redacted]`. Current support validates the option shape and redacted plan/dry-run rendering only; real runs with `--secret` are blocked before endpoint work. The final pass-off flow will resolve `reference` from a configured secret provider on the admin side and bind the resolved value to the script parameter through the selected transport. Secret values must not be placed on the command line, in logs, in results, in traces, or in artifacts.
 
 ## Core Principle
 

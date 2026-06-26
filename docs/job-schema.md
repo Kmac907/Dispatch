@@ -109,4 +109,4 @@ Relative `ps` and `copy.src` task paths resolve from the job file directory, sca
 
 Job files may contain endpoint credential reference names, but must not contain passwords, tokens, SAS values, or secret material.
 
-`credential` is not a script secret. The planned `dispatch run ps ... --secret name=reference` surface is separate from the current job schema. If job-level script secrets are added later, plan output must render only redacted script-parameter bindings, and real execution must not write secret values to command lines, logs, results, traces, or artifacts.
+`credential` is not a script secret. The current `dispatch run ps ... --secret name=reference` plan/dry-run surface is separate from the current job schema. If job-level script secrets are added later, plan output must render only redacted script-parameter bindings, and real execution must not write secret values to command lines, logs, results, traces, or artifacts.

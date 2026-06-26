@@ -256,7 +256,8 @@ Must continue to cover:
 - installer/media ownership
 - script arguments
 - secret handling expectations
-- planned redacted script-parameter handoff for `--secret name=reference`
+- current redacted plan/dry-run script-parameter handoff for `--secret name=reference`
+- future provider-backed secret resolution and safe transport binding to the script parameter
 - cross-reference where script-created logs and artifacts should be written, but do not make this the primary output/results doc
 
 ## Reference and contract documentation
@@ -377,7 +378,7 @@ Purpose:
 
 Purpose:
 - Credential-reference model and provider behavior.
-- Must distinguish endpoint credential references from planned script secret references.
+- Must distinguish endpoint credential references from script secret references.
 
 ### 29. `docs/credential-store-plan.md`
 
@@ -389,7 +390,7 @@ Audience:
 
 Notes:
 - This is not the primary operator credential guide; operators should start with `docs/credentials.md`.
-- This covers endpoint credentials only; planned script secret handoff belongs with script-owned payload and security docs.
+- This covers endpoint credentials only; script secret handoff belongs with script-owned payload and security docs. Current `--secret name=reference` support is plan/dry-run redacted parameter rendering; real provider-backed pass-off remains future work.
 
 ### 30. `docs/logs.md`
 

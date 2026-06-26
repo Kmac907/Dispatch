@@ -57,13 +57,13 @@ dispatch run ps .\Fix.ps1 --target PC001 --credential prod-admin
 
 `--credential` selects the endpoint credential for transport authentication. It is not a script input secret.
 
-## Planned Script Secret Preview
+## Script Secret Preview
 
 ```powershell
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The planned `--secret name=reference` surface renders redacted script-parameter bindings during plan/dry-run. Secret values are not command-line arguments and must not appear in logs or results.
+The `--secret name=reference` surface renders redacted script-parameter bindings during plan/dry-run. In this example the script should declare `param([string]$packageSas)`, and plan output may show `-packageSas [redacted]`. Real execution with `--secret` is blocked until Dispatch can resolve `prod-package-sas` from a configured provider and bind it to the script parameter safely. Secret values are not ordinary command-line arguments and must not appear in logs or results.
 
 ## Logs
 

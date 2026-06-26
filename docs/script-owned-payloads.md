@@ -29,5 +29,7 @@ v1 guardrails:
 - Dispatch logs and result metadata should describe orchestration behavior, not payload download internals.
 - Dispatch does not generate, validate, refresh, store, or pass SAS tokens.
 - Do not pass credentials, SAS tokens, or other secrets on the command line.
-- Planned script secret handoff uses `dispatch run ps ... --secret name=reference`, separate from endpoint `--credential`.
-- The default handoff is script parameter binding. Plan/dry-run output may render redacted parameter bindings such as `-packageSas [redacted]`, while real safe parameter binding is later work.
+- Script secret handoff uses `dispatch run ps ... --secret name=reference`, separate from endpoint `--credential`.
+- The default handoff is script parameter binding. Scripts declare a matching parameter such as `param([string]$packageSas)`.
+- Current plan/dry-run output renders redacted parameter bindings such as `-packageSas [redacted]`; real runs with `--secret` are blocked until Dispatch can resolve the reference and bind the value safely.
+- The final pass-off flow must keep resolved secret values out of ordinary command lines, logs, results, traces, artifacts, and structured output.

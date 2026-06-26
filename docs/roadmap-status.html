@@ -77,7 +77,7 @@
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
 <li>YAML task execution beyond <code>ps</code>/<code>cmd</code>/<code>exe</code>, including real <code>copy</code> transfer execution, remains planned.</li>
 <li>Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
-<li>Script secret handoff is separate from endpoint <code>--credential</code>. The approved initial boundary is planned <code>dispatch run ps ... --secret name=reference</code> validation and redacted plan rendering of script-parameter bindings; real safe parameter binding is later work.</li>
+<li>Script secret handoff is separate from endpoint <code>--credential</code>. The approved initial boundary is current <code>dispatch run ps ... --secret name=reference</code> plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>

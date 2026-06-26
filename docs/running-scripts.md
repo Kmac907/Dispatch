@@ -38,13 +38,21 @@ Planning does not prompt for passwords, decrypt DPAPI files, read Windows Creden
 
 ## Script Secret Handoff
 
-`--credential <name>` is for endpoint authentication only. Planned script secrets use `--secret name=reference`:
+`--credential <name>` is for endpoint authentication only. Script secrets use `--secret name=reference`:
 
 ```powershell
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The default handoff is script parameter binding. Plan and dry-run output can validate the reference and show the redacted parameter the script would receive, for example `-packageSas [redacted]`, but it must not show the secret value. Real safe parameter binding is later work.
+The default handoff is script parameter binding. The script declares a matching parameter:
+
+```powershell
+param([string]$packageSas)
+```
+
+Current plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example `-packageSas [redacted]`. A real run with `--secret` is rejected before endpoint work until the safe binding slice is implemented.
+
+The final pass-off flow will resolve `prod-package-sas` from the configured secret provider on the admin side and bind the resolved value to `$packageSas` through the selected transport. Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.
 
 ## Output Modes
 

@@ -23,7 +23,7 @@ dispatch doctor
 dispatch init job|hosts|config|all
 dispatch version</code></pre>
     <h2>Common Options</h2>
-    <p>Use <code>--target</code>, <code>--inventory</code>, <code>--transport</code>, <code>--credential</code>, <code>--config</code>, <code>--plan</code>, <code>--output</code>, and <code>--no-progress</code> where supported by the command. Planned <code>run ps</code> script secret handoff uses <code>--secret name=reference</code>, separate from endpoint <code>--credential</code>, and plan output may render only redacted script-parameter bindings.</p>
+    <p>Use <code>--target</code>, <code>--inventory</code>, <code>--transport</code>, <code>--credential</code>, <code>--config</code>, <code>--plan</code>, <code>--output</code>, and <code>--no-progress</code> where supported by the command. <code>run ps</code> script secret handoff uses <code>--secret name=reference</code>, separate from endpoint <code>--credential</code>; current plan output may render only redacted script-parameter bindings, and real execution remains blocked until safe provider-backed parameter binding is implemented.</p>
     <p>The current <code>apply</code> path supports planning, checking, and executing selected multi-task script-first <code>ps</code>, scalar <code>cmd</code>, and scalar <code>exe</code> jobs, plus plan/check-only <code>copy</code> task rendering and transport precedence across explicit CLI values, job transport, inventory transport policy, and config/default transport. Additional task execution remains planned v1 work.</p>
     <h2>Output Modes</h2>
     <p><code>rich</code> is for humans. <code>json</code>, <code>ndjson</code>, <code>yaml</code>, and table output are for automation and stable parsing.</p>

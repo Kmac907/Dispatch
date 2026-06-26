@@ -46,7 +46,7 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - Installer/media payload staging.
 - Azure Blob payload download, SAS generation, or SAS management.
 - Azure Key Vault retrieval for runtime script/payload secret handoff beyond the approved script secret reference boundary.
-- Dispatch-managed SAS generation, Blob payload retrieval, or general runtime script secret orchestration beyond the planned `--secret name=reference` handoff model.
+- Dispatch-managed SAS generation, Blob payload retrieval, or general runtime script secret orchestration beyond the `--secret name=reference` handoff model.
 - Endpoint credential handoff outside the `6.4` credential-reference model and the explicitly selected transport/provider slices.
 - Managed/harness execution mode.
 - Retry policy beyond basic failure reporting.
@@ -66,7 +66,7 @@ Live endpoint validation requires at least one successful run against a user-app
 - No permanent endpoint agent.
 - No Azure Files identity/auth framework.
 - No CredSSP/delegation automation.
-- No secret vault system. Dispatch may reference external secret sources for planned script secret handoff, but it must not become the source of truth for secret values.
+- No secret vault system. Dispatch may reference external secret sources for script secret handoff, but it must not become the source of truth for secret values.
 - No Linux/macOS target support.
 - No full software inventory/configuration-management model beyond declared jobs, host selection, and small task vocabulary.
 - No installer/media payload staging in v1.
@@ -420,7 +420,7 @@ PsExec SAS/secret handoff model:
 
 - v1 has no supported SAS token handoff.
 - Operators may pass ordinary non-secret script arguments, but SAS tokens and credentials must not be passed on the PsExec command line.
-- Planned PsExec script secret handoff must use the common `--secret name=reference` parameter model: Dispatch renders only the script parameter name plus a redacted placeholder in plan output, never the secret value.
+- PsExec script secret handoff must use the common `--secret name=reference` parameter model: `name` maps to a script parameter such as `-payloadSas`; Dispatch renders only the parameter name plus a redacted placeholder in plan output, never the secret value.
 - PsExec real execution must remain blocked for script secrets until there is a safe transport-specific parameter binding path that does not expose the secret through process command lines, logs, dry-run rendering, traces, or process inspection.
 
 #### PSRP transport
@@ -466,9 +466,9 @@ PSRP credential model:
 PSRP SAS/secret handoff model:
 
 - Dispatch does not yet have supported PSRP SAS token handoff.
-- Planned handoff uses the common script-parameter model so scripts declare a normal parameter such as `param([string]$payloadSas)`.
-- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render only the redacted parameter binding, such as `-payloadSas [redacted]`, in plan/dry-run output.
-- PSRP real execution should bind the resolved secret in memory through the remoting runspace rather than writing it to a command line or remote temporary file.
+- Handoff uses the common script-parameter model so scripts declare a normal parameter such as `param([string]$payloadSas)`, and `--secret payloadSas=reference` maps to that parameter.
+- For Blob/SAS use cases, the current implementation can validate the `--secret name=reference` option shape and render only the redacted parameter binding, such as `-payloadSas [redacted]`, in plan/dry-run output.
+- PSRP real execution should resolve the configured secret reference on the admin side and bind the resolved secret in memory through the remoting runspace rather than writing it to a command line or remote temporary file.
 - Example shape:
 
 ```powershell
@@ -530,8 +530,8 @@ Raw WinRM credential model:
 Raw WinRM SAS/secret handoff model:
 
 - Dispatch has a raw WinRM transport, but does not yet have supported raw WinRM SAS token handoff.
-- Planned handoff uses the common script-parameter model.
-- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render only the redacted parameter binding, such as `-payloadSas [redacted]`, in plan/dry-run output.
+- Planned handoff uses the common script-parameter model where `name` maps to a script parameter such as `-payloadSas`.
+- For Blob/SAS use cases, the current implementation can validate the `--secret name=reference` option shape and render only the redacted parameter binding, such as `-payloadSas [redacted]`, in plan/dry-run output.
 - Raw SAS tokens must not be rendered into remote command lines, local logs, dry-run output, result JSON, CSV summaries, or terminal output.
 - Raw WinRM real execution must remain blocked for script secrets until there is a safe parameter-binding path that does not expose the secret through process command lines or transport traces.
 - Example shape:
@@ -1581,14 +1581,14 @@ Document and enforce the boundary that external payload retrieval belongs to the
 Scope:
 - Document recommended patterns for scripts that download payloads from Blob storage with SAS access.
 - Keep endpoint `--credential <name>` separate from script secret handoff.
-- Add the planned CLI shape `dispatch run ps <script.ps1> --secret name=reference`.
+- Add the CLI shape `dispatch run ps <script.ps1> --secret name=reference`.
 - Treat `name` as the script-facing secret name and `reference` as the configured secret reference.
 - Make the default handoff a script parameter binding where `name` becomes `-<name>` for the script.
-- Allow dry-run/plan to validate secret references and render redacted parameter bindings without resolving or printing secret values.
+- Allow dry-run/plan to validate script secret option shape and render redacted parameter bindings without resolving or printing secret values.
 - Keep examples focused on passing ordinary script arguments, environment values owned by the script, or redacted secret parameters into scripts.
 - Add warnings in docs/help text that scripts should not write SAS tokens to logs.
 - Redact secret values from console output, logs, result JSON, CSV summaries, dry-run output, and transport command rendering.
-- Stage real safe parameter binding after the plan/dry-run rendering boundary, with transport-specific implementation rules that avoid command-line, log, trace, result, and artifact exposure.
+- Stage real safe parameter binding after the plan/dry-run rendering boundary: resolve the configured secret reference on the admin side, bind the resolved value to the script parameter through the selected transport, and avoid command-line, log, trace, result, artifact, and process-inspection exposure.
 
 Non-goals:
 - No Dispatch-owned Blob download implementation.
@@ -1607,8 +1607,8 @@ Dependencies:
 
 Definition of done:
 - Documentation includes script-owned Blob/SAS payload examples.
-- `dispatch run ps ... --secret name=reference --plan` validates and renders a redacted script-parameter binding such as `-name [redacted]` without resolving or logging secret values.
-- Real safe parameter binding is tracked as later implementation work; transports must not expose resolved values through command lines, logs, results, traces, artifacts, or process inspection.
+- `dispatch run ps ... --secret name=reference --plan` validates option shape and renders a redacted script-parameter binding such as `-name [redacted]` without resolving or logging secret values.
+- Real safe parameter binding is tracked as future implementation work; transports must not expose resolved values through command lines, logs, results, traces, artifacts, or process inspection.
 - CLI/help text does not imply Dispatch owns Blob payload retrieval.
 - The roadmap keeps Blob payload orchestration out of Dispatch scope.
 

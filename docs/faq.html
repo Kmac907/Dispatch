@@ -56,7 +56,7 @@
 <h2>Why can&#39;t I pass a password directly?</h2>
 <p>Command-line secrets are visible to process inspection, shell history, logs, and automation wrappers. Dispatch uses credential references and provider-backed resolution instead.</p>
 <h2>Is <code>--credential</code> how I pass a secret to my script?</h2>
-<p>No. <code>--credential &lt;name&gt;</code> selects the endpoint credential for transport authentication. Planned script secrets use <code>dispatch run ps ... --secret name=reference</code>, which binds the resolved secret to a script parameter when real execution support exists. Plan output may show only redacted parameter bindings, never secret values.</p>
+<p>No. <code>--credential &lt;name&gt;</code> selects the endpoint credential for transport authentication. Script secrets use <code>dispatch run ps ... --secret name=reference</code>, where <code>name</code> maps to a script parameter such as <code>-packageSas</code>. Current support is plan/dry-run only and shows only a redacted binding such as <code>-packageSas [redacted]</code>. Real execution with <code>--secret</code> is blocked until Dispatch can resolve <code>reference</code> from a configured provider and bind the value to the script parameter without exposing it in command lines, logs, results, traces, or artifacts.</p>
 <h2>Why did target selection not match what I expected?</h2>
 <p>Check inventory groups, host names, selectors, excludes, and de-duplication. Use <code>hosts list</code>, <code>hosts validate</code>, or <code>--plan</code> where available to inspect the resolved set before execution.</p>
 <h2>Why was a host skipped?</h2>

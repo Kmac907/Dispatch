@@ -69,11 +69,16 @@ dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json
 </code></pre>
 <p>Planning does not prompt for passwords, decrypt DPAPI files, read Windows Credential Manager targets, read Key Vault secrets, or touch endpoints.</p>
 <h2>Script Secret Handoff</h2>
-<p><code>--credential &lt;name&gt;</code> is for endpoint authentication only. Planned script secrets use <code>--secret name=reference</code>:</p>
+<p><code>--credential &lt;name&gt;</code> is for endpoint authentication only. Script secrets use <code>--secret name=reference</code>:</p>
 <pre><code>
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 </code></pre>
-<p>The default handoff is script parameter binding. Plan and dry-run output can validate the reference and show the redacted parameter the script would receive, for example <code>-packageSas [redacted]</code>, but it must not show the secret value. Real safe parameter binding is later work.</p>
+<p>The default handoff is script parameter binding. The script declares a matching parameter:</p>
+<pre><code>
+param([string]$packageSas)
+</code></pre>
+<p>Current plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example <code>-packageSas [redacted]</code>. A real run with <code>--secret</code> is rejected before endpoint work until the safe binding slice is implemented.</p>
+<p>The final pass-off flow will resolve <code>prod-package-sas</code> from the configured secret provider on the admin side and bind the resolved value to <code>$packageSas</code> through the selected transport. Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.</p>
 <h2>Output Modes</h2>
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --output rich
