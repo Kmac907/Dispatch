@@ -20,7 +20,7 @@ Command-line secrets are visible to process inspection, shell history, logs, and
 
 ## Is `--credential` how I pass a secret to my script?
 
-No. `--credential <name>` selects the endpoint credential for transport authentication. Script secrets use `dispatch run ps ... --secret name=reference`, where `name` maps to a script parameter such as `-packageSas`. Current support is plan/dry-run only and shows only a redacted binding such as `-packageSas [redacted]`. Real execution with `--secret` is blocked until Dispatch can resolve `reference` from a configured provider and bind the value to the script parameter without exposing it in command lines, logs, results, traces, or artifacts.
+No. `--credential <name>` selects the endpoint credential for transport authentication. Script secrets use `dispatch run ps ... --secret name=reference`, where `name` maps to a script parameter such as `-packageSas`. Dispatch resolves `reference` from a configured provider and binds the value to the script parameter without exposing it in command lines, logs, results, traces, or artifacts. Plan output shows only a redacted binding such as `-packageSas [redacted]`.
 
 ## Why did target selection not match what I expected?
 

@@ -109,9 +109,7 @@ Use `--plan` to validate inputs and inspect the selected targets, payload, trans
 
 Script secret handoff for `run ps` uses `--secret name=reference`. It is separate from `--credential`: credentials authenticate the transport, while secrets are script inputs. `name` becomes the script parameter name, so `--secret packageSas=prod-package-sas` renders as `-packageSas [redacted]` and expects the script to declare a matching parameter such as `param([string]$packageSas)`.
 
-Current support is plan/dry-run only. Dispatch validates the option shape, rejects duplicate names and plaintext-looking values, and renders only the redacted parameter binding. A real run with `--secret` is rejected before endpoint work until safe transport-specific parameter binding is implemented.
-
-The final pass-off flow is: resolve `reference` from the configured secret provider on the admin side, bind the resolved value to the script parameter through the selected transport, and keep the value out of ordinary command lines, console output, logs, results, traces, artifacts, and structured output.
+Dispatch validates the option shape, rejects duplicate names and plaintext-looking values, resolves `reference` from the configured secret provider on the admin side, and binds the resolved value to the script parameter through the selected transport. Plan/dry-run output renders only the redacted parameter binding. Secret values must stay out of ordinary command lines, console output, logs, results, traces, artifacts, and structured output.
 
 Subcommands:
 

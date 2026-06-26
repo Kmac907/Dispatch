@@ -77,8 +77,8 @@ dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-packag
 <pre><code>
 param([string]$packageSas)
 </code></pre>
-<p>Current plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example <code>-packageSas [redacted]</code>. A real run with <code>--secret</code> is rejected before endpoint work until the safe binding slice is implemented.</p>
-<p>The final pass-off flow will resolve <code>prod-package-sas</code> from the configured secret provider on the admin side and bind the resolved value to <code>$packageSas</code> through the selected transport. Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.</p>
+<p>Dispatch resolves <code>prod-package-sas</code> from the configured secret provider on the admin side and binds the resolved value to <code>$packageSas</code> through the selected transport. Plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example <code>-packageSas [redacted]</code>.</p>
+<p>Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.</p>
 <h2>Output Modes</h2>
 <pre><code>
 dispatch run ps .\Fix.ps1 --target PC001 --output rich

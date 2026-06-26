@@ -31,5 +31,5 @@ v1 guardrails:
 - Do not pass credentials, SAS tokens, or other secrets on the command line.
 - Script secret handoff uses `dispatch run ps ... --secret name=reference`, separate from endpoint `--credential`.
 - The default handoff is script parameter binding. Scripts declare a matching parameter such as `param([string]$packageSas)`.
-- Current plan/dry-run output renders redacted parameter bindings such as `-packageSas [redacted]`; real runs with `--secret` are blocked until Dispatch can resolve the reference and bind the value safely.
-- The final pass-off flow must keep resolved secret values out of ordinary command lines, logs, results, traces, artifacts, and structured output.
+- Dispatch resolves the configured reference and binds the value to the named script parameter through the selected transport.
+- Plan/dry-run output renders redacted parameter bindings such as `-packageSas [redacted]`, and resolved secret values must stay out of ordinary command lines, logs, results, traces, artifacts, and structured output.

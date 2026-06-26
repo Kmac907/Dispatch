@@ -50,9 +50,9 @@ The default handoff is script parameter binding. The script declares a matching 
 param([string]$packageSas)
 ```
 
-Current plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example `-packageSas [redacted]`. A real run with `--secret` is rejected before endpoint work until the safe binding slice is implemented.
+Dispatch resolves `prod-package-sas` from the configured secret provider on the admin side and binds the resolved value to `$packageSas` through the selected transport. Plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example `-packageSas [redacted]`.
 
-The final pass-off flow will resolve `prod-package-sas` from the configured secret provider on the admin side and bind the resolved value to `$packageSas` through the selected transport. Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.
+Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.
 
 ## Output Modes
 

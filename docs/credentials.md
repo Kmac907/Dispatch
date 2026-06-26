@@ -14,7 +14,7 @@ Script secret handoff is a separate surface:
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The default script secret handoff is script parameter binding. The script declares a matching parameter such as `param([string]$packageSas)`. Current plan and dry-run paths validate the option shape and render redacted parameter bindings such as `-packageSas [redacted]`, but they do not resolve or print secret values. Real runs with `--secret` are blocked before endpoint work until a later slice can resolve the configured secret reference and bind the value to the script parameter safely.
+The default script secret handoff is script parameter binding. The script declares a matching parameter such as `param([string]$packageSas)`. Dispatch validates the option shape, resolves the configured secret reference, and binds the value to the script parameter through the selected transport. Plan and dry-run paths render redacted parameter bindings such as `-packageSas [redacted]` and do not resolve or print secret values.
 
 ## Global Credential Catalog
 

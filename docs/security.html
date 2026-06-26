@@ -65,7 +65,7 @@
 <p>Dispatch does not support passing endpoint passwords, SAS tokens, or secret values directly as command-line flags.</p>
 <h2>Script Secret Handoff</h2>
 <p>Endpoint credentials and script secrets are separate. <code>--credential &lt;name&gt;</code> chooses the remoting credential; it does not pass a secret to the script.</p>
-<p>The script secret CLI is <code>dispatch run ps ... --secret name=reference</code>. The default handoff is script parameter binding: <code>name</code> becomes a script parameter such as <code>-packageSas</code>, and the script declares <code>param([string]$packageSas)</code>. Current plan and dry-run output validate the option shape and render only redacted bindings such as <code>-packageSas [redacted]</code>. Real runs with <code>--secret</code> are blocked before endpoint work until Dispatch can resolve the configured reference and bind the value safely through the selected transport.</p>
+<p>The script secret CLI is <code>dispatch run ps ... --secret name=reference</code>. The default handoff is script parameter binding: <code>name</code> becomes a script parameter such as <code>-packageSas</code>, and the script declares <code>param([string]$packageSas)</code>. Dispatch resolves the configured reference and binds the value safely through the selected transport. Plan and dry-run output validate the option shape and render only redacted bindings such as <code>-packageSas [redacted]</code>.</p>
 <h2>Logging And Redaction</h2>
 <p>Secret values must not appear in:</p>
 <ul>

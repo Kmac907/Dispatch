@@ -131,7 +131,7 @@ tasks:
 <p><code>job.vars</code> is only an inline runtime/task-input bag. Transport selection must use the top-level <code>transport</code> field, and separate vars-file concepts are rejected before endpoint work.</p>
 <h2>Secret Boundary</h2>
 <p>Job files may contain endpoint credential reference names, but must not contain passwords, tokens, SAS values, or secret material.</p>
-<p><code>credential</code> is not a script secret. The current <code>dispatch run ps ... --secret name=reference</code> plan/dry-run surface is separate from the current job schema. If job-level script secrets are added later, plan output must render only redacted script-parameter bindings, and real execution must not write secret values to command lines, logs, results, traces, or artifacts.</p>
+<p><code>credential</code> is not a script secret. The <code>dispatch run ps ... --secret name=reference</code> surface is separate from the current job schema. If job-level script secrets are added later, they must follow the same configured-reference and script-parameter binding model, plan output must render only redacted script-parameter bindings, and real execution must not write secret values to command lines, logs, results, traces, or artifacts.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>

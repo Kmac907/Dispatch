@@ -71,8 +71,8 @@ dispatch run ps .\Install-App.ps1 `
 <li>Do not pass credentials, SAS tokens, or other secrets on the command line.</li>
 <li>Script secret handoff uses <code>dispatch run ps ... --secret name=reference</code>, separate from endpoint <code>--credential</code>.</li>
 <li>The default handoff is script parameter binding. Scripts declare a matching parameter such as <code>param([string]$packageSas)</code>.</li>
-<li>Current plan/dry-run output renders redacted parameter bindings such as <code>-packageSas [redacted]</code>; real runs with <code>--secret</code> are blocked until Dispatch can resolve the reference and bind the value safely.</li>
-<li>The final pass-off flow must keep resolved secret values out of ordinary command lines, logs, results, traces, artifacts, and structured output.</li>
+<li>Dispatch resolves the configured reference and binds the value to the named script parameter through the selected transport.</li>
+<li>Plan/dry-run output renders redacted parameter bindings such as <code>-packageSas [redacted]</code>, and resolved secret values must stay out of ordinary command lines, logs, results, traces, artifacts, and structured output.</li>
 </ul>
   </article>
 </main>

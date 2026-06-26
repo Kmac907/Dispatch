@@ -72,7 +72,7 @@ Task tags are optional on `ps`, `cmd`, `exe`, and plan/check `copy` tasks. `--ta
 
 ## Script Secrets
 
-Script secret handoff currently exists only as the `dispatch run ps ... --secret name=reference` plan/dry-run surface. It is not part of the current `apply` subset. When job-level script secrets are added, they must follow the same redacted script-parameter model and no-secret-values-in-logs rule.
+Script secret handoff is available through the `dispatch run ps ... --secret name=reference` surface. It is not part of the current `apply` subset. When job-level script secrets are added, they must follow the same configured-reference, redacted script-parameter model and no-secret-values-in-logs rule.
 
 ## Job Variables
 

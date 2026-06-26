@@ -4,7 +4,7 @@ Dispatch is a Windows-native endpoint automation runner for administrators who n
 
 Dispatch is not an endpoint agent, package manager, or full configuration-management platform. It focuses on target selection, execution planning, transport execution, credential references, live status, logs, results, and copied-back script-created files.
 
-Endpoint credentials and script secret handoff are separate models. `--credential <name>` selects the remoting credential. The script input surface is `dispatch run ps ... --secret name=reference`; current plan output shows a redacted parameter binding such as `-packageSas [redacted]`, while real execution remains blocked until Dispatch can resolve the reference and bind the secret value to the script parameter safely.
+Endpoint credentials and script secret handoff are separate models. `--credential <name>` selects the remoting credential. The script input surface is `dispatch run ps ... --secret name=reference`; Dispatch resolves the reference from a configured provider and binds the value to the named script parameter, while plan output shows only a redacted binding such as `-packageSas [redacted]`.
 
 ## Start Here
 
