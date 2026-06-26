@@ -44,7 +44,7 @@ Planning does not prompt for passwords, decrypt DPAPI files, read Windows Creden
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The default handoff is a protected temporary file below the remote run root `secrets\` folder. Plan and dry-run output can validate the reference and show the redacted secret-file path that the script would read, but it must not show the secret value. Real protected remote staging and cleanup are later work.
+The default handoff is script parameter binding. Plan and dry-run output can validate the reference and show the redacted parameter the script would receive, for example `-packageSas [redacted]`, but it must not show the secret value. Real safe parameter binding is later work.
 
 ## Output Modes
 

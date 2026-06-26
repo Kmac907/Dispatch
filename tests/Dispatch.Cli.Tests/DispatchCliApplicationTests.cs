@@ -208,7 +208,7 @@ public sealed class DispatchCliApplicationTests
     public async Task RunPowerShellDryRunAcceptsScriptSecretReferences()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
-        await File.WriteAllTextAsync(scriptPath, "param([string]$payload_sasFile) Write-Output $payload_sasFile");
+        await File.WriteAllTextAsync(scriptPath, "param([string]$payload_sas) Write-Output $payload_sas");
         var planner = new CapturingPlanner();
         var application = CreateApplication(planner);
 
@@ -7599,8 +7599,7 @@ credentials:
                 .Select(secret => new ScriptSecretHandoffPlan(
                     secret.Name,
                     secret.ReferenceName,
-                    Path.Combine(@"C:\ProgramData\Dispatch\Runs\run-test\secrets", $"{secret.Name}.secret"),
-                    $"-{secret.Name}File"))
+                    $"-{secret.Name}"))
                 .ToArray();
             var plannedCommand = request.Payload switch
             {
@@ -7615,7 +7614,7 @@ credentials:
                             "-File",
                             plannedRemoteScriptPath,
                             .. plannedScriptPayload.ScriptArguments,
-                            .. scriptSecrets.SelectMany(static secret => new[] { secret.ScriptArgumentName, secret.RemotePath })
+                            .. scriptSecrets.SelectMany(static secret => new[] { secret.ScriptParameterName, secret.RedactedValue })
                         ]),
                 CommandPayload commandPayload => new DirectExecutionCommand(
                     "cmd.exe",

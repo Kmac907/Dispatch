@@ -128,7 +128,7 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 </code></pre>
 <p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
-<p>Script secret handoff is planned for <code>run ps</code> as <code>--secret name=reference</code>. It is separate from <code>--credential</code>: credentials authenticate the transport, while secrets are script inputs. The initial boundary is plan/dry-run validation and redacted rendering of the default remote secret-file path under the run root <code>secrets\</code> folder. Secret values must not appear in command lines, logs, results, or structured output. Real protected remote staging and cleanup are later work.</p>
+<p>Script secret handoff is planned for <code>run ps</code> as <code>--secret name=reference</code>. It is separate from <code>--credential</code>: credentials authenticate the transport, while secrets are script inputs. The initial boundary is plan/dry-run validation and redacted rendering of the script parameter binding, for example <code>-packageSas [redacted]</code>. Secret values must not appear in command lines, logs, results, traces, artifacts, or structured output. Real safe parameter binding is later work.</p>
 <p>Subcommands:</p>
 <ul>
 <li><code>run ps &lt;script.ps1&gt;</code> runs a local PowerShell script file as a Dispatch-managed execution. Extra arguments after the script path are passed through as script arguments. Use this for script-first automation, installer/remediation scripts, and any workflow where results/logs matter more than leaving the script at a specific remote path.</li>

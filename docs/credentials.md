@@ -14,7 +14,7 @@ Script secret handoff is a separate planned surface:
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The default script secret handoff is a protected temporary secret file under the remote run root `secrets\` folder. Plan and dry-run paths may validate secret references and render redacted secret-file paths, but they must not resolve or print secret values. Real protected remote staging and cleanup are later implementation work.
+The default script secret handoff is script parameter binding. Plan and dry-run paths may validate secret references and render redacted parameter bindings such as `-packageSas [redacted]`, but they must not resolve or print secret values. Real safe parameter binding is later implementation work.
 
 ## Global Credential Catalog
 
@@ -113,7 +113,7 @@ dispatch apply .\job.yml --credential breakglass-admin
 
 Runtime credential resolution is implemented for PSRP and raw WinRM execution. Plan and dry-run paths validate references but do not prompt, decrypt DPAPI files, read Windows Credential Manager targets, or read Key Vault secrets.
 
-Script secrets follow their own `--secret name=reference` model. Secret values must never be passed as script arguments or serialized into Dispatch logs or results.
+Script secrets follow their own `--secret name=reference` model. Secret values must never be passed as ordinary command-line script arguments or serialized into Dispatch logs or results.
 
 ## Azure Key Vault Auth
 

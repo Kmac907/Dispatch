@@ -107,7 +107,7 @@ dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 
 Use `--plan` to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.
 
-Script secret handoff is planned for `run ps` as `--secret name=reference`. It is separate from `--credential`: credentials authenticate the transport, while secrets are script inputs. The initial boundary is plan/dry-run validation and redacted rendering of the default remote secret-file path under the run root `secrets\` folder. Secret values must not appear in command lines, logs, results, or structured output. Real protected remote staging and cleanup are later work.
+Script secret handoff is planned for `run ps` as `--secret name=reference`. It is separate from `--credential`: credentials authenticate the transport, while secrets are script inputs. The initial boundary is plan/dry-run validation and redacted rendering of the script parameter binding, for example `-packageSas [redacted]`. Secret values must not appear in command lines, logs, results, traces, artifacts, or structured output. Real safe parameter binding is later work.
 
 Subcommands:
 

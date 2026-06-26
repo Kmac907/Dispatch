@@ -20,7 +20,7 @@ Command-line secrets are visible to process inspection, shell history, logs, and
 
 ## Is `--credential` how I pass a secret to my script?
 
-No. `--credential <name>` selects the endpoint credential for transport authentication. Planned script secrets use `dispatch run ps ... --secret name=reference`, which defaults to a protected temporary secret file under the remote run root `secrets\` folder. Plan output may show only redacted file paths, never secret values.
+No. `--credential <name>` selects the endpoint credential for transport authentication. Planned script secrets use `dispatch run ps ... --secret name=reference`, which binds the resolved secret to a script parameter when real execution support exists. Plan output may show only redacted parameter bindings, never secret values.
 
 ## Why did target selection not match what I expected?
 

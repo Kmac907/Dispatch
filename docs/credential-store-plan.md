@@ -14,7 +14,7 @@ The approved script secret handoff surface is separate and planned as:
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas
 ```
 
-`--credential <name>` selects the endpoint credential. `--secret name=reference` selects a script secret reference. The initial implementation boundary can validate those references and render redacted default secret-file paths under the remote run root `secrets\` folder in plan/dry-run output. Real protected remote staging and cleanup are later implementation work. Secret values must not be placed on the command line, in logs, in results, or in artifacts.
+`--credential <name>` selects the endpoint credential. `--secret name=reference` selects a script secret reference. The initial implementation boundary can validate those references and render redacted script-parameter bindings such as `-packageSas [redacted]` in plan/dry-run output. Real safe parameter binding is later implementation work. Secret values must not be placed on the command line, in logs, in results, in traces, or in artifacts.
 
 ## Core Principle
 

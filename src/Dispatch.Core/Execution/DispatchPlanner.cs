@@ -199,8 +199,8 @@ internal sealed class DispatchPlanner(
         arguments.AddRange(payload.ScriptArguments);
         foreach (var secret in scriptSecrets)
         {
-            arguments.Add(secret.ScriptArgumentName);
-            arguments.Add(secret.RemotePath);
+            arguments.Add(secret.ScriptParameterName);
+            arguments.Add(secret.RedactedValue);
         }
 
         return new DirectExecutionCommand("powershell.exe", arguments);
@@ -213,8 +213,7 @@ internal sealed class DispatchPlanner(
             .Select(reference => new ScriptSecretHandoffPlan(
                 reference.Name,
                 reference.ReferenceName,
-                CombineWindowsPath(remoteRunRoot, "secrets", $"{reference.Name}.secret"),
-                $"-{reference.Name}File"))
+                $"-{reference.Name}"))
             .ToArray();
 
     private static DirectExecutionCommand CreateCommandPayloadCommand(CommandPayload payload)

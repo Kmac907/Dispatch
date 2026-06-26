@@ -256,7 +256,7 @@ Must continue to cover:
 - installer/media ownership
 - script arguments
 - secret handling expectations
-- planned protected secret-file handoff under the remote run root `secrets\` folder
+- planned redacted script-parameter handoff for `--secret name=reference`
 - cross-reference where script-created logs and artifacts should be written, but do not make this the primary output/results doc
 
 ## Reference and contract documentation

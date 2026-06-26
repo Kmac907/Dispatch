@@ -30,4 +30,4 @@ v1 guardrails:
 - Dispatch does not generate, validate, refresh, store, or pass SAS tokens.
 - Do not pass credentials, SAS tokens, or other secrets on the command line.
 - Planned script secret handoff uses `dispatch run ps ... --secret name=reference`, separate from endpoint `--credential`.
-- The default handoff is a protected temporary secret file under the remote run root `secrets\` folder. Plan/dry-run output may render redacted secret-file paths, while real protected remote staging and cleanup are later work.
+- The default handoff is script parameter binding. Plan/dry-run output may render redacted parameter bindings such as `-packageSas [redacted]`, while real safe parameter binding is later work.

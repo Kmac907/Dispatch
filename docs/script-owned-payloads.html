@@ -70,7 +70,7 @@ dispatch run ps .\Install-App.ps1 `
 <li>Dispatch does not generate, validate, refresh, store, or pass SAS tokens.</li>
 <li>Do not pass credentials, SAS tokens, or other secrets on the command line.</li>
 <li>Planned script secret handoff uses <code>dispatch run ps ... --secret name=reference</code>, separate from endpoint <code>--credential</code>.</li>
-<li>The default handoff is a protected temporary secret file under the remote run root <code>secrets\</code> folder. Plan/dry-run output may render redacted secret-file paths, while real protected remote staging and cleanup are later work.</li>
+<li>The default handoff is script parameter binding. Plan/dry-run output may render redacted parameter bindings such as <code>-packageSas [redacted]</code>, while real safe parameter binding is later work.</li>
 </ul>
   </article>
 </main>

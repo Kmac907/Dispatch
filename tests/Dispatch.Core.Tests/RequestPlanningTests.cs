@@ -64,7 +64,7 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
-    public async Task PlannerAddsRedactedScriptSecretFileArguments()
+    public async Task PlannerAddsRedactedScriptSecretParameterArguments()
     {
         using var script = TemporaryScript.Create("Install.ps1");
         using var provider = BuildProvider();
@@ -82,8 +82,7 @@ public sealed class RequestPlanningTests
 
         Assert.Equal("payload_sas", secret.Name);
         Assert.Equal("blob-install-sas", secret.ReferenceName);
-        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\secrets\payload_sas.secret", secret.RemotePath);
-        Assert.Equal("-payload_sasFile", secret.ScriptArgumentName);
+        Assert.Equal("-payload_sas", secret.ScriptParameterName);
         Assert.Equal("[redacted]", secret.RedactedValue);
         Assert.NotNull(target.PlannedCommand);
         Assert.Equal(
@@ -95,8 +94,8 @@ public sealed class RequestPlanningTests
                 @"C:\ProgramData\Dispatch\Runs\run-001\script\Install.ps1",
                 "-Mode",
                 "Install",
-                "-payload_sasFile",
-                @"C:\ProgramData\Dispatch\Runs\run-001\secrets\payload_sas.secret"
+                "-payload_sas",
+                "[redacted]"
             ],
             target.PlannedCommand.Arguments);
     }

@@ -215,7 +215,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine($"Throttle: {plan.ThrottleLimit}");
         if (plan.Job.ScriptSecrets.Count > 0)
         {
-            console.WriteLine($"Script secrets: {plan.Job.ScriptSecrets.Count} redacted file handoff plan(s)");
+            console.WriteLine($"Script secrets: {plan.Job.ScriptSecrets.Count} redacted parameter handoff plan(s)");
         }
 
         console.WriteLine();
@@ -241,7 +241,7 @@ internal static class SpectreConsoleRenderer
             console.WriteLine("Script secret handoff:");
             foreach (var secret in plan.Job.ScriptSecrets)
             {
-                console.WriteLine($"  {secret.Name} -> {secret.ReferenceName} as {secret.ScriptArgumentName} {secret.RemotePath} ({secret.RedactedValue})");
+                console.WriteLine($"  {secret.Name} -> {secret.ReferenceName} as {secret.ScriptParameterName} {secret.RedactedValue}");
             }
         }
 

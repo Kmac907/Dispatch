@@ -110,7 +110,7 @@ Credential-reference precedence belongs to roadmap item `6.4` and the canonical 
 
 Credential commands do not accept plaintext password flags. `creds add` accepts a reference name and optional username metadata only; unsupported extra arguments are rejected instead of being ignored.
 
-Script secret handoff is separate from credential-reference precedence. `--credential <name>` authenticates to the endpoint. The planned `dispatch run ps ... --secret name=reference` surface selects script input secrets, defaults to a protected temporary secret file under the remote run root `secrets\` folder, and must never put secret values in the command line, console output, logs, results, traces, or artifacts. The first implementation boundary can validate/render redacted secret-file paths in plan/dry-run output; real protected remote staging and cleanup are later work.
+Script secret handoff is separate from credential-reference precedence. `--credential <name>` authenticates to the endpoint. The planned `dispatch run ps ... --secret name=reference` surface selects script input secrets and binds them to script parameters. The first implementation boundary can validate and render redacted parameter bindings such as `-packageSas [redacted]` in plan/dry-run output. Real execution must remain blocked until transport-specific safe parameter binding avoids command-line, console, log, result, trace, artifact, and process-inspection exposure.
 
 ## Output Model
 

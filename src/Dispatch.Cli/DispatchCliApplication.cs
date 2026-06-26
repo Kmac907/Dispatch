@@ -243,7 +243,7 @@ public sealed class DispatchCliApplication(
     private static void RenderScriptSecretHandoffPlanned() =>
         RenderPlannedCommand(
             "run ps --secret",
-            "10 Script-Owned Payload Documentation And Guardrails - protected script-secret file staging");
+            "10 Script-Owned Payload Documentation And Guardrails - safe script-secret parameter binding");
 
     private async Task<DispatchRunResult> RunWithSpectreProgressAsync(
         ExecutionPlan plan,

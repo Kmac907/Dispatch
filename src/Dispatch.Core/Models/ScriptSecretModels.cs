@@ -7,6 +7,5 @@ public sealed record ScriptSecretReference(
 public sealed record ScriptSecretHandoffPlan(
     string Name,
     string ReferenceName,
-    string RemotePath,
-    string ScriptArgumentName,
+    string ScriptParameterName,
     string RedactedValue = "[redacted]");

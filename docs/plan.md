@@ -420,8 +420,8 @@ PsExec SAS/secret handoff model:
 
 - v1 has no supported SAS token handoff.
 - Operators may pass ordinary non-secret script arguments, but SAS tokens and credentials must not be passed on the PsExec command line.
-- Planned PsExec script secret handoff must use the common `--secret name=reference` protected file model: Dispatch renders only the protected file path under the remote run root `secrets\` folder, never the secret value. Real protected SMB/admin-share staging and cleanup are later implementation work.
-- PsExec dry-run output may render secret handoff as redacted metadata only; it must never display the SAS token, credential, protected file content, or decrypted value.
+- Planned PsExec script secret handoff must use the common `--secret name=reference` parameter model: Dispatch renders only the script parameter name plus a redacted placeholder in plan output, never the secret value.
+- PsExec real execution must remain blocked for script secrets until there is a safe transport-specific parameter binding path that does not expose the secret through process command lines, logs, dry-run rendering, traces, or process inspection.
 
 #### PSRP transport
 
@@ -466,24 +466,24 @@ PSRP credential model:
 PSRP SAS/secret handoff model:
 
 - Dispatch does not yet have supported PSRP SAS token handoff.
-- Planned handoff uses the common protected secret-file model so scripts receive a file path instead of a raw token.
-- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render the redacted protected secret-file path under the remote run root `secrets\` folder. Real PSRP protected transfer and cleanup are later implementation work.
-- PSRP invocation must pass a secret reference, not the raw secret value, for the default model.
+- Planned handoff uses the common script-parameter model so scripts declare a normal parameter such as `param([string]$payloadSas)`.
+- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render only the redacted parameter binding, such as `-payloadSas [redacted]`, in plan/dry-run output.
+- PSRP real execution should bind the resolved secret in memory through the remoting runspace rather than writing it to a command line or remote temporary file.
 - Example shape:
 
 ```powershell
 Invoke-Command -ComputerName PC001 -ScriptBlock {
-  param($ScriptPath, $SecretFile)
-  & $ScriptPath -SecretFile $SecretFile
+  param($ScriptPath, $PayloadSas)
+  & $ScriptPath -PayloadSas $PayloadSas
 } -ArgumentList `
   "C:\ProgramData\Dispatch\Runs\<RunId>\script\Install.ps1",
-  "C:\ProgramData\Dispatch\Runs\<RunId>\secrets\payload.secret"
+  "<resolved secret value passed in memory>"
 ```
 
-- The endpoint script is responsible for reading/decrypting the protected secret file and downloading its own payload.
-- PSRP may add an advanced in-memory parameter handoff for short-lived secrets over an encrypted remoting channel, but it must be opt-in and fully redacted from dry-run output, logs, result JSON, CSV, terminal rendering, and transport traces.
+- The endpoint script is responsible for using the parameter value to download its own payload and must not echo the value.
+- PSRP secret parameter handoff must be fully redacted from dry-run output, logs, result JSON, CSV, terminal rendering, and transport traces.
 - Dispatch still does not download installer/media payloads.
-- When real staging is implemented, cleanup must remove any remote secret file/folder and report cleanup failures separately from script execution failures.
+- Cleanup has no secret file to remove in this model; any future transport scratch data must still be cleaned up and reported separately from script execution failures.
 
 #### Raw WinRM transport
 
@@ -530,19 +530,19 @@ Raw WinRM credential model:
 Raw WinRM SAS/secret handoff model:
 
 - Dispatch has a raw WinRM transport, but does not yet have supported raw WinRM SAS token handoff.
-- Planned handoff uses the protected secret-file model transferred over the WinRM channel through streamed/chunked content.
-- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render the redacted protected secret-file path under the remote run root `secrets\` folder. Real raw WinRM protected upload and cleanup are later implementation work.
+- Planned handoff uses the common script-parameter model.
+- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render only the redacted parameter binding, such as `-payloadSas [redacted]`, in plan/dry-run output.
 - Raw SAS tokens must not be rendered into remote command lines, local logs, dry-run output, result JSON, CSV summaries, or terminal output.
-- The remote process should receive only a protected secret-file path or an explicitly redacted environment-style input created by Dispatch.
+- Raw WinRM real execution must remain blocked for script secrets until there is a safe parameter-binding path that does not expose the secret through process command lines or transport traces.
 - Example shape:
 
 ```text
-winrm shell command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Dispatch\Runs\<RunId>\script\Install.ps1 -SecretFile C:\ProgramData\Dispatch\Runs\<RunId>\secrets\payload.secret
+planned command rendering: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\ProgramData\Dispatch\Runs\<RunId>\script\Install.ps1 -PayloadSas [redacted]
 ```
 
-- The endpoint script is responsible for reading/decrypting the protected secret file and downloading its own payload.
+- The endpoint script is responsible for using the parameter value to download its own payload and must not echo the value.
 - Because raw WinRM only exposes process stdout/stderr, scripts must avoid echoing secret values; Dispatch must still apply best-effort redaction to captured streams.
-- When real staging is implemented, cleanup must remove any remote secret file/folder and report cleanup failures separately from script execution failures.
+- Cleanup has no secret file to remove in this model; any future transport scratch data must still be cleaned up and reported separately from script execution failures.
 
 Do not require a launcher or harness in v1. The current installer runner intentionally runs `update.ps1` directly, and Dispatch should preserve that simplicity.
 
@@ -1583,12 +1583,12 @@ Scope:
 - Keep endpoint `--credential <name>` separate from script secret handoff.
 - Add the planned CLI shape `dispatch run ps <script.ps1> --secret name=reference`.
 - Treat `name` as the script-facing secret name and `reference` as the configured secret reference.
-- Make the default handoff a protected temporary secret file under the remote run root `secrets\` folder.
-- Allow dry-run/plan to validate secret references and render redacted secret-file paths without resolving or printing secret values.
-- Keep examples focused on passing script arguments, environment values, or encrypted protected secret-file paths into scripts.
+- Make the default handoff a script parameter binding where `name` becomes `-<name>` for the script.
+- Allow dry-run/plan to validate secret references and render redacted parameter bindings without resolving or printing secret values.
+- Keep examples focused on passing ordinary script arguments, environment values owned by the script, or redacted secret parameters into scripts.
 - Add warnings in docs/help text that scripts should not write SAS tokens to logs.
 - Redact secret values from console output, logs, result JSON, CSV summaries, dry-run output, and transport command rendering.
-- Stage real protected remote secret-file upload and cleanup after the plan/dry-run rendering boundary.
+- Stage real safe parameter binding after the plan/dry-run rendering boundary, with transport-specific implementation rules that avoid command-line, log, trace, result, and artifact exposure.
 
 Non-goals:
 - No Dispatch-owned Blob download implementation.
@@ -1597,6 +1597,7 @@ Non-goals:
 - No endpoint-side Key Vault login requirement for the default model.
 - No command-line secret value passing for any transport.
 - No SAS generation, persistence, validation, or refresh.
+- No secret values in remote temporary files as the default handoff model.
 - No plaintext long-lived secret files.
 - No long-lived SAS storage.
 - No installer/media payload staging.
@@ -1606,8 +1607,8 @@ Dependencies:
 
 Definition of done:
 - Documentation includes script-owned Blob/SAS payload examples.
-- `dispatch run ps ... --secret name=reference --plan` validates and renders redacted protected secret-file paths under the remote run root `secrets\` folder without resolving or logging secret values.
-- Real protected remote staging and cleanup are tracked as later implementation work; when implemented, cleanup removes the remote secret file/folder after execution, with failed cleanup reported separately from script execution.
+- `dispatch run ps ... --secret name=reference --plan` validates and renders a redacted script-parameter binding such as `-name [redacted]` without resolving or logging secret values.
+- Real safe parameter binding is tracked as later implementation work; transports must not expose resolved values through command lines, logs, results, traces, artifacts, or process inspection.
 - CLI/help text does not imply Dispatch owns Blob payload retrieval.
 - The roadmap keeps Blob payload orchestration out of Dispatch scope.
 

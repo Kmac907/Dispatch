@@ -92,7 +92,7 @@ dispatch run ps .\Fix.ps1 --target PC001 --credential prod-admin
 <pre><code>
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 </code></pre>
-<p>The planned <code>--secret name=reference</code> surface renders redacted protected secret-file paths during plan/dry-run. Secret values are not command-line arguments and must not appear in logs or results.</p>
+<p>The planned <code>--secret name=reference</code> surface renders redacted script-parameter bindings during plan/dry-run. Secret values are not command-line arguments and must not appear in logs or results.</p>
 <h2>Logs</h2>
 <pre><code>
 dispatch logs list
