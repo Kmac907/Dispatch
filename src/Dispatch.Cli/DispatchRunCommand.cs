@@ -13,6 +13,7 @@ internal sealed record DispatchRunCommand(
     string? LocalRunRoot,
     string? RemoteRunRoot,
     IReadOnlyList<string> ArtifactPaths,
+    IReadOnlyList<ScriptSecretReference> ScriptSecrets,
     string? CredentialReference,
     bool RunAsSystem,
     bool NoDashboard,
@@ -35,5 +36,6 @@ internal sealed record DispatchRunCommand(
             localRunRoot: LocalRunRoot,
             remoteRunRoot: RemoteRunRoot,
             artifactPaths: ArtifactPaths,
+            scriptSecrets: ScriptSecrets,
             executionContext: new ExecutionContextOptions(RunAsSystem));
 }

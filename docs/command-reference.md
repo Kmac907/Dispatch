@@ -69,7 +69,7 @@ Use `--no-progress` to disable live widgets, `--quiet` to suppress rich non-erro
 ## Run
 
 ```powershell
-dispatch run ps <script.ps1> [args] --target <selector> [--inventory <hosts.yml>] [--transport psrp|winrm|psexec] [--credential <name>]
+dispatch run ps <script.ps1> [args] --target <selector> [--inventory <hosts.yml>] [--transport psrp|winrm|psexec] [--credential <name>] [--secret name=reference]
 dispatch run cmd <command> --target <selector> [--transport psrp|winrm]
 dispatch run exe <path> --target <selector> [--transport psrp|winrm]
 ```
@@ -88,6 +88,7 @@ Common options:
 - `--config`
 - `--transport`
 - `--credential`
+- `--secret name=reference` for planned script secret handoff on `run ps`
 - `--expected-exit-code`
 - `--throttle` / concurrency option where implemented
 - `--plan`
@@ -105,6 +106,8 @@ dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 ```
 
 Use `--plan` to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.
+
+Script secret handoff is planned for `run ps` as `--secret name=reference`. It is separate from `--credential`: credentials authenticate the transport, while secrets are script inputs. The initial boundary is plan/dry-run validation and redacted rendering of the default remote secret-file path under the run root `secrets\` folder. Secret values must not appear in command lines, logs, results, or structured output. Real protected remote staging and cleanup are later work.
 
 Subcommands:
 

@@ -46,6 +46,7 @@ internal sealed class DispatchPlanner(
             request.Payload is ScriptPayload
             && (request.Transport == TransportKind.PsExec
                 || request.Transport == TransportKind.WinRm);
+        var scriptSecretPlans = CreateScriptSecretPlans(request.ScriptSecrets, remoteRunRoot);
         var job = new DispatchJob(
             RunId: runId,
             Targets: request.Targets,
@@ -57,10 +58,11 @@ internal sealed class DispatchPlanner(
             RetryPolicy: new RetryPolicy(),
             ExpectedExitCodes: expectedExitCodes,
             ArtifactPolicy: new ArtifactPolicy(request.ArtifactPaths),
-            ResultPolicy: new ResultPolicy(localLayout.LocalRunRoot));
+            ResultPolicy: new ResultPolicy(localLayout.LocalRunRoot),
+            ScriptSecrets: scriptSecretPlans);
 
         var targets = localLayout.Targets
-            .Select(target => CreateTargetExecution(runId, target, request.Payload, remoteRunRoot))
+            .Select(target => CreateTargetExecution(runId, target, request.Payload, remoteRunRoot, scriptSecretPlans))
             .ToArray();
 
         var plan = new ExecutionPlan(
@@ -85,7 +87,8 @@ internal sealed class DispatchPlanner(
         string runId,
         TargetLocalLayout targetLayout,
         DispatchPayload payload,
-        string remoteRunRoot)
+        string remoteRunRoot,
+        IReadOnlyList<ScriptSecretHandoffPlan> scriptSecrets)
     {
         var remoteScriptPath = payload is ScriptPayload script
             ? CombineWindowsPath(remoteRunRoot, "script", Path.GetFileName(script.ScriptPath))
@@ -93,7 +96,7 @@ internal sealed class DispatchPlanner(
 
         var command = payload switch
         {
-            ScriptPayload scriptPayload when remoteScriptPath is not null => CreatePowerShellScriptCommand(scriptPayload, remoteScriptPath),
+            ScriptPayload scriptPayload when remoteScriptPath is not null => CreatePowerShellScriptCommand(scriptPayload, remoteScriptPath, scriptSecrets),
             CommandPayload commandPayload => CreateCommandPayloadCommand(commandPayload),
             _ => null
         };
@@ -179,7 +182,10 @@ internal sealed class DispatchPlanner(
         }
     }
 
-    private static DirectExecutionCommand CreatePowerShellScriptCommand(ScriptPayload payload, string remoteScriptPath)
+    private static DirectExecutionCommand CreatePowerShellScriptCommand(
+        ScriptPayload payload,
+        string remoteScriptPath,
+        IReadOnlyList<ScriptSecretHandoffPlan> scriptSecrets)
     {
         var arguments = new List<string>
         {
@@ -191,8 +197,25 @@ internal sealed class DispatchPlanner(
         };
 
         arguments.AddRange(payload.ScriptArguments);
+        foreach (var secret in scriptSecrets)
+        {
+            arguments.Add(secret.ScriptArgumentName);
+            arguments.Add(secret.RemotePath);
+        }
+
         return new DirectExecutionCommand("powershell.exe", arguments);
     }
+
+    private static IReadOnlyList<ScriptSecretHandoffPlan> CreateScriptSecretPlans(
+        IReadOnlyList<ScriptSecretReference> references,
+        string remoteRunRoot) =>
+        references
+            .Select(reference => new ScriptSecretHandoffPlan(
+                reference.Name,
+                reference.ReferenceName,
+                CombineWindowsPath(remoteRunRoot, "secrets", $"{reference.Name}.secret"),
+                $"-{reference.Name}File"))
+            .ToArray();
 
     private static DirectExecutionCommand CreateCommandPayloadCommand(CommandPayload payload)
     {

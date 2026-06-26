@@ -38,6 +38,14 @@ public static class DispatchRequestValidator
         {
             AddScriptArgumentSecretErrors(scriptPayload, errors);
         }
+        else if (request.ScriptSecrets.Count > 0)
+        {
+            errors.Add(new(
+                "ScriptSecretsRequireScriptPayload",
+                "Script secret handoff is supported only for PowerShell script payloads in this slice."));
+        }
+
+        AddScriptSecretReferenceErrors(request.ScriptSecrets, errors);
 
         AddArtifactPathErrors(request.ArtifactPaths, errors);
         AddPsrpExecutionContextErrors(request, errors);
@@ -94,6 +102,55 @@ public static class DispatchRequestValidator
         value.Contains("sig=", StringComparison.OrdinalIgnoreCase)
         || value.Contains("SharedAccessSignature=", StringComparison.OrdinalIgnoreCase)
         || value.Contains("sv=", StringComparison.OrdinalIgnoreCase) && value.Contains("se=", StringComparison.OrdinalIgnoreCase) && value.Contains("sp=", StringComparison.OrdinalIgnoreCase);
+
+    private static void AddScriptSecretReferenceErrors(
+        IReadOnlyList<ScriptSecretReference> secrets,
+        ICollection<DispatchValidationError> errors)
+    {
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var secret in secrets)
+        {
+            if (!IsValidSecretName(secret.Name))
+            {
+                errors.Add(new(
+                    "InvalidScriptSecretName",
+                    $"Script secret name '{secret.Name}' must start with a letter or underscore and contain only letters, numbers, or underscores."));
+            }
+
+            if (!names.Add(secret.Name))
+            {
+                errors.Add(new(
+                    "DuplicateScriptSecretName",
+                    $"Script secret name '{secret.Name}' is specified more than once."));
+            }
+
+            if (string.IsNullOrWhiteSpace(secret.ReferenceName))
+            {
+                errors.Add(new(
+                    "InvalidScriptSecretReference",
+                    $"Script secret '{secret.Name}' must reference a configured secret name."));
+            }
+
+            if (LooksLikeSecretValue(secret.ReferenceName))
+            {
+                errors.Add(new(
+                    "PlaintextScriptSecretNotSupported",
+                    $"Script secret '{secret.Name}' looks like a plaintext secret value. Use a configured secret reference name instead."));
+            }
+        }
+    }
+
+    private static bool IsValidSecretName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var first = value[0];
+        return (char.IsLetter(first) || first == '_')
+            && value.All(static character => char.IsLetterOrDigit(character) || character == '_');
+    }
 
     private static void AddArtifactPathErrors(
         IReadOnlyList<string> artifactPaths,

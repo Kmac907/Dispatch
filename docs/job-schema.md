@@ -107,4 +107,6 @@ Relative `ps` and `copy.src` task paths resolve from the job file directory, sca
 
 ## Secret Boundary
 
-Job files may contain credential reference names, but must not contain passwords, tokens, SAS values, or secret material.
+Job files may contain endpoint credential reference names, but must not contain passwords, tokens, SAS values, or secret material.
+
+`credential` is not a script secret. The planned `dispatch run ps ... --secret name=reference` surface is separate from the current job schema. If job-level script secrets are added later, plan output must render only redacted secret-file paths under the remote run root `secrets\` folder, and real protected staging/cleanup must not write secret values to command lines, logs, results, or artifacts.

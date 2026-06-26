@@ -45,8 +45,8 @@ The detailed CLI design contract lives in `docs/cli-design.md`. This roadmap is 
 - PsExec-first live validation in environments where `\\<device>\C$` admin-share staging is unavailable.
 - Installer/media payload staging.
 - Azure Blob payload download, SAS generation, or SAS management.
-- Azure Key Vault retrieval for runtime script/payload secret handoff.
-- Dispatch-managed SAS, Key Vault payload secrets, or general runtime script secret handoff for any transport.
+- Azure Key Vault retrieval for runtime script/payload secret handoff beyond the approved script secret reference boundary.
+- Dispatch-managed SAS generation, Blob payload retrieval, or general runtime script secret orchestration beyond the planned `--secret name=reference` handoff model.
 - Endpoint credential handoff outside the `6.4` credential-reference model and the explicitly selected transport/provider slices.
 - Managed/harness execution mode.
 - Retry policy beyond basic failure reporting.
@@ -66,7 +66,7 @@ Live endpoint validation requires at least one successful run against a user-app
 - No permanent endpoint agent.
 - No Azure Files identity/auth framework.
 - No CredSSP/delegation automation.
-- No secret vault system.
+- No secret vault system. Dispatch may reference external secret sources for planned script secret handoff, but it must not become the source of truth for secret values.
 - No Linux/macOS target support.
 - No full software inventory/configuration-management model beyond declared jobs, host selection, and small task vocabulary.
 - No installer/media payload staging in v1.
@@ -413,15 +413,15 @@ PsExec credential model:
 - v1 supports current admin context only.
 - v1 does not accept plaintext password arguments.
 - v1 does not invoke `psexec -u/-p` because those values are difficult to protect from command-line exposure, logs, dry-run rendering, and process inspection.
-- Post-MVP explicit credential support may be added only through a secure prompt, protected in-memory credential object, or approved secret source.
+- Later explicit credential support may be added only through a secure prompt, protected in-memory credential object, or approved secret source.
 - `--run-as-system` changes the remote process token to local SYSTEM through PsExec; it is not a domain credential delegation feature.
 
 PsExec SAS/secret handoff model:
 
 - v1 has no supported SAS token handoff.
 - Operators may pass ordinary non-secret script arguments, but SAS tokens and credentials must not be passed on the PsExec command line.
-- Post-MVP PsExec secret handoff must use a protected file model: Dispatch retrieves the secret on the admin workstation, encrypts it for the endpoint or endpoint script, copies the protected file over SMB/admin share, passes only the protected file path to the script, redacts the path/value where needed, and deletes the remote secret file during cleanup.
-- PsExec dry-run output must render secret handoff as redacted metadata only; it must never display the SAS token, credential, protected file content, or decrypted value.
+- Planned PsExec script secret handoff must use the common `--secret name=reference` protected file model: Dispatch renders only the protected file path under the remote run root `secrets\` folder, never the secret value. Real protected SMB/admin-share staging and cleanup are later implementation work.
+- PsExec dry-run output may render secret handoff as redacted metadata only; it must never display the SAS token, credential, protected file content, or decrypted value.
 
 #### PSRP transport
 
@@ -466,8 +466,8 @@ PSRP credential model:
 PSRP SAS/secret handoff model:
 
 - Dispatch does not yet have supported PSRP SAS token handoff.
-- Post-MVP preferred handoff is still the protected secret-file model so scripts receive a file path instead of a raw token.
-- For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, transfers the protected secret file to the endpoint over the PSRP remoting channel, and invokes the script with only the protected secret-file path.
+- Planned handoff uses the common protected secret-file model so scripts receive a file path instead of a raw token.
+- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render the redacted protected secret-file path under the remote run root `secrets\` folder. Real PSRP protected transfer and cleanup are later implementation work.
 - PSRP invocation must pass a secret reference, not the raw secret value, for the default model.
 - Example shape:
 
@@ -483,7 +483,7 @@ Invoke-Command -ComputerName PC001 -ScriptBlock {
 - The endpoint script is responsible for reading/decrypting the protected secret file and downloading its own payload.
 - PSRP may add an advanced in-memory parameter handoff for short-lived secrets over an encrypted remoting channel, but it must be opt-in and fully redacted from dry-run output, logs, result JSON, CSV, terminal rendering, and transport traces.
 - Dispatch still does not download installer/media payloads.
-- Cleanup must remove any remote secret file/folder and report cleanup failures separately from script execution failures.
+- When real staging is implemented, cleanup must remove any remote secret file/folder and report cleanup failures separately from script execution failures.
 
 #### Raw WinRM transport
 
@@ -530,8 +530,8 @@ Raw WinRM credential model:
 Raw WinRM SAS/secret handoff model:
 
 - Dispatch has a raw WinRM transport, but does not yet have supported raw WinRM SAS token handoff.
-- Post-MVP preferred handoff is the protected secret-file model transferred over the WinRM channel through streamed/chunked content.
-- For Blob/SAS use cases, Dispatch retrieves the configured secret on the admin workstation or jump box, protects it, uploads the protected secret file through chunked WinRM content transfer, and invokes the remote process with only the protected secret-file path.
+- Planned handoff uses the protected secret-file model transferred over the WinRM channel through streamed/chunked content.
+- For Blob/SAS use cases, the initial implementation can validate `--secret name=reference` and render the redacted protected secret-file path under the remote run root `secrets\` folder. Real raw WinRM protected upload and cleanup are later implementation work.
 - Raw SAS tokens must not be rendered into remote command lines, local logs, dry-run output, result JSON, CSV summaries, or terminal output.
 - The remote process should receive only a protected secret-file path or an explicitly redacted environment-style input created by Dispatch.
 - Example shape:
@@ -542,7 +542,7 @@ winrm shell command: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\
 
 - The endpoint script is responsible for reading/decrypting the protected secret file and downloading its own payload.
 - Because raw WinRM only exposes process stdout/stderr, scripts must avoid echoing secret values; Dispatch must still apply best-effort redaction to captured streams.
-- Cleanup must remove any remote secret file/folder and report cleanup failures separately from script execution failures.
+- When real staging is implemented, cleanup must remove any remote secret file/folder and report cleanup failures separately from script execution failures.
 
 Do not require a launcher or harness in v1. The current installer runner intentionally runs `update.ps1` directly, and Dispatch should preserve that simplicity.
 
@@ -1576,27 +1576,28 @@ Definition of done:
 #### 10. Script-Owned Payload Documentation And Guardrails
 
 Objective:
-Document and enforce the boundary that external payload retrieval belongs to the script, while adding a narrow runtime secret handoff model for scripts that need SAS-backed payload access.
+Document and enforce the boundary that external payload retrieval belongs to the script, while adding a narrow script secret handoff model for scripts that need protected runtime inputs.
 
 Scope:
 - Document recommended patterns for scripts that download payloads from Blob storage with SAS access.
-- Add a post-MVP Key Vault secret source that Dispatch can use on the admin workstation or jump box to retrieve a SAS once per job.
-- Keep runtime secret-source configuration aligned with `docs/credential-store-plan.md`, including Azure Key Vault auth mode terminology and no-plaintext YAML rules.
-- Pass retrieved secrets to scripts as runtime inputs through a redacted mechanism, preferring an encrypted protected temporary secret file.
-- Support a certificate/CMS-style encrypted secret file model where Dispatch encrypts the SAS before writing it over SMB and the endpoint script decrypts it locally.
-- Document DPAPI machine-scope encryption as an endpoint-side option when the secret must be protected after arrival rather than before SMB transit.
+- Keep endpoint `--credential <name>` separate from script secret handoff.
+- Add the planned CLI shape `dispatch run ps <script.ps1> --secret name=reference`.
+- Treat `name` as the script-facing secret name and `reference` as the configured secret reference.
+- Make the default handoff a protected temporary secret file under the remote run root `secrets\` folder.
+- Allow dry-run/plan to validate secret references and render redacted secret-file paths without resolving or printing secret values.
 - Keep examples focused on passing script arguments, environment values, or encrypted protected secret-file paths into scripts.
 - Add warnings in docs/help text that scripts should not write SAS tokens to logs.
 - Redact secret values from console output, logs, result JSON, CSV summaries, dry-run output, and transport command rendering.
+- Stage real protected remote secret-file upload and cleanup after the plan/dry-run rendering boundary.
 
 Non-goals:
 - No Dispatch-owned Blob download implementation.
 - No Azure Files SMB identity framework.
 - No general-purpose secret vault system.
 - No endpoint-side Key Vault login requirement for the default model.
-- No command-line secret passing as the preferred PsExec model.
+- No command-line secret value passing for any transport.
 - No SAS generation, persistence, validation, or refresh.
-- No plaintext secret file as the preferred post-MVP handoff model.
+- No plaintext long-lived secret files.
 - No long-lived SAS storage.
 - No installer/media payload staging.
 
@@ -1605,9 +1606,8 @@ Dependencies:
 
 Definition of done:
 - Documentation includes script-owned Blob/SAS payload examples.
-- Dispatch can retrieve a configured Key Vault secret before a job and expose it to the script through an encrypted protected secret file without logging the value.
-- PsExec and WinRM plans show redacted secret handoff behavior.
-- Cleanup removes the remote secret file/folder after execution, with failed cleanup reported separately from script execution.
+- `dispatch run ps ... --secret name=reference --plan` validates and renders redacted protected secret-file paths under the remote run root `secrets\` folder without resolving or logging secret values.
+- Real protected remote staging and cleanup are tracked as later implementation work; when implemented, cleanup removes the remote secret file/folder after execution, with failed cleanup reported separately from script execution.
 - CLI/help text does not imply Dispatch owns Blob payload retrieval.
 - The roadmap keeps Blob payload orchestration out of Dispatch scope.
 

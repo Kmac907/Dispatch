@@ -96,6 +96,9 @@ dispatch apply .\job.yml --credential breakglass-admin
 <p><code>--no-progress</code> disables live progress for apply execution, <code>--quiet</code> suppresses rich non-error output, and <code>--verbose</code> / <code>--trace</code> control NDJSON diagnostic detail. <code>--diff</code> is recognized but fails before planning until the diff behavior slice is implemented.</p>
 <h2>Job Credential</h2>
 <p><code>credential</code> selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.</p>
+<p><code>credential</code> is only the endpoint authentication reference. It does not pass SAS tokens, API keys, or other script inputs to tasks.</p>
+<h2>Script Secrets</h2>
+<p>Script secret handoff is planned first for <code>dispatch run ps ... --secret name=reference</code>. It is not part of the current <code>apply</code> subset. When job-level script secrets are added, they must follow the same protected secret-file model, redacted plan output, and no-secret-values-in-logs rule.</p>
 <h2>Job Variables</h2>
 <p><code>job.vars</code> is the v1 runtime/task-input variable bag. Current <code>ps</code> apply tasks pass scalar <code>job.vars</code> entries to scripts as named PowerShell arguments in YAML order, for example <code>message: fixed</code> becomes <code>-message fixed</code>. Variable names must use letters, numbers, or underscores, and start with a letter or underscore. Inventory vars are host/group metadata and are not automatically merged into runtime task variables.</p>
 <p>Transport is not allowed under <code>job.vars</code>; use the top-level <code>transport</code> field. Separate vars-file concepts such as <code>group_vars</code>, <code>host_vars</code>, <code>vars_files</code>, and <code>include_vars</code> are not part of v1 jobs and fail validation before endpoint work.</p>

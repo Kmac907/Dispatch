@@ -237,6 +237,7 @@ Purpose:
 Must include:
 - no plaintext credential policy
 - no command-line secret handoff policy
+- endpoint `--credential` versus script `--secret name=reference`
 - logging/redaction behavior
 - script-owned payload boundary
 - transport-specific risk notes
@@ -255,6 +256,7 @@ Must continue to cover:
 - installer/media ownership
 - script arguments
 - secret handling expectations
+- planned protected secret-file handoff under the remote run root `secrets\` folder
 - cross-reference where script-created logs and artifacts should be written, but do not make this the primary output/results doc
 
 ## Reference and contract documentation
@@ -375,6 +377,7 @@ Purpose:
 
 Purpose:
 - Credential-reference model and provider behavior.
+- Must distinguish endpoint credential references from planned script secret references.
 
 ### 29. `docs/credential-store-plan.md`
 
@@ -386,6 +389,7 @@ Audience:
 
 Notes:
 - This is not the primary operator credential guide; operators should start with `docs/credentials.md`.
+- This covers endpoint credentials only; planned script secret handoff belongs with script-owned payload and security docs.
 
 ### 30. `docs/logs.md`
 

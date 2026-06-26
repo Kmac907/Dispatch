@@ -4,6 +4,18 @@ Dispatch uses credential references so jobs, inventories, and CLI overrides can 
 
 Reference names are safe to log. Resolved passwords are never serialized and must not appear in YAML, command-line arguments, console output, run logs, result JSON, NDJSON, CSV, or artifacts.
 
+## Endpoint Credentials Only
+
+`--credential <name>` selects the account used by a transport to authenticate to the endpoint. It is not a script input mechanism and must not be used for SAS tokens, API keys, installer secrets, or payload-download secrets.
+
+Script secret handoff is a separate planned surface:
+
+```powershell
+dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
+```
+
+The default script secret handoff is a protected temporary secret file under the remote run root `secrets\` folder. Plan and dry-run paths may validate secret references and render redacted secret-file paths, but they must not resolve or print secret values. Real protected remote staging and cleanup are later implementation work.
+
 ## Global Credential Catalog
 
 Credential provider metadata lives in the global Dispatch config:
@@ -100,6 +112,8 @@ dispatch apply .\job.yml --credential breakglass-admin
 ```
 
 Runtime credential resolution is implemented for PSRP and raw WinRM execution. Plan and dry-run paths validate references but do not prompt, decrypt DPAPI files, read Windows Credential Manager targets, or read Key Vault secrets.
+
+Script secrets follow their own `--secret name=reference` model. Secret values must never be passed as script arguments or serialized into Dispatch logs or results.
 
 ## Azure Key Vault Auth
 

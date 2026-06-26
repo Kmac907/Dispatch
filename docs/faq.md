@@ -18,6 +18,10 @@ Use `run ps` for normal ad-hoc script execution. Use `apply` for repeatable job 
 
 Command-line secrets are visible to process inspection, shell history, logs, and automation wrappers. Dispatch uses credential references and provider-backed resolution instead.
 
+## Is `--credential` how I pass a secret to my script?
+
+No. `--credential <name>` selects the endpoint credential for transport authentication. Planned script secrets use `dispatch run ps ... --secret name=reference`, which defaults to a protected temporary secret file under the remote run root `secrets\` folder. Plan output may show only redacted file paths, never secret values.
+
 ## Why did target selection not match what I expected?
 
 Check inventory groups, host names, selectors, excludes, and de-duplication. Use `hosts list`, `hosts validate`, or `--plan` where available to inspect the resolved set before execution.

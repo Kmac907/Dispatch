@@ -81,6 +81,7 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("      -t, --target <selector> Target host/group/selector");
         console.WriteLine("      --config <path>        Dispatch config file");
         console.WriteLine("      --credential <name>    Credential reference override");
+        console.WriteLine("      --secret name=reference Script secret reference for run ps plan/dry-run handoff");
         console.WriteLine("      --exclude <selector>   Exclude selected hosts");
         console.WriteLine();
         console.WriteLine("Examples:");
@@ -212,6 +213,11 @@ internal static class SpectreConsoleRenderer
         console.WriteLine($"Payload: {plan.Job.Payload.DisplayName}");
         console.WriteLine($"Targets: {plan.Targets.Count}");
         console.WriteLine($"Throttle: {plan.ThrottleLimit}");
+        if (plan.Job.ScriptSecrets.Count > 0)
+        {
+            console.WriteLine($"Script secrets: {plan.Job.ScriptSecrets.Count} redacted file handoff plan(s)");
+        }
+
         console.WriteLine();
         var table = new Table().Border(TableBorder.Rounded);
         table.AddColumn("Target");
@@ -230,6 +236,15 @@ internal static class SpectreConsoleRenderer
         console.WriteLine($"Local run root: {plan.LocalRunRoot}");
         console.WriteLine($"Admin results: {plan.LocalResultsJsonPath}");
         console.WriteLine($"Event log: {plan.LocalEventsNdjsonPath}");
+        if (plan.Job.ScriptSecrets.Count > 0)
+        {
+            console.WriteLine("Script secret handoff:");
+            foreach (var secret in plan.Job.ScriptSecrets)
+            {
+                console.WriteLine($"  {secret.Name} -> {secret.ReferenceName} as {secret.ScriptArgumentName} {secret.RemotePath} ({secret.RedactedValue})");
+            }
+        }
+
         if (plan.Job.ResultPolicy.WriteCsv)
         {
             console.WriteLine($"Optional CSV export: {plan.LocalResultsCsvPath}");

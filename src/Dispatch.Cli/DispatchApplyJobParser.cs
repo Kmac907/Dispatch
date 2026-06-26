@@ -214,6 +214,7 @@ internal static class DispatchApplyJobParser
                 LocalRunRoot: null,
                 RemoteRunRoot: null,
                 ArtifactPaths: [],
+                ScriptSecrets: [],
                 CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
                 RunAsSystem: false,
                 NoDashboard: validateOnly || options.NoProgress,

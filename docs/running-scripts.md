@@ -36,6 +36,16 @@ dispatch run ps .\Fix.ps1 --target PC001 --transport psrp --plan --output json
 
 Planning does not prompt for passwords, decrypt DPAPI files, read Windows Credential Manager targets, read Key Vault secrets, or touch endpoints.
 
+## Script Secret Handoff
+
+`--credential <name>` is for endpoint authentication only. Planned script secrets use `--secret name=reference`:
+
+```powershell
+dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
+```
+
+The default handoff is a protected temporary file below the remote run root `secrets\` folder. Plan and dry-run output can validate the reference and show the redacted secret-file path that the script would read, but it must not show the secret value. Real protected remote staging and cleanup are later work.
+
 ## Output Modes
 
 ```powershell

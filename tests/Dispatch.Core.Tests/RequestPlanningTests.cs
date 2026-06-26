@@ -64,6 +64,62 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerAddsRedactedScriptSecretFileArguments()
+    {
+        using var script = TemporaryScript.Create("Install.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, ["-Mode", "Install"]),
+            targets: [new TargetSpec("PC001", "computer-name")],
+            transport: TransportKind.Psrp,
+            dryRun: true,
+            scriptSecrets: [new ScriptSecretReference("payload_sas", "blob-install-sas")]);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var secret = Assert.Single(plan.Job.ScriptSecrets);
+        var target = Assert.Single(plan.Targets);
+
+        Assert.Equal("payload_sas", secret.Name);
+        Assert.Equal("blob-install-sas", secret.ReferenceName);
+        Assert.Equal(@"C:\ProgramData\Dispatch\Runs\run-001\secrets\payload_sas.secret", secret.RemotePath);
+        Assert.Equal("-payload_sasFile", secret.ScriptArgumentName);
+        Assert.Equal("[redacted]", secret.RedactedValue);
+        Assert.NotNull(target.PlannedCommand);
+        Assert.Equal(
+            [
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                @"C:\ProgramData\Dispatch\Runs\run-001\script\Install.ps1",
+                "-Mode",
+                "Install",
+                "-payload_sasFile",
+                @"C:\ProgramData\Dispatch\Runs\run-001\secrets\payload_sas.secret"
+            ],
+            target.PlannedCommand.Arguments);
+    }
+
+    [Fact]
+    public async Task PlannerRejectsScriptSecretsForCommandPayloads()
+    {
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new CommandPayload("whoami", "cmd", null),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.Psrp,
+            dryRun: true,
+            scriptSecrets: [new ScriptSecretReference("payload_sas", "blob-install-sas")]);
+
+        var exception = await Assert.ThrowsAsync<DispatchPlanningException>(
+            () => planner.CreatePlanAsync(request, CancellationToken.None));
+
+        Assert.Contains(exception.Errors, static error => error.Code == "ScriptSecretsRequireScriptPayload");
+    }
+
+    [Fact]
     public async Task PlannerRejectsMissingLocalScriptBeforeEndpointWork()
     {
         using var provider = BuildProvider();

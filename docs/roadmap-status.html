@@ -77,6 +77,7 @@
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
 <li>YAML task execution beyond <code>ps</code>/<code>cmd</code>/<code>exe</code>, including real <code>copy</code> transfer execution, remains planned.</li>
 <li>Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
+<li>Script secret handoff is separate from endpoint <code>--credential</code>. The approved initial boundary is planned <code>dispatch run ps ... --secret name=reference</code> validation and redacted plan rendering of protected remote secret-file paths; real protected remote staging and cleanup are later work.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>
@@ -85,6 +86,7 @@
 <li>Implement <code>6.8</code> diagnostics migration.</li>
 <li>Implement PowerShell module wrapper.</li>
 <li>Implement source install and local packaging.</li>
+<li>Implement script secret handoff in staged slices: plan/dry-run validation first, then protected remote staging and cleanup.</li>
 </ul>
 <h2>Deferred Or Out Of Scope For V1</h2>
 <ul>
@@ -95,6 +97,7 @@
 <li>Enterprise package feeds.</li>
 <li>Managed execution as default.</li>
 <li>Dispatch-owned Blob/media payload staging.</li>
+<li>Command-line script secret values in any form.</li>
 </ul>
   </article>
 </main>

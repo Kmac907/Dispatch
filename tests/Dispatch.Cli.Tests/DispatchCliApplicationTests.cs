@@ -205,6 +205,119 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunPowerShellDryRunAcceptsScriptSecretReferences()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "param([string]$payload_sasFile) Write-Output $payload_sasFile");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--plan",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--secret",
+                    "payload_sas=blob-install-sas"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            var secret = Assert.Single(planner.LastRequest!.ScriptSecrets);
+            Assert.Equal("payload_sas", secret.Name);
+            Assert.Equal("blob-install-sas", secret.ReferenceName);
+            Assert.Contains("Script secret handoff", output);
+            Assert.Contains("payload_sas -> blob-install-sas", output);
+            Assert.Contains("[redacted]", output);
+            Assert.DoesNotContain("secret-value", output + error, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellScriptSecretsFailRealExecutionUntilStagingIsImplemented()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var executor = new CapturingSucceedingExecutor();
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psrp",
+                    "--secret",
+                    "payload_sas=blob-install-sas"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Contains("Planning", output);
+            Assert.NotNull(planner.LastRequest);
+            Assert.Null(executor.LastPlan);
+            Assert.Contains("Planned Dispatch command", error);
+            Assert.Contains("run ps --secret", error);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellRejectsMalformedScriptSecretReference()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--plan",
+                    "--target",
+                    "PC001",
+                    "--secret",
+                    "payload_sas"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("--secret requires name=reference", error);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
     public async Task RedirectedCompactModeDoesNotReprintProgressPanels()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -7337,6 +7450,7 @@ credentials:
         Assert.Contains("--quiet", output);
         Assert.Contains("--verbose", output);
         Assert.Contains("--trace", output);
+        Assert.Contains("--secret name=reference", output);
         Assert.Contains("Compatibility", output);
         Assert.Contains("Usage:", output);
         Assert.Contains("Current execution support: run ps through psexec, winrm, or psrp; run cmd and run exe through winrm or psrp", normalized);
@@ -7481,13 +7595,28 @@ credentials:
             var plannedRemoteScriptPath = request.Payload is ScriptPayload scriptPayload
                 ? Path.Combine(@"C:\ProgramData\Dispatch\Runs\run-test\script", Path.GetFileName(scriptPayload.ScriptPath))
                 : null;
+            var scriptSecrets = request.ScriptSecrets
+                .Select(secret => new ScriptSecretHandoffPlan(
+                    secret.Name,
+                    secret.ReferenceName,
+                    Path.Combine(@"C:\ProgramData\Dispatch\Runs\run-test\secrets", $"{secret.Name}.secret"),
+                    $"-{secret.Name}File"))
+                .ToArray();
             var plannedCommand = request.Payload switch
             {
-                ScriptPayload => plannedRemoteScriptPath is null
+                ScriptPayload plannedScriptPayload => plannedRemoteScriptPath is null
                     ? null
                     : new DirectExecutionCommand(
                         "powershell.exe",
-                        ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", plannedRemoteScriptPath]),
+                        [
+                            "-NoProfile",
+                            "-ExecutionPolicy",
+                            "Bypass",
+                            "-File",
+                            plannedRemoteScriptPath,
+                            .. plannedScriptPayload.ScriptArguments,
+                            .. scriptSecrets.SelectMany(static secret => new[] { secret.ScriptArgumentName, secret.RemotePath })
+                        ]),
                 CommandPayload commandPayload => new DirectExecutionCommand(
                     "cmd.exe",
                     ["/c", commandPayload.CommandLine]),
@@ -7516,7 +7645,8 @@ credentials:
                 RetryPolicy: new RetryPolicy(),
                 ExpectedExitCodes: request.ExpectedExitCodes,
                 ArtifactPolicy: new ArtifactPolicy(request.ArtifactPaths),
-                ResultPolicy: new ResultPolicy(@"C:\Dispatch\Tests\run-test"));
+                ResultPolicy: new ResultPolicy(@"C:\Dispatch\Tests\run-test"),
+                ScriptSecrets: scriptSecrets);
 
             LastPlan = new ExecutionPlan(
                 RunId: "run-test",

@@ -777,6 +777,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         [CommandArgument(0, "<script.ps1>")]
         public string ScriptPath { get; init; } = string.Empty;
+
+        [CommandOption("--secret <name=reference>")]
+        public string[] Secrets { get; init; } = [];
     }
 
     private sealed class RunCmdSettings : RunTargetedSettings
@@ -841,6 +844,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         var mapped = new List<string> { "--script", settings.ScriptPath };
         AddTargetedArgs(mapped, settings);
+        foreach (var secret in settings.Secrets)
+        {
+            AddValue(mapped, "--secret", secret);
+        }
+
         AddRemaining(mapped, remaining);
         return mapped.ToArray();
     }

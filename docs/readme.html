@@ -48,6 +48,7 @@
 <h1>Dispatch Documentation</h1>
 <p>Dispatch is a Windows-native endpoint automation runner for administrators who need to run scripts, commands, and declared YAML jobs across Windows hosts with durable results and explicit transport behavior.</p>
 <p>Dispatch is not an endpoint agent, package manager, or full configuration-management platform. It focuses on target selection, execution planning, transport execution, credential references, live status, logs, results, and copied-back script-created files.</p>
+<p>Endpoint credentials and script secret handoff are separate models. <code>--credential &lt;name&gt;</code> selects the remoting credential. The planned script input surface is <code>dispatch run ps ... --secret name=reference</code>, with redacted plan output and a protected temporary secret file under the remote run root <code>secrets\</code> folder when real staging is implemented.</p>
 <h2>Start Here</h2>
 <ul>
 <li><a href="getting-started.html">Getting Started</a> - first install, validation, and run.</li>

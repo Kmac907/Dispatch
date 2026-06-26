@@ -12,6 +12,7 @@ public sealed record DispatchRequest
         string? localRunRoot = null,
         string? remoteRunRoot = null,
         IReadOnlyList<string>? artifactPaths = null,
+        IReadOnlyList<ScriptSecretReference>? scriptSecrets = null,
         ExecutionContextOptions? executionContext = null)
     {
         Payload = payload;
@@ -23,6 +24,7 @@ public sealed record DispatchRequest
         LocalRunRoot = localRunRoot;
         RemoteRunRoot = remoteRunRoot;
         ArtifactPaths = artifactPaths ?? [];
+        ScriptSecrets = scriptSecrets ?? [];
         ExecutionContext = executionContext ?? new ExecutionContextOptions();
     }
 
@@ -43,6 +45,8 @@ public sealed record DispatchRequest
     public string? RemoteRunRoot { get; init; }
 
     public IReadOnlyList<string> ArtifactPaths { get; init; }
+
+    public IReadOnlyList<ScriptSecretReference> ScriptSecrets { get; init; }
 
     public ExecutionContextOptions ExecutionContext { get; init; }
 }

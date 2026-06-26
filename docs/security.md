@@ -25,6 +25,12 @@ Resolved passwords are kept in memory only and are not serialized.
 
 Dispatch does not support passing endpoint passwords, SAS tokens, or secret values directly as command-line flags.
 
+## Script Secret Handoff
+
+Endpoint credentials and script secrets are separate. `--credential <name>` chooses the remoting credential; it does not pass a secret to the script.
+
+The planned script secret CLI is `dispatch run ps ... --secret name=reference`. The default handoff is a protected temporary secret file under the remote run root `secrets\` folder. Plan and dry-run output can validate references and render redacted secret-file paths, but real protected remote staging and cleanup are later implementation work.
+
 ## Logging And Redaction
 
 Secret values must not appear in:

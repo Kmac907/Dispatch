@@ -167,6 +167,12 @@ public sealed class DispatchCliApplication(
                 streamWriter.WritePlanningStarted();
                 var streamPlan = await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
                 streamWriter.WritePlan(streamPlan);
+                if (HasScriptSecrets(streamPlan))
+                {
+                    RenderScriptSecretHandoffPlanned();
+                    return new DispatchRunCommandOutcome(1, null);
+                }
+
                 var resolvedStreamPlan = await ResolveRuntimeCredentialsAsync(streamPlan, command, cancellationToken).ConfigureAwait(false);
                 if (resolvedStreamPlan is null)
                 {
@@ -189,6 +195,12 @@ public sealed class DispatchCliApplication(
             var plan = command.OutputMode == DispatchOutputMode.Rich && !command.Quiet
                 ? await CreatePlanWithStatusAsync(request, command.NoColor, cancellationToken).ConfigureAwait(false)
                 : await planner.CreatePlanAsync(request, cancellationToken).ConfigureAwait(false);
+            if (HasScriptSecrets(plan))
+            {
+                RenderScriptSecretHandoffPlanned();
+                return new DispatchRunCommandOutcome(1, null);
+            }
+
             var resolvedPlan = await ResolveRuntimeCredentialsAsync(plan, command, cancellationToken).ConfigureAwait(false);
             if (resolvedPlan is null)
             {
@@ -225,6 +237,13 @@ public sealed class DispatchCliApplication(
 
     private static int GetRunResultExitCode(DispatchRunResult result) =>
         result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
+
+    private static bool HasScriptSecrets(ExecutionPlan plan) => plan.Job.ScriptSecrets.Count > 0;
+
+    private static void RenderScriptSecretHandoffPlanned() =>
+        RenderPlannedCommand(
+            "run ps --secret",
+            "10 Script-Owned Payload Documentation And Guardrails - protected script-secret file staging");
 
     private async Task<DispatchRunResult> RunWithSpectreProgressAsync(
         ExecutionPlan plan,

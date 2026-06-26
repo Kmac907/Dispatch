@@ -29,4 +29,5 @@ v1 guardrails:
 - Dispatch logs and result metadata should describe orchestration behavior, not payload download internals.
 - Dispatch does not generate, validate, refresh, store, or pass SAS tokens.
 - Do not pass credentials, SAS tokens, or other secrets on the command line.
-- Post-MVP secret handoff must use a redacted protected secret-file model rather than raw command-line values.
+- Planned script secret handoff uses `dispatch run ps ... --secret name=reference`, separate from endpoint `--credential`.
+- The default handoff is a protected temporary secret file under the remote run root `secrets\` folder. Plan/dry-run output may render redacted secret-file paths, while real protected remote staging and cleanup are later work.

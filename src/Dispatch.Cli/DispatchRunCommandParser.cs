@@ -30,6 +30,7 @@ internal sealed class DispatchRunCommandParser
         string? localRunRoot = null;
         string? remoteRunRoot = null;
         var artifactPaths = new List<string>();
+        var scriptSecrets = new List<ScriptSecretReference>();
         var runAsSystem = false;
         var noDashboard = false;
         var outputMode = DispatchOutputMode.Rich;
@@ -230,6 +231,19 @@ internal sealed class DispatchRunCommandParser
 
                     artifactPaths.AddRange(SplitCommaSeparatedValues(artifactPathValue));
                     break;
+                case "--secret":
+                    if (!TryReadValue(args, ref index, arg, out var secretValue, out error))
+                    {
+                        return false;
+                    }
+
+                    if (!TryParseScriptSecretReference(secretValue, out var scriptSecret, out error))
+                    {
+                        return false;
+                    }
+
+                    scriptSecrets.Add(scriptSecret);
+                    break;
                 case "--target-file":
                     if (!TryReadValue(args, ref index, arg, out targetFile, out error))
                     {
@@ -326,6 +340,7 @@ internal sealed class DispatchRunCommandParser
             LocalRunRoot: localRunRoot,
             RemoteRunRoot: remoteRunRoot,
             ArtifactPaths: artifactPaths,
+            ScriptSecrets: scriptSecrets,
             CredentialReference: credentialReference,
             RunAsSystem: runAsSystem,
             NoDashboard: noDashboard,
@@ -359,6 +374,25 @@ internal sealed class DispatchRunCommandParser
 
     private static IEnumerable<string> SplitCommaSeparatedValues(string value) =>
         value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static bool TryParseScriptSecretReference(
+        string value,
+        out ScriptSecretReference reference,
+        out string error)
+    {
+        reference = new ScriptSecretReference(string.Empty, string.Empty);
+        error = string.Empty;
+
+        var parts = value.Split('=', 2, StringSplitOptions.TrimEntries);
+        if (parts.Length != 2 || string.IsNullOrWhiteSpace(parts[0]) || string.IsNullOrWhiteSpace(parts[1]))
+        {
+            error = "--secret requires name=reference, for example --secret payload_sas=blob-install-sas.";
+            return false;
+        }
+
+        reference = new ScriptSecretReference(parts[0], parts[1]);
+        return true;
+    }
 
     private static bool TryLoadConfig(
         string? configPath,

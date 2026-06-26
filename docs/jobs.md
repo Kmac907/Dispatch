@@ -68,6 +68,12 @@ Task tags are optional on `ps`, `cmd`, `exe`, and plan/check `copy` tasks. `--ta
 
 `credential` selects a reference from the loaded global Dispatch config. The job file does not define provider details or passwords.
 
+`credential` is only the endpoint authentication reference. It does not pass SAS tokens, API keys, or other script inputs to tasks.
+
+## Script Secrets
+
+Script secret handoff is planned first for `dispatch run ps ... --secret name=reference`. It is not part of the current `apply` subset. When job-level script secrets are added, they must follow the same protected secret-file model, redacted plan output, and no-secret-values-in-logs rule.
+
 ## Job Variables
 
 `job.vars` is the v1 runtime/task-input variable bag. Current `ps` apply tasks pass scalar `job.vars` entries to scripts as named PowerShell arguments in YAML order, for example `message: fixed` becomes `-message fixed`. Variable names must use letters, numbers, or underscores, and start with a letter or underscore. Inventory vars are host/group metadata and are not automatically merged into runtime task variables.

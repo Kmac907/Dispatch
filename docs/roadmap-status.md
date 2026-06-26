@@ -32,6 +32,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
+- Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is planned `dispatch run ps ... --secret name=reference` validation and redacted plan rendering of protected remote secret-file paths; real protected remote staging and cleanup are later work.
 
 ## Planned Next
 
@@ -40,6 +41,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Implement `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.
 - Implement source install and local packaging.
+- Implement script secret handoff in staged slices: plan/dry-run validation first, then protected remote staging and cleanup.
 
 ## Deferred Or Out Of Scope For V1
 
@@ -50,3 +52,4 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Enterprise package feeds.
 - Managed execution as default.
 - Dispatch-owned Blob/media payload staging.
+- Command-line script secret values in any form.
