@@ -198,7 +198,7 @@ dispatch creds test <name>
 dispatch creds remove <name>
 ```
 
-Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper `PSCredential` handoff remains planned for the wrapper slice. PsExec explicit password handoff remains intentionally unsupported while the v1 PsExec boundary forbids plaintext `psexec -u/-p` password passing.
+Status: current for config-defined prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault provider behavior on PSRP and raw WinRM credential resolution. PowerShell-wrapper `PSCredential` handoff remains planned for the Roadmap `7` wrapper slice: module commands will select configured references with `-CredentialName`, use optional supplied `-Credential <PSCredential>`, or prompt with `Get-Credential` for `provider: pscredential` when `-Credential` is omitted. Direct `dispatch.exe` must continue to reject `provider: pscredential` without protected wrapper handoff. PsExec explicit password handoff remains intentionally unsupported while the v1 PsExec boundary forbids plaintext `psexec -u/-p` password passing.
 
 Credential names are references from the loaded global YAML config. Resolved passwords are never command-line arguments.
 

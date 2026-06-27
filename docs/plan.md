@@ -1446,12 +1446,20 @@ Scope:
 - Add `Dispatch.psd1` and `Dispatch.psm1`.
 - Bundle `dispatch.exe` under `bin\win-x64`.
 - Implement command-aligned wrappers such as `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`.
+- Add `-CredentialName <name>` to the execution wrappers so the module can select the same configured credential references used by `dispatch.exe`.
+- Add optional `-Credential <PSCredential>` to the execution wrappers for `provider: pscredential` references.
+- Implement the PowerShell-module-only `provider: pscredential` workflow: when `-CredentialName` resolves to a `pscredential` reference and `-Credential` is supplied, use that live object; when `-Credential` is omitted, prompt with `Get-Credential`, using the configured username when present.
+- Keep `provider: prompt` owned by Dispatch itself. When a module command selects a `prompt` reference, the wrapper must not call `Get-Credential`; it should let the underlying Dispatch runtime perform the same secure prompt used by direct `dispatch.exe`.
+- Keep direct `dispatch.exe --credential <name>` behavior unchanged for `provider: pscredential`: direct CLI runtime use must fail clearly unless a compatible protected wrapper handoff is present.
+- Add a protected handoff from the PowerShell module to Dispatch for wrapper-supplied `PSCredential` values without placing passwords on command lines, in config, in job/inventory YAML, in logs, in traces, in results, or in artifacts.
+- Continue routing the resolved credential through the same transport handoff path as other endpoint credentials: PSRP receives an in-memory `PSCredential`, raw WinRM receives in-process WSMan connection options, and PsExec explicit password handoff remains unsupported under the no-plaintext `psexec -u/-p` boundary.
 - Prefer explicit JSON result path for automation functions rather than parsing rich operator output.
 
 Non-goals:
 - No binary cmdlets in MVP.
 - No PowerShell repository publishing in MVP.
 - No separate PowerShell execution engine.
+- No Roadmap 7 change should make `provider: pscredential` a normal direct `dispatch.exe` credential provider.
 
 Dependencies:
 - 6.8.
@@ -1460,6 +1468,11 @@ Definition of done:
 - Importing the module exposes the documented commands.
 - `dispatch.exe` remains the canonical CLI entrypoint after module installation.
 - `Invoke-DispatchPowerShell` invokes `dispatch run ps` and returns machine-readable results.
+- `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` accept `-CredentialName`; the command-capable wrappers also support optional `-Credential <PSCredential>` for `pscredential` references.
+- For `provider: pscredential`, supplied `-Credential` and module-side `Get-Credential` prompting both work, the configured username is used for prompting when available, and username mismatch behavior is validated or explicitly documented.
+- For `provider: prompt`, the module delegates prompting to Dispatch instead of prompting twice.
+- Direct `dispatch.exe` continues to reject `provider: pscredential` without wrapper handoff.
+- Tests prove wrapper credential prompting, supplied `PSCredential` handoff, direct CLI rejection, no plaintext secret leakage, and cleanup of any temporary handoff material.
 
 #### 8. Source Install And Local Packaging
 
