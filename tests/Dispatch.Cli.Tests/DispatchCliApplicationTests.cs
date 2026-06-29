@@ -6343,6 +6343,60 @@ credentials:
     }
 
     [Fact]
+    public async Task HostsGraphShowsGroupRelationships()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            defaults:
+              transport: psrp
+            groups:
+              prod:
+                children:
+                  - web
+                  - db
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+                vars:
+                  credential: prod-admin
+              db:
+                hosts: [DB01]
+            hosts:
+              LOOSE01:
+            """);
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "graph", "--inventory", inventoryPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error);
+            Assert.DoesNotContain("Planned Dispatch command", error);
+            using var json = JsonDocument.Parse(output);
+            var groups = json.RootElement.GetProperty("groups").EnumerateArray().ToArray();
+            Assert.Equal(["db", "prod", "web"], groups.Select(static group => group.GetProperty("name").GetString()).ToArray());
+            var prod = groups.Single(static group => group.GetProperty("name").GetString() == "prod");
+            Assert.Equal(["db", "web"], prod.GetProperty("children").EnumerateArray().Select(static child => child.GetString()).ToArray());
+            var web = groups.Single(static group => group.GetProperty("name").GetString() == "web");
+            Assert.Equal(["WEB01", "WEB02"], web.GetProperty("hosts").EnumerateArray().Select(static host => host.GetString()).ToArray());
+            Assert.Equal("prod-admin", web.GetProperty("credentialReference").GetString());
+            Assert.Equal(["LOOSE01"], json.RootElement.GetProperty("ungroupedHosts").EnumerateArray().Select(static host => host.GetString()).ToArray());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task HostsValidateRejectsInvalidInventory()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
@@ -6451,7 +6505,6 @@ credentials:
     }
 
     [Theory]
-    [InlineData("hosts", "graph")]
     [InlineData("hosts", "vars")]
     public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
     {

@@ -387,6 +387,60 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderHostInventoryGraph(
+        TextWriter writer,
+        InventoryGraphInspectionResult result,
+        DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(result));
+                break;
+            case DispatchOutputMode.Ndjson:
+                foreach (var group in result.Groups)
+                {
+                    writer.WriteLine(JsonSerializer.Serialize(
+                        new { type = "hosts.graph.group", inventory = result.InventoryPath, group },
+                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                }
+
+                foreach (var host in result.UngroupedHosts)
+                {
+                    writer.WriteLine(JsonSerializer.Serialize(
+                        new { type = "hosts.graph.ungrouped", inventory = result.InventoryPath, host },
+                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                }
+
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, result);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine("Dispatch hosts graph");
+                writer.WriteLine($"Inventory: {result.InventoryPath}");
+                writer.WriteLine($"Groups: {result.Groups.Count}");
+                writer.WriteLine($"Ungrouped hosts: {result.UngroupedHosts.Count}");
+                foreach (var group in result.Groups)
+                {
+                    var hosts = group.Hosts.Count == 0 ? "-" : string.Join(",", group.Hosts);
+                    var children = group.Children.Count == 0 ? "-" : string.Join(",", group.Children);
+                    var transport = group.Transport?.ToDispatchString() ?? "-";
+                    var credential = string.IsNullOrWhiteSpace(group.CredentialReference) ? "-" : group.CredentialReference;
+                    writer.WriteLine($"{group.Name} | children={children} | hosts={hosts} | transport={transport} | credential={credential}");
+                }
+
+                if (result.UngroupedHosts.Count > 0)
+                {
+                    writer.WriteLine($"ungrouped | hosts={string.Join(",", result.UngroupedHosts)}");
+                }
+
+                break;
+        }
+    }
+
     public static void RenderHostTestResult(
         TextWriter writer,
         DispatchHostTestResult result,

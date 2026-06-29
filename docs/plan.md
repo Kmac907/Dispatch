@@ -1377,7 +1377,7 @@ Current implementation boundary:
 - Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.
 - `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
 - Init scaffolding refuses to overwrite existing starter files.
-- `hosts` and expanded transport-aware `doctor` behavior remain later `6.6` work.
+- `dispatch hosts list`, `dispatch hosts validate`, `dispatch hosts test`, and `dispatch hosts graph` are implemented; `dispatch hosts vars` and expanded transport-aware `doctor` behavior remain later `6.6` work.
 
 #### 6.7 CLI Safety, Policy, And Exit Codes
 

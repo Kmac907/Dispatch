@@ -937,6 +937,23 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
+    internal int RunHostsGraphCommand(string? inventory, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        if (!TryInspectInventoryGraph(inventory, out var graph))
+        {
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderHostInventoryGraph(Console.Out, graph!, outputMode);
+        return 0;
+    }
+
     internal async Task<int> RunHostsTestCommandAsync(
         string? inventory,
         string? target,
@@ -1219,6 +1236,32 @@ public sealed class DispatchCliApplication(
         var message = string.Join(
             Environment.NewLine,
             inspection.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
+        SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", message);
+        return false;
+    }
+
+    private bool TryInspectInventoryGraph(string? inventory, out InventoryGraphInspectionResult? graph)
+    {
+        graph = null;
+        var inventoryPath = NormalizeOptionalValue(inventory) ?? NormalizeOptionalValue(options.Value.Inventory);
+        if (inventoryPath is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Hosts",
+                "hosts commands require --inventory <path> or Dispatch:Inventory in configuration.");
+            return false;
+        }
+
+        graph = TargetResolver.InspectInventoryGraph(inventoryPath);
+        if (graph.IsValid)
+        {
+            return true;
+        }
+
+        var message = string.Join(
+            Environment.NewLine,
+            graph.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
         SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", message);
         return false;
     }

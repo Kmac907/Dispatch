@@ -37,6 +37,47 @@ public static class TargetResolver
         return new InventoryInspectionResult(inventoryPath, hosts, errors);
     }
 
+    public static InventoryGraphInspectionResult InspectInventoryGraph(string inventoryPath)
+    {
+        var errors = new List<DispatchValidationError>();
+        var inventory = ReadInventory(inventoryPath, errors);
+        if (errors.Count > 0)
+        {
+            return new InventoryGraphInspectionResult(inventoryPath, [], [], [], errors);
+        }
+
+        var targets = inventory.AllHosts
+            .Select(static host => new TargetSpec(host.Name, host.Source))
+            .ToArray();
+        var inventoryTransportPolicies = inventory.ResolveTransportPoliciesForTargets(targets, errors);
+        var inventoryCredentialReferences = inventory.ResolveCredentialReferencesForTargets(targets, errors);
+        if (errors.Count > 0)
+        {
+            return new InventoryGraphInspectionResult(inventoryPath, [], [], [], errors);
+        }
+
+        var hosts = targets
+            .Select(target => new InventoryHostInspection(
+                target.Name,
+                target.Source,
+                inventory.ResolveGroupNamesForHost(target.Name),
+                inventoryTransportPolicies.TryGetValue(target.Name, out var transport) ? transport : null,
+                inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference) ? credentialReference : null))
+            .OrderBy(static host => host.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var ungroupedHosts = hosts
+            .Where(static host => host.Groups.Count == 0)
+            .Select(static host => host.Name)
+            .ToArray();
+
+        return new InventoryGraphInspectionResult(
+            inventoryPath,
+            inventory.CreateGraphGroups(),
+            ungroupedHosts,
+            hosts,
+            errors);
+    }
+
     public static TargetResolutionResult Resolve(TargetResolutionInput input)
     {
         var targets = new List<TargetSpec>();
@@ -501,6 +542,17 @@ public static class TargetResolver
             null);
 
         public IEnumerable<InventoryHost> AllHosts => hosts.Values;
+
+        public IReadOnlyList<InventoryGraphGroup> CreateGraphGroups() =>
+            groups
+                .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => new InventoryGraphGroup(
+                    group.Key,
+                    group.Value.Hosts.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                    group.Value.Children.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
+                    groupTransports.TryGetValue(group.Key, out var transport) ? transport : null,
+                    groupCredentialReferences.TryGetValue(group.Key, out var credentialReference) ? credentialReference : null))
+                .ToArray();
 
         public static InventoryTargets FromText(string path, IReadOnlyList<string> lines)
         {

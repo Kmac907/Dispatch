@@ -167,6 +167,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new HostsValidateCommand(application);
             }
 
+            if (type == typeof(HostsGraphCommand))
+            {
+                return new HostsGraphCommand(application);
+            }
+
             if (type == typeof(LogsShowCommand))
             {
                 return new LogsShowCommand(application);
@@ -420,7 +425,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         }
     }
 
-    private sealed class HostsGraphCommand() : PlannedCommand("hosts graph", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class HostsGraphCommand(DispatchCliApplication application) : Command<HostsInventorySettings>
+    {
+        protected override int Execute(CommandContext context, HostsInventorySettings settings, CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return application.RunHostsGraphCommand(settings.Inventory, settings.Output);
+        }
+    }
 
     private sealed class HostsVarsCommand() : PlannedCommand("hosts vars", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
 
@@ -922,7 +938,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
     private static readonly HashSet<Type> PlannedCommandTypes =
     [
-        typeof(HostsGraphCommand),
         typeof(HostsVarsCommand)
     ];
 
