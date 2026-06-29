@@ -6252,8 +6252,130 @@ credentials:
         }
     }
 
+    [Fact]
+    public async Task HostsValidateReportsValidInventory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            defaults:
+              transport: psrp
+              credential: prod-admin
+            groups:
+              web:
+                hosts:
+                  - WEB01
+            hosts:
+              WEB02:
+                tags: [web]
+                vars:
+                  transport: winrm
+            """);
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "validate", "--inventory", inventoryPath],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error);
+            Assert.Contains("Dispatch hosts valid", output);
+            Assert.Contains("Hosts: 2", output);
+            Assert.DoesNotContain("Planned Dispatch command", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HostsListShowsResolvedHostMetadata()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            defaults:
+              transport: psrp
+              credential: prod-admin
+            groups:
+              web:
+                hosts:
+                  - WEB01
+            hosts:
+              WEB02:
+                tags: [web]
+                vars:
+                  transport: winrm
+            """);
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "list", "--inventory", inventoryPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error);
+            Assert.DoesNotContain("Planned Dispatch command", error);
+            using var json = JsonDocument.Parse(output);
+            var hosts = json.RootElement.GetProperty("hosts").EnumerateArray().ToArray();
+            Assert.Equal(["WEB01", "WEB02"], hosts.Select(static host => host.GetProperty("name").GetString()).ToArray());
+            Assert.Equal("psrp", hosts[0].GetProperty("transport").GetString());
+            Assert.Equal("prod-admin", hosts[0].GetProperty("credentialReference").GetString());
+            Assert.Equal(["web"], hosts[0].GetProperty("groups").EnumerateArray().Select(static group => group.GetString()).ToArray());
+            Assert.Equal("winrm", hosts[1].GetProperty("transport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HostsValidateRejectsInvalidInventory()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            hosts:
+              PC001:
+                vars:
+                  password: unsafe
+            """);
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "validate", "--inventory", inventoryPath],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("Invalid Dispatch Hosts", error);
+            Assert.Contains("InventorySecretFieldUnsupported", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
-    [InlineData("hosts", "list")]
+    [InlineData("hosts", "test")]
     public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
     {
         var application = CreateApplication(new CapturingPlanner());

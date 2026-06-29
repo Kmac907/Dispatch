@@ -158,19 +158,22 @@ dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--inventory &lt;path&gt
 </ul>
 <h2>Hosts</h2>
 <pre><code>
-dispatch hosts list --inventory &lt;hosts.yml&gt;
+dispatch hosts list --inventory &lt;hosts.yml&gt; [--output rich|table|json|ndjson|yaml]
 dispatch hosts test --inventory &lt;hosts.yml&gt; --target &lt;selector&gt; [--transport psrp|winrm|psexec|auto]
-dispatch hosts validate --inventory &lt;hosts.yml&gt;
+dispatch hosts validate --inventory &lt;hosts.yml&gt; [--output rich|table|json|ndjson|yaml]
 dispatch hosts graph --inventory &lt;hosts.yml&gt;
 dispatch hosts vars --inventory &lt;hosts.yml&gt; --target &lt;host&gt;
 </code></pre>
-<p>Status: planned v1 command group. Inventory parsing and selector behavior are partially implemented on current run paths.</p>
-<p>Use <code>hosts</code> commands before execution when you need confidence in inventory structure or target selection. These commands are planned as inspection/validation tools, not as execution commands and not as endpoint remediation.</p>
+<p>Status: partial/current. <code>hosts list</code> and <code>hosts validate</code> are implemented as local inventory inspection commands. <code>hosts test</code>, <code>hosts graph</code>, and <code>hosts vars</code> remain planned v1.</p>
+<p>Use <code>hosts</code> commands before execution when you need confidence in inventory structure or target selection. These commands are inspection/validation tools, not execution commands and not endpoint remediation.</p>
+<p>Current subcommands:</p>
+<ul>
+<li><code>hosts list</code> reads an inventory and prints the hosts Dispatch can resolve, including group membership, effective inventory transport policy, credential reference name, and source location where available. Use it to confirm names and inherited metadata before running work. It does not contact endpoints.</li>
+<li><code>hosts validate</code> validates inventory syntax/schema using the same parser and supported metadata fields as current <code>run</code>, <code>apply</code>, and <code>push</code> target resolution. It reports unsupported fields, unsupported transports, plaintext-looking secret fields, group cycles, and conflicting inherited metadata before endpoint work. Use it in pull requests or preflight checks for inventory files.</li>
+</ul>
 <p>Planned subcommands:</p>
 <ul>
-<li><code>hosts list</code> will read an inventory and print the hosts Dispatch can resolve, including group membership where available. Use it to confirm names and selector expansion before running work.</li>
 <li><code>hosts test</code> will test the selected remoting path for matching hosts. It is not an ICMP ping command and will not remediate endpoints. Use it to prove the chosen transport path is reachable enough for Dispatch.</li>
-<li><code>hosts validate</code> will validate inventory syntax/schema without running endpoint work. Use it in pull requests or preflight checks for inventory files.</li>
 <li><code>hosts graph</code> will show group/child relationships so nested inventory structure is easier to inspect. Use it when group inheritance or child groups make selection hard to reason about.</li>
 <li><code>hosts vars</code> will show the effective host metadata Dispatch can derive for one target, including supported transport and credential reference fields. Use it to understand precedence across defaults, groups, host entries, config, and CLI overrides.</li>
 </ul>

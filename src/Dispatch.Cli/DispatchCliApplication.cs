@@ -897,6 +897,40 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
+    internal int RunHostsListCommand(string? inventory, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        if (!TryInspectInventory(inventory, out var inspection))
+        {
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderHostInventoryInspection(Console.Out, inspection!, outputMode);
+        return 0;
+    }
+
+    internal int RunHostsValidateCommand(string? inventory, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        if (!TryInspectInventory(inventory, out var inspection))
+        {
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderHostInventoryValidation(Console.Out, inspection!, outputMode);
+        return 0;
+    }
+
     internal async Task<int> RunCredsAddCommandAsync(
         string name,
         string? userName,
@@ -1046,6 +1080,32 @@ public sealed class DispatchCliApplication(
     {
         SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", message);
         return 1;
+    }
+
+    private bool TryInspectInventory(string? inventory, out InventoryInspectionResult? inspection)
+    {
+        inspection = null;
+        var inventoryPath = NormalizeOptionalValue(inventory) ?? NormalizeOptionalValue(options.Value.Inventory);
+        if (inventoryPath is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Hosts",
+                "hosts commands require --inventory <path> or Dispatch:Inventory in configuration.");
+            return false;
+        }
+
+        inspection = TargetResolver.InspectInventory(inventoryPath);
+        if (inspection.IsValid)
+        {
+            return true;
+        }
+
+        var message = string.Join(
+            Environment.NewLine,
+            inspection.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
+        SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", message);
+        return false;
     }
 
     private static int RenderCredentialOperationResult(

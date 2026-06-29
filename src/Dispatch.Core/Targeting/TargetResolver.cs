@@ -5,6 +5,38 @@ namespace Dispatch.Core.Targeting;
 
 public static class TargetResolver
 {
+    public static InventoryInspectionResult InspectInventory(string inventoryPath)
+    {
+        var errors = new List<DispatchValidationError>();
+        var inventory = ReadInventory(inventoryPath, errors);
+        if (errors.Count > 0)
+        {
+            return new InventoryInspectionResult(inventoryPath, [], errors);
+        }
+
+        var targets = inventory.AllHosts
+            .Select(static host => new TargetSpec(host.Name, host.Source))
+            .ToArray();
+        var inventoryTransportPolicies = inventory.ResolveTransportPoliciesForTargets(targets, errors);
+        var inventoryCredentialReferences = inventory.ResolveCredentialReferencesForTargets(targets, errors);
+        if (errors.Count > 0)
+        {
+            return new InventoryInspectionResult(inventoryPath, [], errors);
+        }
+
+        var hosts = targets
+            .Select(target => new InventoryHostInspection(
+                target.Name,
+                target.Source,
+                inventory.ResolveGroupNamesForHost(target.Name),
+                inventoryTransportPolicies.TryGetValue(target.Name, out var transport) ? transport : null,
+                inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference) ? credentialReference : null))
+            .OrderBy(static host => host.Name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new InventoryInspectionResult(inventoryPath, hosts, errors);
+    }
+
     public static TargetResolutionResult Resolve(TargetResolutionInput input)
     {
         var targets = new List<TargetSpec>();
@@ -1616,6 +1648,11 @@ public static class TargetResolver
                 }
             }
         }
+
+        public IReadOnlyList<string> ResolveGroupNamesForHost(string hostName) =>
+            ResolveGroupsForHost(hostName)
+                .OrderBy(static groupName => groupName, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
         private bool GroupContainsHost(string groupName, string hostName, ISet<string> visitedGroups)
         {

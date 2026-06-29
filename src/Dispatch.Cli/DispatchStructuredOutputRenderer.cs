@@ -4,6 +4,8 @@ using System.Text.Json.Serialization;
 using Dispatch.Core;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
+using Dispatch.Core.Targeting;
+using Dispatch.Core.Validation;
 
 namespace Dispatch.Cli;
 
@@ -312,6 +314,79 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderHostInventoryInspection(
+        TextWriter writer,
+        InventoryInspectionResult result,
+        DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(result));
+                break;
+            case DispatchOutputMode.Ndjson:
+                foreach (var host in result.Hosts)
+                {
+                    writer.WriteLine(JsonSerializer.Serialize(
+                        new { type = "hosts.host", inventory = result.InventoryPath, host },
+                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                }
+
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, result);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine("Dispatch hosts");
+                writer.WriteLine($"Inventory: {result.InventoryPath}");
+                writer.WriteLine($"Hosts: {result.Hosts.Count}");
+                foreach (var host in result.Hosts)
+                {
+                    var groups = host.Groups.Count == 0 ? "-" : string.Join(",", host.Groups);
+                    var transport = host.Transport?.ToDispatchString() ?? "-";
+                    var credential = string.IsNullOrWhiteSpace(host.CredentialReference) ? "-" : host.CredentialReference;
+                    writer.WriteLine($"{host.Name} | groups={groups} | transport={transport} | credential={credential} | source={host.Source}");
+                }
+
+                break;
+        }
+    }
+
+    public static void RenderHostInventoryValidation(
+        TextWriter writer,
+        InventoryInspectionResult result,
+        DispatchOutputMode mode)
+    {
+        var validation = new DispatchHostInventoryValidation(
+            result.InventoryPath,
+            result.IsValid,
+            result.Hosts.Count,
+            result.Errors);
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(validation));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    new { type = "hosts.validation", validation },
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, validation);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine("Dispatch hosts valid");
+                writer.WriteLine($"Inventory: {result.InventoryPath}");
+                writer.WriteLine($"Hosts: {result.Hosts.Count}");
+                break;
+        }
+    }
+
     private static void WriteYaml<T>(TextWriter writer, T value)
     {
         var node = JsonSerializer.SerializeToNode(value, DispatchJson.Options);
@@ -506,3 +581,9 @@ internal sealed record DispatchPushTargetResult(
     string? FailureMessage,
     long BytesUploaded,
     IReadOnlyDictionary<string, string> Metadata);
+
+internal sealed record DispatchHostInventoryValidation(
+    string InventoryPath,
+    bool Valid,
+    int HostCount,
+    IReadOnlyList<DispatchValidationError> Errors);

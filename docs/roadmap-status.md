@@ -20,6 +20,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Inventory subset for current run paths.
 - `dispatch apply <job.yml> --plan`, `dispatch apply <job.yml> --check`, and `dispatch apply <job.yml>` for selected multi-task script-first `ps`, scalar `cmd`, and scalar `exe` jobs, plus plan/check-only `copy` task rendering.
 - `dispatch push <source> --dest <remote-path>` for single-file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy, optional replacement through `--overwrite`, target-local pre-replacement backup through `--backup`, explicit push-result SHA-256 enforcement/reporting through `--checksum`, single-file `.ps1` execute-after-copy through `--execute`, post-execute script removal through `--cleanup`, plus push `--plan` / `--check` preview.
+- `dispatch hosts list` and `dispatch hosts validate` local inventory inspection.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -28,7 +29,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 
 - `doctor` exists but the full v1 transport-aware diagnostics surface is still expanding.
 - `push` supports file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy, `--backup` pre-replacement backup, `--checksum` push-result SHA-256 enforcement/reporting, single-file `.ps1` execute-after-copy through `--execute`, and post-execute script removal through `--cleanup`. Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.
-- `hosts` command group is registered/planned but not fully implemented.
+- `hosts` command group has current `list` and `validate`; `test`, `graph`, and `vars` remain planned.
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
@@ -36,7 +37,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 
 ## Planned Next
 
-- Continue `6.6` push, hosts, and transport-aware doctor command surfaces.
+- Continue `6.6` remaining hosts subcommands and transport-aware doctor command surfaces.
 - Implement `6.7` CLI safety, policy, and stable exit codes.
 - Implement `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.

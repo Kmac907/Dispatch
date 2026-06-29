@@ -152,6 +152,16 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new LogsListCommand(application);
             }
 
+            if (type == typeof(HostsListCommand))
+            {
+                return new HostsListCommand(application);
+            }
+
+            if (type == typeof(HostsValidateCommand))
+            {
+                return new HostsValidateCommand(application);
+            }
+
             if (type == typeof(LogsShowCommand))
             {
                 return new LogsShowCommand(application);
@@ -355,11 +365,33 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             DispatchCliApplication.RenderPlannedCommand(command, roadmapItem);
     }
 
-    private sealed class HostsListCommand() : PlannedCommand("hosts list", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class HostsListCommand(DispatchCliApplication application) : Command<HostsInventorySettings>
+    {
+        protected override int Execute(CommandContext context, HostsInventorySettings settings, CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return application.RunHostsListCommand(settings.Inventory, settings.Output);
+        }
+    }
 
     private sealed class HostsTestCommand() : PlannedCommand("hosts test", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
 
-    private sealed class HostsValidateCommand() : PlannedCommand("hosts validate", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class HostsValidateCommand(DispatchCliApplication application) : Command<HostsInventorySettings>
+    {
+        protected override int Execute(CommandContext context, HostsInventorySettings settings, CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return application.RunHostsValidateCommand(settings.Inventory, settings.Output);
+        }
+    }
 
     private sealed class HostsGraphCommand() : PlannedCommand("hosts graph", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
 
@@ -698,6 +730,15 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         public string? Output { get; init; }
     }
 
+    private sealed class HostsInventorySettings : CommandSettings
+    {
+        [CommandOption("-i|--inventory <path>")]
+        public string? Inventory { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
     private abstract class RunTargetedSettings : CommandSettings, IRunSharedSettings
     {
         [CommandOption("-t|--target <selector>")]
@@ -833,9 +874,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
     private static readonly HashSet<Type> PlannedCommandTypes =
     [
-        typeof(HostsListCommand),
         typeof(HostsTestCommand),
-        typeof(HostsValidateCommand),
         typeof(HostsGraphCommand),
         typeof(HostsVarsCommand)
     ];
