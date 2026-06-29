@@ -7,21 +7,35 @@ namespace Dispatch.Cli;
 
 public interface IDispatchDoctor
 {
-    DispatchDoctorReport Run();
+    DispatchDoctorReport Run(DispatchDoctorRequest request);
 }
 
 public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatchDoctor
 {
-    public DispatchDoctorReport Run()
+    public DispatchDoctorReport Run() => Run(DispatchDoctorRequest.Auto);
+
+    public DispatchDoctorReport Run(DispatchDoctorRequest request)
     {
         var checks = new List<DispatchDoctorCheck>
         {
             CheckOperatingSystem(),
             CheckPowerShell(),
-            CheckPsExec(),
             CheckLocalRunRoot(),
-            CheckAdminContext()
+            CheckTransportScope(request.Transport)
         };
+
+        if (request.Transport is DispatchDoctorTransportScope.Auto or DispatchDoctorTransportScope.PsExec)
+        {
+            checks.Add(CheckPsExec());
+            checks.Add(CheckAdminContext());
+        }
+
+        if (request.Transport is DispatchDoctorTransportScope.Auto
+            or DispatchDoctorTransportScope.Psrp
+            or DispatchDoctorTransportScope.WinRm)
+        {
+            checks.Add(CheckWinRmClient());
+        }
 
         return new DispatchDoctorReport(checks);
     }
@@ -60,6 +74,17 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
                 $"PsExec was not found from configured path '{RedactPath(configuredPath)}'.",
                 "Set Dispatch:PsExecPath or add psexec.exe to PATH.")
             : DispatchDoctorCheck.Pass("PsExec", "PsExec executable resolved.", RedactPath(resolved));
+    }
+
+    private static DispatchDoctorCheck CheckWinRmClient()
+    {
+        var resolved = ResolveAnyExecutable("winrm.exe", "winrm.cmd");
+        return resolved is null
+            ? DispatchDoctorCheck.Fail(
+                "WinRM client",
+                "WinRM command-line client was not found in PATH.",
+                "Required for raw WinRM and PSRP local diagnostics.")
+            : DispatchDoctorCheck.Pass("WinRM client", "WinRM command-line client is available.", RedactPath(resolved));
     }
 
     private DispatchDoctorCheck CheckLocalRunRoot()
@@ -112,6 +137,36 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
         return principal.IsInRole(WindowsBuiltInRole.Administrator)
             ? DispatchDoctorCheck.Pass("Admin context", "Current process is running with an administrator token.", "Endpoint rights are still validated per target.")
             : DispatchDoctorCheck.Warning("Admin context", "Current process is not elevated.", "PsExec/admin-share operations may fail without appropriate endpoint rights.");
+    }
+
+    private static DispatchDoctorCheck CheckTransportScope(DispatchDoctorTransportScope transport) =>
+        DispatchDoctorCheck.Pass(
+            "Transport scope",
+            $"Checking {FormatTransportScope(transport)} local prerequisites.",
+            transport.ToDispatchString());
+
+    private static string FormatTransportScope(DispatchDoctorTransportScope transport) =>
+        transport switch
+        {
+            DispatchDoctorTransportScope.Auto => "all current transport paths",
+            DispatchDoctorTransportScope.PsExec => "PsExec",
+            DispatchDoctorTransportScope.Psrp => "PSRP",
+            DispatchDoctorTransportScope.WinRm => "raw WinRM",
+            _ => transport.ToString()
+        };
+
+    private static string? ResolveAnyExecutable(params string[] executables)
+    {
+        foreach (var executable in executables)
+        {
+            var resolved = ResolveExecutable(executable);
+            if (resolved is not null)
+            {
+                return resolved;
+            }
+        }
+
+        return null;
     }
 
     private static string? ResolveExecutable(string executable)
@@ -171,6 +226,32 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
 
         return path;
     }
+}
+
+public sealed record DispatchDoctorRequest(DispatchDoctorTransportScope Transport)
+{
+    public static DispatchDoctorRequest Auto { get; } = new(DispatchDoctorTransportScope.Auto);
+}
+
+public enum DispatchDoctorTransportScope
+{
+    Auto,
+    PsExec,
+    Psrp,
+    WinRm
+}
+
+public static class DispatchDoctorTransportScopeExtensions
+{
+    public static string ToDispatchString(this DispatchDoctorTransportScope transport) =>
+        transport switch
+        {
+            DispatchDoctorTransportScope.Auto => "auto",
+            DispatchDoctorTransportScope.PsExec => "psexec",
+            DispatchDoctorTransportScope.Psrp => "psrp",
+            DispatchDoctorTransportScope.WinRm => "winrm",
+            _ => transport.ToString().ToLowerInvariant()
+        };
 }
 
 public sealed record DispatchDoctorReport(IReadOnlyList<DispatchDoctorCheck> Checks)

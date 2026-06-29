@@ -419,9 +419,15 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
-    internal int RunDoctorCommand()
+    internal int RunDoctorCommand(string? transport)
     {
-        var report = doctor.Run();
+        if (!TryParseDoctorTransport(transport, out var transportScope, out var error))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Doctor", error);
+            return 1;
+        }
+
+        var report = doctor.Run(new DispatchDoctorRequest(transportScope));
         SpectreConsoleRenderer.RenderDoctorReport(Console.Out, report);
         return report.Succeeded ? 0 : 1;
     }
@@ -2412,6 +2418,40 @@ public sealed class DispatchCliApplication(
             default:
                 transport = TransportKind.WinRm;
                 error = $"Unsupported transport '{value}'.";
+                return false;
+        }
+    }
+
+    private static bool TryParseDoctorTransport(
+        string? value,
+        out DispatchDoctorTransportScope transport,
+        out string error)
+    {
+        error = string.Empty;
+        var normalized = NormalizeOptionalValue(value);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            transport = DispatchDoctorTransportScope.Auto;
+            return true;
+        }
+
+        switch (normalized.ToLowerInvariant())
+        {
+            case "auto":
+                transport = DispatchDoctorTransportScope.Auto;
+                return true;
+            case "psexec":
+                transport = DispatchDoctorTransportScope.PsExec;
+                return true;
+            case "psrp":
+                transport = DispatchDoctorTransportScope.Psrp;
+                return true;
+            case "winrm":
+                transport = DispatchDoctorTransportScope.WinRm;
+                return true;
+            default:
+                transport = DispatchDoctorTransportScope.Auto;
+                error = $"Unsupported doctor transport '{value}'. Expected auto, psexec, psrp, or winrm.";
                 return false;
         }
     }

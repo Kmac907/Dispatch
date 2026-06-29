@@ -267,10 +267,10 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
             DispatchCliApplication.RenderVersion();
     }
 
-    private sealed class DoctorCommand(DispatchCliApplication application) : Command
+    private sealed class DoctorCommand(DispatchCliApplication application) : Command<DoctorSettings>
     {
-        protected override int Execute(CommandContext context, CancellationToken cancellationToken) =>
-            application.RunDoctorCommand();
+        protected override int Execute(CommandContext context, DoctorSettings settings, CancellationToken cancellationToken) =>
+            application.RunDoctorCommand(settings.Transport);
     }
 
     private sealed class ApplyCommand(DispatchCliApplication application) : AsyncCommand<ApplySettings>
@@ -709,6 +709,12 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
         [CommandOption("--trace")]
         public bool Trace { get; init; }
+    }
+
+    private sealed class DoctorSettings : CommandSettings
+    {
+        [CommandOption("--transport <name>")]
+        public string? Transport { get; init; }
     }
 
     private sealed class LogsListSettings : CommandSettings

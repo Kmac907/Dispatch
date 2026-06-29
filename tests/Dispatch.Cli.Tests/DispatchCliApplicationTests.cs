@@ -92,6 +92,51 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task DoctorRoutePassesSelectedTransportScope()
+    {
+        var doctor = new StaticDoctor(new DispatchDoctorReport(
+        [
+            DispatchDoctorCheck.Pass("Transport scope", "Checking raw WinRM local prerequisites.", "winrm")
+        ]));
+        var application = CreateApplication(new CapturingPlanner(), doctor);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--transport", "winrm"], CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+        Assert.Equal(DispatchDoctorTransportScope.WinRm, doctor.LastRequest?.Transport);
+        Assert.Contains("Transport scope", output);
+    }
+
+    [Fact]
+    public async Task DoctorRouteRejectsUnsupportedTransportBeforeRunningChecks()
+    {
+        var doctor = new StaticDoctor(new DispatchDoctorReport(
+        [
+            DispatchDoctorCheck.Pass("Transport scope", "Checking local prerequisites.", "auto")
+        ]));
+        var application = CreateApplication(new CapturingPlanner(), doctor);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--transport", "ssh"], CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output);
+        Assert.Null(doctor.LastRequest);
+        Assert.Contains("Unsupported doctor transport 'ssh'", error);
+    }
+
+    [Fact]
+    public async Task DoctorHelpShowsTransportScopeOption()
+    {
+        var application = CreateApplication(new CapturingPlanner());
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--help"], CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+        Assert.Contains("--transport", output);
+        Assert.Contains("auto|psexec|psrp|winrm", output);
+    }
+
+    [Fact]
     public void DoctorChecksConfiguredPsExecAndWritableOutputPath()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
@@ -106,7 +151,7 @@ public sealed class DispatchCliApplicationTests
 
         try
         {
-            var report = doctor.Run();
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
 
             Assert.DoesNotContain(report.Checks, static check => check.Status == DispatchDoctorStatus.Fail);
             Assert.Contains(report.Checks, static check => check is { Name: "PsExec", Status: DispatchDoctorStatus.Pass });
@@ -130,13 +175,65 @@ public sealed class DispatchCliApplicationTests
 
         try
         {
-            var report = doctor.Run();
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
 
             var check = Assert.Single(report.Checks, static item => item.Name == "PsExec");
             Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
             Assert.Contains("PsExec was not found", check.Message);
             Assert.Contains("%TEMP%", check.Message);
             Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DoctorWinRmScopeDoesNotRequirePsExec()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
+        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        {
+            LocalRunRoot = root,
+            PsExecPath = Path.Combine(root, "missing-psexec.exe")
+        }));
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.WinRm));
+
+            Assert.DoesNotContain(report.Checks, static item => item.Name == "PsExec");
+            Assert.Contains(report.Checks, static item => item is { Name: "WinRM client" });
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DoctorPsExecScopeChecksPsExec()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
+        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        {
+            LocalRunRoot = root,
+            PsExecPath = Path.Combine(root, "missing-psexec.exe")
+        }));
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "PsExec");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
         }
         finally
         {
@@ -8410,7 +8507,13 @@ credentials:
 
     private sealed class StaticDoctor(DispatchDoctorReport report) : IDispatchDoctor
     {
-        public DispatchDoctorReport Run() => report;
+        public DispatchDoctorRequest? LastRequest { get; private set; }
+
+        public DispatchDoctorReport Run(DispatchDoctorRequest request)
+        {
+            LastRequest = request;
+            return report;
+        }
     }
 
 }

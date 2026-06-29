@@ -221,11 +221,11 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 </code></pre>
 <h2>Doctor</h2>
 <pre><code>
-dispatch doctor [--output rich|json|table]
+dispatch doctor [--transport auto|psexec|psrp|winrm]
 </code></pre>
-<p>Status: partial/current diagnostics, with expanded transport-aware checks planned v1.</p>
+<p>Status: current for local transport-scoped prerequisite checks. Structured <code>doctor</code> output modes and broader diagnostics remain planned v1.</p>
 <p><code>doctor</code> reports local readiness. It does not remediate endpoints.</p>
-<p>Current diagnostics are local prerequisite checks only. Expanded <code>--transport psexec|psrp|winrm|auto</code> behavior is planned but not accepted by the current command, so operators cannot request transport-specific prerequisite checks yet.</p>
+<p>Current diagnostics are local prerequisite checks only. Omitted <code>--transport</code> or <code>--transport auto</code> runs shared checks plus local checks for the current transport set. <code>--transport psexec</code> includes the configured PsExec path and local admin-token checks. <code>--transport psrp</code> and <code>--transport winrm</code> include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing.</p>
 <p>Use <code>doctor</code> when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use <code>hosts test</code> for endpoint-specific transport probes; <code>doctor</code> is not a fleet scan.</p>
 <h2>Init</h2>
 <pre><code>

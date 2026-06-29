@@ -69,13 +69,14 @@
 <li><code>dispatch hosts test</code> transport endpoint probing for selected inventory targets.</li>
 <li><code>dispatch hosts graph</code> local inventory group/child relationship inspection.</li>
 <li><code>dispatch hosts vars</code> local effective host metadata inspection.</li>
+<li><code>dispatch doctor --transport auto|psexec|psrp|winrm</code> local prerequisite scoping.</li>
 <li><code>dispatch init config|hosts|job|all</code> starter YAML scaffolding.</li>
 <li>Logs commands over local run history.</li>
 <li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
 </ul>
 <h2>Partial</h2>
 <ul>
-<li><code>doctor</code> exists but the full v1 transport-aware diagnostics surface is still expanding.</li>
+<li><code>doctor</code> supports local transport-scoped prerequisite checks, but structured output modes and broader diagnostics remain planned.</li>
   <li><code>push</code> supports file and recursive directory transfer over raw WinRM or PSRP, including <code>--transport auto</code> selection through inventory/config/default transport policy, <code>--backup</code> pre-replacement backup, <code>--checksum</code> push-result SHA-256 enforcement/reporting, single-file <code>.ps1</code> execute-after-copy through <code>--execute</code>, and post-execute script removal through <code>--cleanup</code>. Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.</li>
 <li><code>hosts</code> command group has current <code>list</code>, <code>validate</code>, <code>graph</code>, <code>vars</code>, and transport-probe <code>test</code> over the supported v1 inventory subset.</li>
 <li>Inventory support covers the v1 subset needed by current run paths.</li>
@@ -85,7 +86,6 @@
 </ul>
 <h2>Planned Next</h2>
 <ul>
-<li>Continue <code>6.6</code> transport-aware doctor command surfaces.</li>
 <li>Implement <code>6.7</code> CLI safety, policy, and stable exit codes.</li>
 <li>Implement <code>6.8</code> diagnostics migration.</li>
 <li>Implement PowerShell module wrapper.</li>

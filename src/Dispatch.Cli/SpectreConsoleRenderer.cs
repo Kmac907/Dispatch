@@ -99,7 +99,10 @@ internal static class SpectreConsoleRenderer
         console.WriteLine("Validate local configuration and dependencies.");
         console.WriteLine();
         console.WriteLine("Usage:");
-        console.WriteLine("  dispatch doctor");
+        console.WriteLine("  dispatch doctor [--transport auto|psexec|psrp|winrm]");
+        console.WriteLine();
+        console.WriteLine("Options:");
+        console.WriteLine("      --transport <name>      Scope local checks to auto, psexec, psrp, or winrm");
     }
 
     public static void RenderPlannedFeature(TextWriter writer, string command, string roadmapItem)
