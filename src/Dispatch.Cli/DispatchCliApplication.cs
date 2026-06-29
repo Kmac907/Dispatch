@@ -954,6 +954,47 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
+    internal int RunHostsVarsCommand(string? inventory, string? target, string? outputValue)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Command", outputError!);
+            return 1;
+        }
+
+        var normalizedTarget = NormalizeOptionalValue(target);
+        if (normalizedTarget is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Hosts",
+                "hosts vars requires --target <host>.");
+            return 1;
+        }
+
+        if (!TryInspectInventory(inventory, out var inspection))
+        {
+            return 1;
+        }
+
+        var host = inspection!.Hosts.FirstOrDefault(item =>
+            item.Name.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase));
+        if (host is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Hosts",
+                $"Inventory '{inspection.InventoryPath}' does not contain host '{normalizedTarget}'.");
+            return 1;
+        }
+
+        DispatchStructuredOutputRenderer.RenderHostVars(
+            Console.Out,
+            new DispatchHostVarsResult(inspection.InventoryPath, normalizedTarget, host),
+            outputMode);
+        return 0;
+    }
+
     internal async Task<int> RunHostsTestCommandAsync(
         string? inventory,
         string? target,

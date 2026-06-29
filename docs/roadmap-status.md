@@ -23,6 +23,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `dispatch hosts list` and `dispatch hosts validate` local inventory inspection.
 - `dispatch hosts test` transport endpoint probing for selected inventory targets.
 - `dispatch hosts graph` local inventory group/child relationship inspection.
+- `dispatch hosts vars` local effective host metadata inspection.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -31,7 +32,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 
 - `doctor` exists but the full v1 transport-aware diagnostics surface is still expanding.
 - `push` supports file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy, `--backup` pre-replacement backup, `--checksum` push-result SHA-256 enforcement/reporting, single-file `.ps1` execute-after-copy through `--execute`, and post-execute script removal through `--cleanup`. Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.
-- `hosts` command group has current `list`, `validate`, `graph`, and transport-probe `test`; `vars` remains planned.
+- `hosts` command group has current `list`, `validate`, `graph`, `vars`, and transport-probe `test` over the supported v1 inventory subset.
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
@@ -39,7 +40,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 
 ## Planned Next
 
-- Continue `6.6` remaining hosts vars subcommand and transport-aware doctor command surfaces.
+- Continue `6.6` transport-aware doctor command surfaces.
 - Implement `6.7` CLI safety, policy, and stable exit codes.
 - Implement `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.

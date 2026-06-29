@@ -172,6 +172,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new HostsGraphCommand(application);
             }
 
+            if (type == typeof(HostsVarsCommand))
+            {
+                return new HostsVarsCommand(application);
+            }
+
             if (type == typeof(LogsShowCommand))
             {
                 return new LogsShowCommand(application);
@@ -438,7 +443,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         }
     }
 
-    private sealed class HostsVarsCommand() : PlannedCommand("hosts vars", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class HostsVarsCommand(DispatchCliApplication application) : Command<HostsVarsSettings>
+    {
+        protected override int Execute(CommandContext context, HostsVarsSettings settings, CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return application.RunHostsVarsCommand(settings.Inventory, settings.Target, settings.Output);
+        }
+    }
 
     private sealed class LogsListCommand(DispatchCliApplication application) : Command<LogsListSettings>
     {
@@ -782,6 +798,18 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         public string? Output { get; init; }
     }
 
+    private sealed class HostsVarsSettings : CommandSettings
+    {
+        [CommandOption("-i|--inventory <path>")]
+        public string? Inventory { get; init; }
+
+        [CommandOption("-t|--target <host>")]
+        public string? Target { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
     private sealed class HostsTestSettings : CommandSettings
     {
         [CommandOption("-i|--inventory <path>")]
@@ -936,10 +964,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         bool Trace { get; }
     }
 
-    private static readonly HashSet<Type> PlannedCommandTypes =
-    [
-        typeof(HostsVarsCommand)
-    ];
+    private static readonly HashSet<Type> PlannedCommandTypes = [];
 
     private static string[] BuildPowerShellArgs(RunPsSettings settings, IReadOnlyList<string> remaining)
     {

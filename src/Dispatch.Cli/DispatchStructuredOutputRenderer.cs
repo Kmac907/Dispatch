@@ -441,6 +441,38 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderHostVars(
+        TextWriter writer,
+        DispatchHostVarsResult result,
+        DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(result));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(JsonSerializer.Serialize(
+                    new { type = "hosts.vars", inventory = result.InventoryPath, target = result.Target, host = result.Host },
+                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, result);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine("Dispatch host vars");
+                writer.WriteLine($"Inventory: {result.InventoryPath}");
+                writer.WriteLine($"Target: {result.Host.Name}");
+                writer.WriteLine($"Source: {result.Host.Source}");
+                writer.WriteLine($"Groups: {(result.Host.Groups.Count == 0 ? "-" : string.Join(",", result.Host.Groups))}");
+                writer.WriteLine($"Transport: {result.Host.Transport?.ToDispatchString() ?? "-"}");
+                writer.WriteLine($"Credential: {(string.IsNullOrWhiteSpace(result.Host.CredentialReference) ? "-" : result.Host.CredentialReference)}");
+                break;
+        }
+    }
+
     public static void RenderHostTestResult(
         TextWriter writer,
         DispatchHostTestResult result,
@@ -681,6 +713,11 @@ internal sealed record DispatchHostInventoryValidation(
     bool Valid,
     int HostCount,
     IReadOnlyList<DispatchValidationError> Errors);
+
+internal sealed record DispatchHostVarsResult(
+    string InventoryPath,
+    string Target,
+    InventoryHostInspection Host);
 
 internal sealed record DispatchHostTestResult(
     string InventoryPath,
