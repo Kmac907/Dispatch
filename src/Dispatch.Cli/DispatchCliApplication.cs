@@ -4,6 +4,7 @@ using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
 using Dispatch.Core.Targeting;
+using Dispatch.Core.Transports;
 using Dispatch.Transports.PsExec;
 using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
@@ -28,7 +29,8 @@ public sealed class DispatchCliApplication(
     IWinRmScriptTransferClient? winRmTransferClient = null,
     IPsrpFileTransferClient? psrpFileTransferClient = null,
     IWinRmShellClient? winRmShellClient = null,
-    IPsrpCommandClient? psrpCommandClient = null)
+    IPsrpCommandClient? psrpCommandClient = null,
+    IEnumerable<ITransportEndpointProbe>? endpointProbes = null)
 {
     private readonly DispatchRunHistoryReader runHistoryReader = new();
     private readonly DispatchRunLogExporter runLogExporter = new();
@@ -43,6 +45,10 @@ public sealed class DispatchCliApplication(
     private readonly IPsrpFileTransferClient? psrpFileTransferClient = psrpFileTransferClient;
     private readonly IWinRmShellClient? winRmShellClient = winRmShellClient;
     private readonly IPsrpCommandClient? psrpCommandClient = psrpCommandClient;
+    private readonly IReadOnlyDictionary<TransportKind, ITransportEndpointProbe> endpointProbes =
+        (endpointProbes ?? [])
+            .GroupBy(static probe => probe.Kind)
+            .ToDictionary(static group => group.Key, static group => group.First());
 
     public async Task<int> RunAsync(string[] args, CancellationToken cancellationToken)
     {
@@ -931,6 +937,115 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
+    internal async Task<int> RunHostsTestCommandAsync(
+        string? inventory,
+        string? target,
+        string? exclude,
+        string? transport,
+        string? configPath,
+        string? outputValue,
+        CancellationToken cancellationToken)
+    {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", outputError!);
+            return 1;
+        }
+
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Hosts",
+                "hosts test requires --target <selector>.");
+            return 1;
+        }
+
+        if (!TryLoadPushConfig(configPath, out var config, out var configError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", configError);
+            return 1;
+        }
+
+        var inventoryPath = NormalizeOptionalValue(inventory) ?? NormalizeOptionalValue(config.Inventory);
+        if (inventoryPath is null)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Invalid Dispatch Hosts",
+                "hosts test requires --inventory <path> or Dispatch:Inventory in configuration.");
+            return 1;
+        }
+
+        var targetResolution = TargetResolver.Resolve(new TargetResolutionInput(
+            ComputerNameValues: [],
+            TargetFile: null,
+            InventoryPath: inventoryPath,
+            TargetSelectors: [target],
+            ExcludeSelectors: string.IsNullOrWhiteSpace(exclude) ? [] : [exclude]));
+        if (targetResolution.Errors.Count > 0)
+        {
+            var message = string.Join(
+                Environment.NewLine,
+                targetResolution.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", message);
+            return 1;
+        }
+
+        if (!TryResolveHostsTestTransports(transport, targetResolution, config.DefaultTransport, out var targetTransports, out var transportError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", transportError);
+            return 1;
+        }
+
+        var startedAt = DateTimeOffset.UtcNow;
+        var results = new List<DispatchHostTestTargetResult>();
+        foreach (var resolvedTarget in targetResolution.Targets)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var resolvedTransport = targetTransports[resolvedTarget.Name];
+            if (!endpointProbes.TryGetValue(resolvedTransport, out var probe))
+            {
+                var missingStartedAt = DateTimeOffset.UtcNow;
+                results.Add(new DispatchHostTestTargetResult(
+                    resolvedTarget.Name,
+                    resolvedTransport,
+                    false,
+                    FailureCategory.TransportUnavailable,
+                    $"No endpoint probe is registered for transport '{resolvedTransport.ToDispatchString()}'.",
+                    missingStartedAt,
+                    DateTimeOffset.UtcNow,
+                    new Dictionary<string, string>()));
+                continue;
+            }
+
+            var plan = CreateHostsTestProbePlan(resolvedTarget, resolvedTransport);
+            var probeResult = await probe
+                .ProbeAsync(new TransportEndpointProbeRequest(plan, plan.Targets[0]), cancellationToken)
+                .ConfigureAwait(false);
+            results.Add(new DispatchHostTestTargetResult(
+                resolvedTarget.Name,
+                resolvedTransport,
+                probeResult.Succeeded,
+                probeResult.FailureCategory,
+                probeResult.FailureMessage,
+                probeResult.StartedAt,
+                probeResult.EndedAt,
+                probeResult.Metadata ?? new Dictionary<string, string>()));
+        }
+
+        var result = new DispatchHostTestResult(
+            inventoryPath,
+            target,
+            NormalizeOptionalValue(exclude),
+            NormalizeOptionalValue(transport) ?? "auto",
+            startedAt,
+            DateTimeOffset.UtcNow,
+            results);
+        DispatchStructuredOutputRenderer.RenderHostTestResult(Console.Out, result, outputMode);
+        return result.Succeeded ? 0 : 1;
+    }
+
     internal async Task<int> RunCredsAddCommandAsync(
         string name,
         string? userName,
@@ -1106,6 +1221,79 @@ public sealed class DispatchCliApplication(
             inspection.Errors.Select(static validationError => $"{validationError.Code}: {validationError.Message}"));
         SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Hosts", message);
         return false;
+    }
+
+    private static bool TryResolveHostsTestTransports(
+        string? transport,
+        TargetResolutionResult targetResolution,
+        TransportKind? defaultTransport,
+        out IReadOnlyDictionary<string, TransportKind> targetTransports,
+        out string error)
+    {
+        var resolved = new Dictionary<string, TransportKind>(StringComparer.OrdinalIgnoreCase);
+        targetTransports = resolved;
+        error = string.Empty;
+
+        var normalized = NormalizeOptionalValue(transport);
+        if (!string.IsNullOrWhiteSpace(normalized) && !normalized.Equals("auto", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryParseTransport(normalized, out var parsedTransport, out error))
+            {
+                return false;
+            }
+
+            foreach (var target in targetResolution.Targets)
+            {
+                resolved[target.Name] = parsedTransport;
+            }
+
+            return true;
+        }
+
+        foreach (var target in targetResolution.Targets)
+        {
+            if (targetResolution.InventoryTransportPolicies is not null
+                && targetResolution.InventoryTransportPolicies.TryGetValue(target.Name, out var inventoryTransport)
+                && inventoryTransport is not null)
+            {
+                resolved[target.Name] = inventoryTransport.Value;
+                continue;
+            }
+
+            resolved[target.Name] = defaultTransport ?? TransportKind.WinRm;
+        }
+
+        return true;
+    }
+
+    private static ExecutionPlan CreateHostsTestProbePlan(TargetSpec target, TransportKind transport)
+    {
+        var runId = $"hosts-test-{Guid.NewGuid():N}";
+        var job = new DispatchJob(
+            RunId: runId,
+            Targets: [target],
+            Payload: new CommandPayload("probe", "cmd", null),
+            Transport: transport,
+            ExecutionContext: new ExecutionContextOptions(),
+            ScriptTransferPolicy: new ScriptTransferPolicy(string.Empty, false),
+            TimeoutPolicy: new TimeoutPolicy(),
+            RetryPolicy: new RetryPolicy(),
+            ExpectedExitCodes: [0],
+            ArtifactPolicy: new ArtifactPolicy([]),
+            ResultPolicy: new ResultPolicy(string.Empty));
+        var targetExecution = new TargetExecution(
+            runId,
+            target,
+            TargetExecutionState.Probing,
+            null,
+            null,
+            $@"C:\ProgramData\Dispatch\Runs\{runId}\script\hosts-test-probe.ps1");
+        return new ExecutionPlan(
+            runId,
+            DateTimeOffset.UtcNow,
+            job,
+            [targetExecution],
+            DryRun: true);
     }
 
     private static int RenderCredentialOperationResult(

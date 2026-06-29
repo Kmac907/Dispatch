@@ -159,21 +159,21 @@ dispatch push &lt;source&gt; --dest &lt;remote-path&gt; [--inventory &lt;path&gt
 <h2>Hosts</h2>
 <pre><code>
 dispatch hosts list --inventory &lt;hosts.yml&gt; [--output rich|table|json|ndjson|yaml]
-dispatch hosts test --inventory &lt;hosts.yml&gt; --target &lt;selector&gt; [--transport psrp|winrm|psexec|auto]
+dispatch hosts test --inventory &lt;hosts.yml&gt; --target &lt;selector&gt; [--exclude &lt;selector&gt;] [--transport psrp|winrm|psexec|auto] [--output rich|table|json|ndjson|yaml]
 dispatch hosts validate --inventory &lt;hosts.yml&gt; [--output rich|table|json|ndjson|yaml]
 dispatch hosts graph --inventory &lt;hosts.yml&gt;
 dispatch hosts vars --inventory &lt;hosts.yml&gt; --target &lt;host&gt;
 </code></pre>
-<p>Status: partial/current. <code>hosts list</code> and <code>hosts validate</code> are implemented as local inventory inspection commands. <code>hosts test</code>, <code>hosts graph</code>, and <code>hosts vars</code> remain planned v1.</p>
+<p>Status: partial/current. <code>hosts list</code> and <code>hosts validate</code> are implemented as local inventory inspection commands. <code>hosts test</code> is implemented as transport endpoint probing for selected inventory targets. <code>hosts graph</code> and <code>hosts vars</code> remain planned v1.</p>
 <p>Use <code>hosts</code> commands before execution when you need confidence in inventory structure or target selection. These commands are inspection/validation tools, not execution commands and not endpoint remediation.</p>
 <p>Current subcommands:</p>
 <ul>
 <li><code>hosts list</code> reads an inventory and prints the hosts Dispatch can resolve, including group membership, effective inventory transport policy, credential reference name, and source location where available. Use it to confirm names and inherited metadata before running work. It does not contact endpoints.</li>
+<li><code>hosts test</code> resolves the required <code>--target &lt;selector&gt;</code> against the inventory, applies optional <code>--exclude</code>, resolves the effective transport from <code>--transport</code>, inventory policy, or configuration defaults, and runs the matching Dispatch transport endpoint probe for each selected host. It does not execute commands, copy files, remediate endpoints, or perform ICMP ping. Use it to prove the chosen remoting path is reachable enough for Dispatch before running work.</li>
 <li><code>hosts validate</code> validates inventory syntax/schema using the same parser and supported metadata fields as current <code>run</code>, <code>apply</code>, and <code>push</code> target resolution. It reports unsupported fields, unsupported transports, plaintext-looking secret fields, group cycles, and conflicting inherited metadata before endpoint work. Use it in pull requests or preflight checks for inventory files.</li>
 </ul>
 <p>Planned subcommands:</p>
 <ul>
-<li><code>hosts test</code> will test the selected remoting path for matching hosts. It is not an ICMP ping command and will not remediate endpoints. Use it to prove the chosen transport path is reachable enough for Dispatch.</li>
 <li><code>hosts graph</code> will show group/child relationships so nested inventory structure is easier to inspect. Use it when group inheritance or child groups make selection hard to reason about.</li>
 <li><code>hosts vars</code> will show the effective host metadata Dispatch can derive for one target, including supported transport and credential reference fields. Use it to understand precedence across defaults, groups, host entries, config, and CLI overrides.</li>
 </ul>
@@ -229,7 +229,7 @@ dispatch doctor [--output rich|json|table]
 <p>Status: partial/current diagnostics, with expanded transport-aware checks planned v1.</p>
 <p><code>doctor</code> reports local readiness. It does not remediate endpoints.</p>
 <p>Current diagnostics are local prerequisite checks only. Expanded <code>--transport psexec|psrp|winrm|auto</code> behavior is planned but not accepted by the current command, so operators cannot request transport-specific prerequisite checks yet.</p>
-<p>Use <code>doctor</code> when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use future <code>hosts test</code> behavior for endpoint-specific transport checks; <code>doctor</code> is not a fleet scan.</p>
+<p>Use <code>doctor</code> when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use <code>hosts test</code> for endpoint-specific transport probes; <code>doctor</code> is not a fleet scan.</p>
 <h2>Init</h2>
 <pre><code>
 dispatch init config

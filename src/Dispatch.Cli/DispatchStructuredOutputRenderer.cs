@@ -387,6 +387,46 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderHostTestResult(
+        TextWriter writer,
+        DispatchHostTestResult result,
+        DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(DispatchJson.Serialize(result));
+                break;
+            case DispatchOutputMode.Ndjson:
+                foreach (var target in result.Targets)
+                {
+                    writer.WriteLine(JsonSerializer.Serialize(
+                        new { type = "hosts.test.target", inventory = result.InventoryPath, target },
+                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                }
+
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, result);
+                break;
+            case DispatchOutputMode.Rich:
+            case DispatchOutputMode.Table:
+            default:
+                writer.WriteLine(result.Succeeded ? "Dispatch hosts test passed" : "Dispatch hosts test failed");
+                writer.WriteLine($"Inventory: {result.InventoryPath}");
+                writer.WriteLine($"Selector: {result.TargetSelector}");
+                writer.WriteLine($"Transport: {result.TransportSelector}");
+                foreach (var target in result.Targets)
+                {
+                    var status = target.Succeeded ? "reachable" : "failed";
+                    var failure = string.IsNullOrWhiteSpace(target.FailureMessage) ? "-" : target.FailureMessage;
+                    writer.WriteLine($"{target.Target} | transport={target.Transport.ToDispatchString()} | status={status} | failure={failure}");
+                }
+
+                break;
+        }
+    }
+
     private static void WriteYaml<T>(TextWriter writer, T value)
     {
         var node = JsonSerializer.SerializeToNode(value, DispatchJson.Options);
@@ -587,3 +627,30 @@ internal sealed record DispatchHostInventoryValidation(
     bool Valid,
     int HostCount,
     IReadOnlyList<DispatchValidationError> Errors);
+
+internal sealed record DispatchHostTestResult(
+    string InventoryPath,
+    string TargetSelector,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ExcludeSelector,
+    string TransportSelector,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    IReadOnlyList<DispatchHostTestTargetResult> Targets)
+{
+    public bool Succeeded => Targets.All(static target => target.Succeeded);
+    public int TargetCount => Targets.Count;
+    public int SuccessCount => Targets.Count(static target => target.Succeeded);
+    public int FailedCount => Targets.Count(static target => !target.Succeeded);
+}
+
+internal sealed record DispatchHostTestTargetResult(
+    string Target,
+    TransportKind Transport,
+    bool Succeeded,
+    FailureCategory FailureCategory,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? FailureMessage,
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    IReadOnlyDictionary<string, string> Metadata);

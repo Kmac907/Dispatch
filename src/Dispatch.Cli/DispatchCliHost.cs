@@ -1,6 +1,7 @@
 using Dispatch.Core.Hosting;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Defaults;
+using Dispatch.Core.Transports;
 using Dispatch.Transports.PsExec;
 using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
@@ -50,7 +51,8 @@ public static class DispatchCliHost
             winRmTransferClient: services.GetRequiredService<IWinRmScriptTransferClient>(),
             psrpFileTransferClient: services.GetRequiredService<IPsrpFileTransferClient>(),
             winRmShellClient: services.GetRequiredService<IWinRmShellClient>(),
-            psrpCommandClient: services.GetRequiredService<IPsrpCommandClient>()));
+            psrpCommandClient: services.GetRequiredService<IPsrpCommandClient>(),
+            endpointProbes: services.GetServices<ITransportEndpointProbe>()));
 
         return builder.Build();
     }

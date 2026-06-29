@@ -157,6 +157,11 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
                 return new HostsListCommand(application);
             }
 
+            if (type == typeof(HostsTestCommand))
+            {
+                return new HostsTestCommand(application);
+            }
+
             if (type == typeof(HostsValidateCommand))
             {
                 return new HostsValidateCommand(application);
@@ -378,7 +383,29 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         }
     }
 
-    private sealed class HostsTestCommand() : PlannedCommand("hosts test", "6.6 Push, Hosts, Doctor, And Init Command Surfaces");
+    private sealed class HostsTestCommand(DispatchCliApplication application) : AsyncCommand<HostsTestSettings>
+    {
+        protected override async Task<int> ExecuteAsync(
+            CommandContext context,
+            HostsTestSettings settings,
+            CancellationToken cancellationToken)
+        {
+            if (context.Remaining.Raw.Count > 0)
+            {
+                return DispatchCliApplication.RenderInvalidCommand(CreateUnexpectedArgumentsMessage(context.Remaining.Raw));
+            }
+
+            return await application.RunHostsTestCommandAsync(
+                    settings.Inventory,
+                    settings.Target,
+                    settings.Exclude,
+                    settings.Transport,
+                    settings.Config,
+                    settings.Output,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
 
     private sealed class HostsValidateCommand(DispatchCliApplication application) : Command<HostsInventorySettings>
     {
@@ -739,6 +766,27 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
         public string? Output { get; init; }
     }
 
+    private sealed class HostsTestSettings : CommandSettings
+    {
+        [CommandOption("-i|--inventory <path>")]
+        public string? Inventory { get; init; }
+
+        [CommandOption("-t|--target <selector>")]
+        public string? Target { get; init; }
+
+        [CommandOption("--exclude <selector>")]
+        public string? Exclude { get; init; }
+
+        [CommandOption("--transport <name>")]
+        public string? Transport { get; init; }
+
+        [CommandOption("--config <path>")]
+        public string? Config { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
+    }
+
     private abstract class RunTargetedSettings : CommandSettings, IRunSharedSettings
     {
         [CommandOption("-t|--target <selector>")]
@@ -874,7 +922,6 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
 
     private static readonly HashSet<Type> PlannedCommandTypes =
     [
-        typeof(HostsTestCommand),
         typeof(HostsGraphCommand),
         typeof(HostsVarsCommand)
     ];

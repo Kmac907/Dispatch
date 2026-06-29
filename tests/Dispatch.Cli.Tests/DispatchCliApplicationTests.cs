@@ -4,6 +4,7 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
+using Dispatch.Core.Transports;
 using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
@@ -6374,8 +6375,84 @@ credentials:
         }
     }
 
+    [Fact]
+    public async Task HostsTestRunsSelectedTransportProbes()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            defaults:
+              transport: psrp
+            groups:
+              web:
+                hosts:
+                  - WEB01
+                  - WEB02
+            hosts:
+              WEB01:
+              WEB02:
+            """);
+        var psrpProbe = new RecordingEndpointProbe(TransportKind.Psrp);
+        var winRmProbe = new RecordingEndpointProbe(TransportKind.WinRm);
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            endpointProbes: [psrpProbe, winRmProbe]);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "test", "--inventory", inventoryPath, "--target", "web", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.Equal(0, exitCode);
+            Assert.Empty(error);
+            Assert.DoesNotContain("Planned Dispatch command", error);
+            Assert.Equal(["WEB01", "WEB02"], psrpProbe.Targets);
+            Assert.Empty(winRmProbe.Targets);
+            using var json = JsonDocument.Parse(output);
+            Assert.True(json.RootElement.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(2, json.RootElement.GetProperty("targetCount").GetInt32());
+            var targets = json.RootElement.GetProperty("targets").EnumerateArray().ToArray();
+            Assert.Equal("psrp", targets[0].GetProperty("transport").GetString());
+            Assert.Equal("psrp", targets[1].GetProperty("transport").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HostsTestRequiresTargetSelector()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(inventoryPath, "hosts: [WEB01]");
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "test", "--inventory", inventoryPath],
+                CancellationToken.None));
+
+            Assert.Equal(1, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("hosts test requires --target", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
-    [InlineData("hosts", "test")]
+    [InlineData("hosts", "graph")]
+    [InlineData("hosts", "vars")]
     public async Task PlannedCommandGroupsRouteThroughSpectreCli(string command, string subcommand)
     {
         var application = CreateApplication(new CapturingPlanner());
@@ -7619,7 +7696,8 @@ credentials:
         IWinRmScriptTransferClient? winRmTransferClient = null,
         IPsrpFileTransferClient? psrpFileTransferClient = null,
         IWinRmShellClient? winRmShellClient = null,
-        IPsrpCommandClient? psrpCommandClient = null) =>
+        IPsrpCommandClient? psrpCommandClient = null,
+        IEnumerable<ITransportEndpointProbe>? endpointProbes = null) =>
         new(
             Options.Create(options ?? new DispatchOptions { ExpectedExitCodes = [0] }),
             planner,
@@ -7633,7 +7711,8 @@ credentials:
             winRmTransferClient,
             psrpFileTransferClient,
             winRmShellClient,
-            psrpCommandClient);
+            psrpCommandClient,
+            endpointProbes);
 
     private static IReadOnlyList<JsonDocument> ParseNdjson(string output) =>
         output
@@ -8162,6 +8241,28 @@ credentials:
                 Succeeded: false,
                 message,
                 []);
+    }
+
+    private sealed class RecordingEndpointProbe(TransportKind kind) : ITransportEndpointProbe
+    {
+        public TransportKind Kind { get; } = kind;
+
+        public List<string> Targets { get; } = [];
+
+        public Task<TransportEndpointProbeResult> ProbeAsync(
+            TransportEndpointProbeRequest request,
+            CancellationToken cancellationToken)
+        {
+            Targets.Add(request.Target.Target.Name);
+            return Task.FromResult(new TransportEndpointProbeResult(
+                true,
+                DateTimeOffset.UnixEpoch,
+                DateTimeOffset.UnixEpoch,
+                Metadata: new Dictionary<string, string>
+                {
+                    ["probe"] = Kind.ToDispatchString()
+                }));
+        }
     }
 
     private sealed class StaticDoctor(DispatchDoctorReport report) : IDispatchDoctor
