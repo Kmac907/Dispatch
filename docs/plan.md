@@ -1379,7 +1379,7 @@ Current implementation boundary:
 - Init scaffolding refuses to overwrite existing starter files.
 - `dispatch hosts list`, `dispatch hosts validate`, `dispatch hosts test`, `dispatch hosts graph`, and `dispatch hosts vars` are implemented.
 - `dispatch doctor --transport auto|psexec|psrp|winrm` is implemented for local transport-scoped prerequisite checks. Broader diagnostics and structured doctor output modes remain Roadmap 6.8 work.
-- `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Usage/config/inventory/YAML/planning validation still returns `1`; explicit plan/check policy exit code `7`, explicit LocalSystem policy approval, PsExec fallback permission policy, broader command-family exit-code alignment, and full redaction validation remain Roadmap `6.7` work.
+- `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Usage/config/inventory/YAML/planning validation still returns `1`. LocalSystem policy failures now return plan/check policy exit code `7` before planning or endpoint work. PsExec fallback permission policy, broader command-family exit-code alignment, and full redaction validation remain Roadmap `6.7` work.
 
 #### 6.7 CLI Safety, Policy, And Exit Codes
 

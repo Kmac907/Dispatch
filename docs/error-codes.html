@@ -65,7 +65,7 @@
 <tr><td><code>7</code></td><td>Plan/check policy failure.</td></tr>
 <tr><td><code>10</code></td><td>Internal error.</td></tr>
 </tbody></table>
-<p>Current <code>dispatch run</code> execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return <code>1</code>. Broader command-family alignment and explicit plan/check policy exit code <code>7</code> remain Roadmap <code>6.7</code> work. Automation should prefer <code>Admin\results.json</code> for detailed per-target outcomes.</p>
+<p>Current <code>dispatch run</code> execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return <code>1</code>. Current <code>dispatch run</code> LocalSystem policy failures return <code>7</code> before planning or endpoint work. Broader command-family alignment remains Roadmap <code>6.7</code> work. Automation should prefer <code>Admin\results.json</code> for detailed per-target outcomes.</p>
 <h2>Target Failure Categories</h2>
 <p>Stable categories include:</p>
 <ul>

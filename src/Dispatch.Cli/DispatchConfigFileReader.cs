@@ -139,6 +139,7 @@ internal static class DispatchConfigFileReader
             "remote_run_root" => "RemoteRunRoot",
             "expected_exit_codes" => "ExpectedExitCodes",
             "psexec_path" => "PsExecPath",
+            "allow_run_as_system" => "AllowRunAsSystem",
             _ => ToPascalCase(key)
         };
 

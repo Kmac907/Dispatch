@@ -28,8 +28,9 @@ For credentials, the CLI selects a reference; the loaded config defines the prov
 dispatch:
   default_transport: psrp
   default_credential_provider: prompt
-  run_root: C:\ProgramData\Dispatch\Runs
+  local_run_root: C:\ProgramData\Dispatch\Runs
   remote_run_root: C:\ProgramData\Dispatch\Runs
+  allow_run_as_system: false
 
 credentials:
   prod-admin:
@@ -61,8 +62,9 @@ credentials:
 - `default_transport`
 - `default_credential_provider`
 - `credential_store_path` for legacy metadata catalog support where still present
-- `run_root`
+- `local_run_root`
 - `remote_run_root`
+- `allow_run_as_system` enables PsExec LocalSystem execution when an operator also supplies `--system`; default is `false`
 - throttle/batching defaults where implemented
 
 `credentials.<name>` keys depend on provider:

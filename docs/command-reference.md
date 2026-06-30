@@ -92,6 +92,7 @@ Common options:
 - `--expected-exit-code`
 - `--throttle` / concurrency option where implemented
 - `--plan`
+- `--system` for PsExec LocalSystem execution when `dispatch.allow_run_as_system: true` is set in the selected config
 - `--output`
 - `--no-progress`
 
@@ -106,6 +107,8 @@ dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 ```
 
 Use `--plan` to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.
+
+Use `--system` only with `--transport psexec` when the selected config explicitly allows it with `dispatch.allow_run_as_system: true`. LocalSystem requests without that policy approval, or LocalSystem requests for WinRM/PSRP, fail before planning or endpoint work and return policy exit code `7`. `--run-as-system` remains accepted as a legacy/internal alias, but new automation should use `--system`.
 
 Script secret handoff for `run ps` uses `--secret name=reference`. It is separate from `--credential`: credentials authenticate the transport, while secrets are script inputs. `name` becomes the script parameter name, so `--secret packageSas=prod-package-sas` renders as `-packageSas [redacted]` and expects the script to declare a matching parameter such as `param([string]$packageSas)`.
 
@@ -270,4 +273,4 @@ Automation should prefer result files or structured output modes instead of pars
 
 ## Exit Behavior
 
-Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed `dispatch run` execution results, process exit codes now follow the stable result mapping: `0` success, `2` host execution failure or unexpected exit code, `3` probe failure or timed-out target, `4` authentication or authorization failure, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage, configuration, inventory, YAML, and planning validation errors return `1`. Explicit plan/check policy exit code `7` and broader command-family alignment remain Roadmap `6.7` work. Automation should read `Admin\results.json` for per-target detail.
+Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed `dispatch run` execution results, process exit codes now follow the stable result mapping: `0` success, `2` host execution failure or unexpected exit code, `3` probe failure or timed-out target, `4` authentication or authorization failure, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage, configuration, inventory, YAML, and planning validation errors return `1`. Current `dispatch run` LocalSystem policy failures return `7` before planning or endpoint work. Broader command-family alignment remains Roadmap `6.7` work. Automation should read `Admin\results.json` for per-target detail.

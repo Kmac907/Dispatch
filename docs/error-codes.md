@@ -21,7 +21,7 @@ Stable v1 exit-code contract:
 | `7` | Plan/check policy failure. |
 | `10` | Internal error. |
 
-Current `dispatch run` execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return `1`. Broader command-family alignment and explicit plan/check policy exit code `7` remain Roadmap `6.7` work. Automation should prefer `Admin\results.json` for detailed per-target outcomes.
+Current `dispatch run` execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return `1`. Current `dispatch run` LocalSystem policy failures return `7` before planning or endpoint work. Broader command-family alignment remains Roadmap `6.7` work. Automation should prefer `Admin\results.json` for detailed per-target outcomes.
 
 ## Target Failure Categories
 

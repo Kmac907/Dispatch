@@ -50,7 +50,7 @@ PSRP and WinRM depend on endpoint remoting policy. PsExec depends on SMB/admin s
 
 ## Admin Context
 
-Remote execution uses the current admin context or a configured credential reference, depending on transport support and selected provider. LocalSystem or other elevated endpoint contexts must be explicit and policy-approved where implemented.
+Remote execution uses the current admin context or a configured credential reference, depending on transport support and selected provider. PsExec LocalSystem execution must be explicit through `--system` and policy-approved with `dispatch.allow_run_as_system: true`; otherwise Dispatch returns policy exit code `7` before planning or endpoint work.
 
 ## Script-Owned Payload Boundary
 

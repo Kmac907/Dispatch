@@ -343,6 +343,7 @@ internal sealed class DispatchRunCommandParser
             ScriptSecrets: scriptSecrets,
             CredentialReference: credentialReference,
             RunAsSystem: runAsSystem,
+            AllowRunAsSystem: config.AllowRunAsSystem,
             NoDashboard: noDashboard,
             OutputMode: outputMode,
             NoColor: noColor,
@@ -405,7 +406,8 @@ internal sealed class DispatchRunCommandParser
             Inventory = ambientConfig.Inventory,
             Target = ambientConfig.Target,
             Exclude = ambientConfig.Exclude,
-            DefaultTransport = ambientConfig.DefaultTransport
+            DefaultTransport = ambientConfig.DefaultTransport,
+            AllowRunAsSystem = ambientConfig.AllowRunAsSystem
         };
         error = string.Empty;
 
@@ -429,7 +431,8 @@ internal sealed class DispatchRunCommandParser
             {
                 Inventory = section["Inventory"] ?? config.Inventory,
                 Target = section["Target"] ?? config.Target,
-                Exclude = section["Exclude"] ?? config.Exclude
+                Exclude = section["Exclude"] ?? config.Exclude,
+                AllowRunAsSystem = section.GetValue("AllowRunAsSystem", config.AllowRunAsSystem)
             };
 
             var configuredTransport = section["DefaultTransport"];
@@ -559,7 +562,8 @@ internal sealed class DispatchRunCommandParser
         string? Inventory,
         string? Target,
         string? Exclude,
-        TransportKind DefaultTransport);
+        TransportKind DefaultTransport,
+        bool AllowRunAsSystem);
 
     private sealed record DispatchRunConfig
     {
@@ -570,5 +574,7 @@ internal sealed class DispatchRunCommandParser
         public string? Exclude { get; init; }
 
         public TransportKind? DefaultTransport { get; init; }
+
+        public bool AllowRunAsSystem { get; init; }
     }
 }

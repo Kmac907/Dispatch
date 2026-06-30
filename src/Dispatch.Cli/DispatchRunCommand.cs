@@ -16,6 +16,7 @@ internal sealed record DispatchRunCommand(
     IReadOnlyList<ScriptSecretReference> ScriptSecrets,
     string? CredentialReference,
     bool RunAsSystem,
+    bool AllowRunAsSystem,
     bool NoDashboard,
     DispatchOutputMode OutputMode,
     bool NoColor,

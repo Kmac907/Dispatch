@@ -282,6 +282,121 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunSystemWithoutPolicyApprovalReturnsPolicyExitCodeBeforePlanning()
+    {
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["run", "cmd", "whoami", "--target", "PC001", "--transport", "psexec", "--system", "--no-progress"],
+            CancellationToken.None));
+
+        Assert.Equal(7, exitCode);
+        Assert.Empty(output);
+        Assert.Null(planner.LastRequest);
+        Assert.Contains("Dispatch Policy Failed", error);
+        Assert.Contains("allow_run_as_system", error);
+    }
+
+    [Fact]
+    public async Task RunSystemRejectsUnsupportedTransportWithPolicyExitCodeBeforePlanning()
+    {
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            options: new DispatchOptions
+            {
+                ExpectedExitCodes = [0],
+                AllowRunAsSystem = true
+            });
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["run", "cmd", "whoami", "--target", "PC001", "--transport", "winrm", "--system", "--no-progress"],
+            CancellationToken.None));
+
+        Assert.Equal(7, exitCode);
+        Assert.Empty(output);
+        Assert.Null(planner.LastRequest);
+        Assert.Contains("Dispatch Policy Failed", error);
+        Assert.Contains("only supported by the PsExec transport", error);
+    }
+
+    [Fact]
+    public async Task RunSystemWithPolicyApprovalReachesPlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            options: new DispatchOptions
+            {
+                ExpectedExitCodes = [0],
+                AllowRunAsSystem = true
+            });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["run", "ps", scriptPath, "--target", "PC001", "--transport", "psexec", "--system", "--plan", "--no-progress"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.ExecutionContext.RunAsSystem);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunSystemPolicyApprovalCanComeFromExplicitConfig()
+    {
+        var configPath = Path.Combine(Path.GetTempPath(), $"dispatch-config-{Guid.NewGuid():N}.yml");
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(
+            configPath,
+            """
+            dispatch:
+              allow_run_as_system: true
+            """);
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psexec",
+                    "--system",
+                    "--plan",
+                    "--config",
+                    configPath,
+                    "--no-progress"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.ExecutionContext.RunAsSystem);
+        }
+        finally
+        {
+            File.Delete(configPath);
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
     public async Task RunDryRunCreatesSharedDispatchRequest()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
@@ -332,6 +447,80 @@ public sealed class DispatchCliApplicationTests
             var payload = Assert.IsType<ScriptPayload>(request.Payload);
             Assert.Equal(scriptPath, payload.ScriptPath);
             Assert.Equal(["--Name", "Dispatch"], payload.ScriptArguments);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunDryRunRunAsSystemWithoutPolicyApprovalReturnsPolicyExitCode()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "--dry-run",
+                    "--script",
+                    scriptPath,
+                    "--computer-name",
+                    "PC001",
+                    "--transport",
+                    "psexec",
+                    "--run-as-system"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(7, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Dispatch Policy Failed", error);
+            Assert.Contains("LocalSystem execution requires explicit policy approval", error);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunPowerShellPlanSystemAliasWithPolicyApprovalRequestsLocalSystemExecutionContext()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner, options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            AllowRunAsSystem = true
+        });
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "run",
+                    "ps",
+                    scriptPath,
+                    "--plan",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "psexec",
+                    "--system"
+                ],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.True(planner.LastRequest!.ExecutionContext.RunAsSystem);
         }
         finally
         {

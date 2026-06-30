@@ -66,8 +66,9 @@ C:\ProgramData\Dispatch\config.yml
 dispatch:
   default_transport: psrp
   default_credential_provider: prompt
-  run_root: C:\ProgramData\Dispatch\Runs
+  local_run_root: C:\ProgramData\Dispatch\Runs
   remote_run_root: C:\ProgramData\Dispatch\Runs
+  allow_run_as_system: false
 
 credentials:
   prod-admin:
@@ -97,8 +98,9 @@ credentials:
 <li><code>default_transport</code></li>
 <li><code>default_credential_provider</code></li>
 <li><code>credential_store_path</code> for legacy metadata catalog support where still present</li>
-<li><code>run_root</code></li>
+<li><code>local_run_root</code></li>
 <li><code>remote_run_root</code></li>
+<li><code>allow_run_as_system</code> enables PsExec LocalSystem execution when an operator also supplies <code>--system</code>; default is <code>false</code></li>
 <li>throttle/batching defaults where implemented</li>
 </ul>
 <p><code>credentials.&lt;name&gt;</code> keys depend on provider:</p>

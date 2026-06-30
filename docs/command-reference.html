@@ -116,6 +116,7 @@ dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm]
 <li><code>--expected-exit-code</code></li>
 <li><code>--throttle</code> / concurrency option where implemented</li>
 <li><code>--plan</code></li>
+<li><code>--system</code> for PsExec LocalSystem execution when <code>dispatch.allow_run_as_system: true</code> is set in the selected config</li>
 <li><code>--output</code></li>
 <li><code>--no-progress</code></li>
 </ul>
@@ -128,6 +129,7 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
 </code></pre>
 <p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
+<p>Use <code>--system</code> only with <code>--transport psexec</code> when the selected config explicitly allows it with <code>dispatch.allow_run_as_system: true</code>. LocalSystem requests without that policy approval, or LocalSystem requests for WinRM/PSRP, fail before planning or endpoint work and return policy exit code <code>7</code>. <code>--run-as-system</code> remains accepted as a legacy/internal alias, but new automation should use <code>--system</code>.</p>
 <p>Script secret handoff for <code>run ps</code> uses <code>--secret name=reference</code>. It is separate from <code>--credential</code>: credentials authenticate the transport, while secrets are script inputs. <code>name</code> becomes the script parameter name, so <code>--secret packageSas=prod-package-sas</code> renders as <code>-packageSas [redacted]</code> and expects the script to declare a matching parameter such as <code>param([string]$packageSas)</code>.</p>
 <p>Dispatch validates the option shape, rejects duplicate names and plaintext-looking values, resolves <code>reference</code> from the configured secret provider on the admin side, and binds the resolved value to the script parameter through the selected transport. Plan/dry-run output renders only the redacted parameter binding. Secret values must stay out of ordinary command lines, console output, logs, results, traces, artifacts, and structured output.</p>
 <p>Subcommands:</p>
@@ -254,7 +256,7 @@ dispatch init all
 </ul>
 <p>Automation should prefer result files or structured output modes instead of parsing rich terminal output.</p>
 <h2>Exit Behavior</h2>
-<p>Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed <code>dispatch run</code> execution results, process exit codes now follow the stable result mapping: <code>0</code> success, <code>2</code> host execution failure or unexpected exit code, <code>3</code> probe failure or timed-out target, <code>4</code> authentication or authorization failure, <code>5</code> transport unavailable, <code>6</code> cancelled, and <code>10</code> internal error. Usage, configuration, inventory, YAML, and planning validation errors return <code>1</code>. Explicit plan/check policy exit code <code>7</code> and broader command-family alignment remain Roadmap <code>6.7</code> work. Automation should read <code>Admin\results.json</code> for per-target detail.</p>
+<p>Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed <code>dispatch run</code> execution results, process exit codes now follow the stable result mapping: <code>0</code> success, <code>2</code> host execution failure or unexpected exit code, <code>3</code> probe failure or timed-out target, <code>4</code> authentication or authorization failure, <code>5</code> transport unavailable, <code>6</code> cancelled, and <code>10</code> internal error. Usage, configuration, inventory, YAML, and planning validation errors return <code>1</code>. Current <code>dispatch run</code> LocalSystem policy failures return <code>7</code> before planning or endpoint work. Broader command-family alignment remains Roadmap <code>6.7</code> work. Automation should read <code>Admin\results.json</code> for per-target detail.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>

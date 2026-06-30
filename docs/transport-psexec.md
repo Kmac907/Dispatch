@@ -15,7 +15,7 @@ The PsExec transport uses SMB/admin-share staging plus PsExec process execution 
 
 V1 supports current admin context and explicit system execution where policy permits it.
 
-LocalSystem execution must be explicit through the CLI/config policy surface. Dispatch does not silently elevate or switch contexts.
+LocalSystem execution must be explicit through `dispatch run ... --system` and the selected config must set `dispatch.allow_run_as_system: true`. Without that config approval, Dispatch returns policy exit code `7` before planning or endpoint work. Dispatch does not silently elevate or switch contexts.
 
 ## Current Boundaries
 
@@ -37,4 +37,5 @@ LocalSystem execution must be explicit through the CLI/config policy surface. Di
 
 ```powershell
 dispatch run ps .\Fix.ps1 --target PC001 --transport psexec
+dispatch run ps .\Fix.ps1 --target PC001 --transport psexec --system
 ```

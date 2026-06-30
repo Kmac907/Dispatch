@@ -112,7 +112,8 @@ public sealed class DispatchCliApplication(
                     options.Value.Inventory,
                     options.Value.Target,
                     options.Value.Exclude,
-                    options.Value.DefaultTransport),
+                    options.Value.DefaultTransport,
+                    options.Value.AllowRunAsSystem),
                 options.Value.ExpectedExitCodes,
                 out var command,
                 out var error))
@@ -139,6 +140,11 @@ public sealed class DispatchCliApplication(
     {
         try
         {
+            if (!TryValidateRunPolicy(command))
+            {
+                return new DispatchRunCommandOutcome(7, null);
+            }
+
             if (!await TryValidateCredentialReferenceAsync(command, cancellationToken).ConfigureAwait(false))
             {
                 return new DispatchRunCommandOutcome(1, null);
@@ -288,6 +294,34 @@ public sealed class DispatchCliApplication(
     }
 
     private static bool HasScriptSecrets(ExecutionPlan plan) => plan.Job.ScriptSecrets.Count > 0;
+
+    private static bool TryValidateRunPolicy(DispatchRunCommand command)
+    {
+        if (!command.RunAsSystem)
+        {
+            return true;
+        }
+
+        if (command.Transport != TransportKind.PsExec)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Policy Failed",
+                $"LocalSystem execution is only supported by the PsExec transport. Transport '{command.Transport.ToDispatchString()}' cannot use --system.");
+            return false;
+        }
+
+        if (!command.AllowRunAsSystem)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Policy Failed",
+                "LocalSystem execution requires explicit policy approval. Set dispatch.allow_run_as_system: true in the selected Dispatch config before using --system.");
+            return false;
+        }
+
+        return true;
+    }
 
     private static void RenderScriptSecretHandoffPlanned() =>
         RenderPlannedCommand(
@@ -619,7 +653,8 @@ public sealed class DispatchCliApplication(
                     options.Value.Inventory,
                     options.Value.Target,
                     options.Value.Exclude,
-                    options.Value.DefaultTransport),
+                    options.Value.DefaultTransport,
+                    options.Value.AllowRunAsSystem),
                 options.Value.ExpectedExitCodes,
                 out var apply,
                 out var error))
@@ -1541,7 +1576,8 @@ public sealed class DispatchCliApplication(
                 ExpectedExitCodes = currentOptions.ExpectedExitCodes,
                 PsExecPath = currentOptions.PsExecPath,
                 CredentialProvider = section["CredentialProvider"] ?? currentOptions.CredentialProvider,
-                CredentialStorePath = section["CredentialStorePath"] ?? currentOptions.CredentialStorePath
+                CredentialStorePath = section["CredentialStorePath"] ?? currentOptions.CredentialStorePath,
+                AllowRunAsSystem = section.GetValue("AllowRunAsSystem", currentOptions.AllowRunAsSystem)
             };
             return true;
         }

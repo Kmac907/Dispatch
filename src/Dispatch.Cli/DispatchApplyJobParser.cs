@@ -217,6 +217,7 @@ internal static class DispatchApplyJobParser
                 ScriptSecrets: [],
                 CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
                 RunAsSystem: false,
+                AllowRunAsSystem: false,
                 NoDashboard: validateOnly || options.NoProgress,
                 OutputMode: options.OutputMode,
                 NoColor: options.NoColor,
