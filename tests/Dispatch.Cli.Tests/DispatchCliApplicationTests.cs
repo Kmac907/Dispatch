@@ -331,6 +331,115 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public void DoctorReportsHostSchemaAvailableWhenInventoryIsNotConfigured()
+    {
+        var doctor = CreateDoctor(new DispatchOptions());
+
+        var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+        var check = Assert.Single(report.Checks, static item => item.Name == "Host schema");
+        Assert.Equal(DispatchDoctorStatus.Pass, check.Status);
+        Assert.Contains("schema parser and contract are available", check.Message);
+        Assert.Contains("dispatch hosts validate --inventory <path>", check.Detail);
+    }
+
+    [Fact]
+    public void DoctorReportsConfiguredHostInventoryAsValid()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-inventory-{Guid.NewGuid():N}");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(inventoryPath, """
+            hosts:
+              - workstation-01
+              - workstation-02
+            """);
+        var doctor = CreateDoctor(new DispatchOptions
+        {
+            Inventory = inventoryPath,
+            LocalRunRoot = root
+        });
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Host schema");
+            Assert.Equal(DispatchDoctorStatus.Pass, check.Status);
+            Assert.Contains("inventory is valid", check.Message);
+            Assert.Contains("hosts=2", check.Detail);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsMissingConfiguredHostInventoryAsFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-inventory-{Guid.NewGuid():N}");
+        var inventoryPath = Path.Combine(root, "missing-hosts.yml");
+        var doctor = CreateDoctor(new DispatchOptions
+        {
+            Inventory = inventoryPath,
+            LocalRunRoot = root
+        });
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Host schema");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("inventory is invalid", check.Message);
+            Assert.Contains("InventoryNotFound", check.Detail);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsInvalidConfiguredHostInventoryAsFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-inventory-{Guid.NewGuid():N}");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(inventoryPath, """
+            hosts:
+              workstation-01:
+                password: plaintext
+            """);
+        var doctor = CreateDoctor(new DispatchOptions
+        {
+            Inventory = inventoryPath,
+            LocalRunRoot = root
+        });
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Host schema");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("inventory is invalid", check.Message);
+            Assert.Contains("InventorySecretFieldUnsupported", check.Detail);
+            Assert.Contains("plaintext secret", check.Detail);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void DoctorReportsDirectoryGlobalConfigPathAsInaccessibleFailure()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-config-{Guid.NewGuid():N}");

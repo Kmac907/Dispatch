@@ -1,6 +1,7 @@
 using Dispatch.Core.Configuration;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Defaults;
+using Dispatch.Core.Targeting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Win32;
@@ -54,6 +55,7 @@ public sealed class DispatchDoctor : IDispatchDoctor
             CheckDotNetRuntime(),
             CheckPowerShell(),
             CheckGlobalConfigFile(),
+            CheckHostSchema(),
             CheckCredentialProvider(),
             CheckLocalRunRoot(),
             CheckRunHistoryLayout(),
@@ -205,6 +207,48 @@ public sealed class DispatchDoctor : IDispatchDoctor
                 "Credential provider",
                 "Credential provider status could not be checked.",
                 $"{exception.GetType().Name}: {exception.Message}");
+        }
+    }
+
+    private DispatchDoctorCheck CheckHostSchema()
+    {
+        var inventory = options.Value.Inventory;
+        if (string.IsNullOrWhiteSpace(inventory))
+        {
+            return DispatchDoctorCheck.Pass(
+                "Host schema",
+                "Supported host inventory schema parser and contract are available.",
+                "Run 'dispatch hosts validate --inventory <path>' to validate a specific inventory file.");
+        }
+
+        try
+        {
+            var inspection = TargetResolver.InspectInventory(inventory);
+            if (inspection.IsValid)
+            {
+                return DispatchDoctorCheck.Pass(
+                    "Host schema",
+                    "Configured host inventory is valid.",
+                    $"hosts={inspection.Hosts.Count}; inventory={RedactPath(inspection.InventoryPath)}");
+            }
+
+            return DispatchDoctorCheck.Fail(
+                "Host schema",
+                "Configured host inventory is invalid.",
+                $"inventory={RedactPath(inventory)}; {string.Join("; ", inspection.Errors.Select(static error => $"{error.Code}: {error.Message}"))}");
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or FormatException
+            or InvalidDataException
+            or IOException
+            or NotSupportedException
+            or SecurityException
+            or UnauthorizedAccessException)
+        {
+            return DispatchDoctorCheck.Fail(
+                "Host schema",
+                "Configured host inventory could not be inspected.",
+                $"{RedactPath(inventory)}: {exception.Message}");
         }
     }
 
