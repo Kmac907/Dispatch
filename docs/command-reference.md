@@ -230,14 +230,16 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 ## Doctor
 
 ```powershell
-dispatch doctor [--transport auto|psexec|psrp|winrm]
+dispatch doctor [--transport auto|psexec|psrp|winrm] [--output rich|table|json|ndjson|yaml]
 ```
 
-Status: current for local transport-scoped prerequisite checks. Structured `doctor` output modes and broader diagnostics remain planned v1.
+Status: current for local transport-scoped prerequisite checks, stable output modes, and the first expanded local diagnostics. Some broader diagnostics remain planned v1.
 
 `doctor` reports local readiness. It does not remediate endpoints.
 
-Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set and can report PsExec readiness, but this does not approve PsExec fallback for host-targeting commands. `--transport psexec` includes the configured PsExec path and local admin-token checks. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing.
+Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set and can report PsExec readiness, but this does not approve PsExec fallback for host-targeting commands. `--transport psexec` includes the configured PsExec path and local admin-token checks. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing. Shared local checks now include the operating system, .NET runtime, PowerShell availability, local output path writability, current user context, and effective local policy flags.
+
+`--output rich` renders the human Spectre report. `--output table` emits stable plain text. `--output json`, `--output ndjson`, and `--output yaml` emit machine-readable reports suitable for automation and future PowerShell module wrappers.
 
 Use `doctor` when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use `hosts test` for endpoint-specific transport probes; `doctor` is not a fleet scan.
 

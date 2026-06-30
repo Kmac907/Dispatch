@@ -19,9 +19,12 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
         var checks = new List<DispatchDoctorCheck>
         {
             CheckOperatingSystem(),
+            CheckDotNetRuntime(),
             CheckPowerShell(),
             CheckLocalRunRoot(),
-            CheckTransportScope(request.Transport)
+            CheckTransportScope(request.Transport),
+            CheckCurrentUserContext(),
+            CheckPolicyRestrictions()
         };
 
         if (request.Transport is DispatchDoctorTransportScope.Auto or DispatchDoctorTransportScope.PsExec)
@@ -38,6 +41,14 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
         }
 
         return new DispatchDoctorReport(checks);
+    }
+
+    private static DispatchDoctorCheck CheckDotNetRuntime()
+    {
+        var framework = RuntimeInformation.FrameworkDescription;
+        return string.IsNullOrWhiteSpace(framework)
+            ? DispatchDoctorCheck.Warning(".NET runtime", ".NET runtime description was not available.", "Dispatch requires the configured .NET runtime to start.")
+            : DispatchDoctorCheck.Pass(".NET runtime", ".NET runtime is available.", framework);
     }
 
     private static DispatchDoctorCheck CheckOperatingSystem()
@@ -137,6 +148,39 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
         return principal.IsInRole(WindowsBuiltInRole.Administrator)
             ? DispatchDoctorCheck.Pass("Admin context", "Current process is running with an administrator token.", "Endpoint rights are still validated per target.")
             : DispatchDoctorCheck.Warning("Admin context", "Current process is not elevated.", "PsExec/admin-share operations may fail without appropriate endpoint rights.");
+    }
+
+    private static DispatchDoctorCheck CheckCurrentUserContext()
+    {
+        var domain = Environment.UserDomainName;
+        var user = Environment.UserName;
+        var identityName = string.Empty;
+        if (OperatingSystem.IsWindows())
+        {
+            try
+            {
+                identityName = WindowsIdentity.GetCurrent().Name;
+            }
+            catch (SystemException)
+            {
+                identityName = string.Empty;
+            }
+        }
+
+        var detail = string.IsNullOrWhiteSpace(identityName)
+            ? $@"{domain}\{user}"
+            : identityName;
+        return DispatchDoctorCheck.Pass("User context", "Current user context resolved.", detail);
+    }
+
+    private DispatchDoctorCheck CheckPolicyRestrictions()
+    {
+        var runAsSystem = options.Value.AllowRunAsSystem ? "allowed" : "blocked";
+        var psexecFallback = options.Value.AllowPsExecFallback ? "allowed" : "blocked";
+        return DispatchDoctorCheck.Pass(
+            "Policy restrictions",
+            "Effective local policy settings loaded.",
+            $"LocalSystem={runAsSystem}; PsExecFallback={psexecFallback}");
     }
 
     private static DispatchDoctorCheck CheckTransportScope(DispatchDoctorTransportScope transport) =>

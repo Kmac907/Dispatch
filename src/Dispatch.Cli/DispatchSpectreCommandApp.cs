@@ -270,7 +270,7 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     private sealed class DoctorCommand(DispatchCliApplication application) : Command<DoctorSettings>
     {
         protected override int Execute(CommandContext context, DoctorSettings settings, CancellationToken cancellationToken) =>
-            application.RunDoctorCommand(settings.Transport);
+            application.RunDoctorCommand(settings.Transport, settings.Output);
     }
 
     private sealed class ApplyCommand(DispatchCliApplication application) : AsyncCommand<ApplySettings>
@@ -715,6 +715,9 @@ internal sealed class DispatchSpectreCommandApp(DispatchCliApplication applicati
     {
         [CommandOption("--transport <name>")]
         public string? Transport { get; init; }
+
+        [CommandOption("--output <mode>")]
+        public string? Output { get; init; }
     }
 
     private sealed class LogsListSettings : CommandSettings

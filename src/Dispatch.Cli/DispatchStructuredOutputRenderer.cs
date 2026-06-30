@@ -57,6 +57,41 @@ internal static class DispatchStructuredOutputRenderer
         }
     }
 
+    public static void RenderDoctorReport(TextWriter writer, DispatchDoctorReport report, DispatchOutputMode mode)
+    {
+        switch (mode)
+        {
+            case DispatchOutputMode.Json:
+                writer.WriteLine(SerializeDispatchRedacted(report));
+                break;
+            case DispatchOutputMode.Ndjson:
+                writer.WriteLine(SerializeRedacted(new { type = "doctor.summary", succeeded = report.Succeeded, checkCount = report.Checks.Count }));
+                foreach (var check in report.Checks)
+                {
+                    writer.WriteLine(SerializeRedacted(new { type = "doctor.check", check }));
+                }
+
+                break;
+            case DispatchOutputMode.Yaml:
+                WriteYaml(writer, report);
+                break;
+            case DispatchOutputMode.Table:
+                writer.WriteLine(report.Succeeded ? "Dispatch doctor passed" : "Dispatch doctor failed");
+                writer.WriteLine("status | check | message | detail");
+                foreach (var check in report.Checks)
+                {
+                    writer.WriteLine(
+                        $"{FormatDoctorStatus(check.Status)} | {DispatchRedactor.Redact(check.Name)} | {DispatchRedactor.Redact(check.Message)} | {DispatchRedactor.Redact(check.Detail)}");
+                }
+
+                break;
+            case DispatchOutputMode.Rich:
+            default:
+                SpectreConsoleRenderer.RenderDoctorReport(writer, report);
+                break;
+        }
+    }
+
     public static void RenderApplyPlan(TextWriter writer, DispatchApplyPlan plan, DispatchOutputMode mode)
     {
         switch (mode)
@@ -497,6 +532,15 @@ internal static class DispatchStructuredOutputRenderer
             WriteYamlNode(writer, node, 0);
         }
     }
+
+    private static string FormatDoctorStatus(DispatchDoctorStatus status) =>
+        status switch
+        {
+            DispatchDoctorStatus.Pass => "pass",
+            DispatchDoctorStatus.Warning => "warning",
+            DispatchDoctorStatus.Fail => "fail",
+            _ => status.ToString().ToLowerInvariant()
+        };
 
     private static void WriteYamlNode(TextWriter writer, JsonNode node, int indent)
     {

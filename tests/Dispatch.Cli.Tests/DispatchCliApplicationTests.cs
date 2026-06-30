@@ -108,6 +108,101 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task DoctorRouteRendersJsonOutput()
+    {
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            new StaticDoctor(new DispatchDoctorReport(
+            [
+                DispatchDoctorCheck.Pass("Operating system", "Windows host detected.", "Microsoft Windows"),
+                DispatchDoctorCheck.Warning("Admin context", "Current process is not elevated.", "Endpoint rights are still validated per target.")
+            ])));
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--output", "json"], CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+        using var document = JsonDocument.Parse(output);
+        var root = document.RootElement;
+        Assert.True(root.GetProperty("succeeded").GetBoolean());
+        Assert.Equal(2, root.GetProperty("checks").GetArrayLength());
+        Assert.Equal("pass", root.GetProperty("checks")[0].GetProperty("status").GetString());
+        Assert.Equal("warning", root.GetProperty("checks")[1].GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public async Task DoctorRouteRendersStableTableOutput()
+    {
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            new StaticDoctor(new DispatchDoctorReport(
+            [
+                DispatchDoctorCheck.Pass("Operating system", "Windows host detected.", "Microsoft Windows")
+            ])));
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--output", "table"], CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+        Assert.Contains("Dispatch doctor passed", output);
+        Assert.Contains("status | check | message | detail", output);
+        Assert.Contains("pass | Operating system | Windows host detected. | Microsoft Windows", output);
+    }
+
+    [Fact]
+    public async Task DoctorRouteRendersNdjsonOutput()
+    {
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            new StaticDoctor(new DispatchDoctorReport(
+            [
+                DispatchDoctorCheck.Pass("Operating system", "Windows host detected.")
+            ])));
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--output", "ndjson"], CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+        var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        Assert.Contains(@"""type"":""doctor.summary""", lines[0]);
+        Assert.Contains(@"""type"":""doctor.check""", lines[1]);
+    }
+
+    [Fact]
+    public async Task DoctorRouteRendersYamlOutput()
+    {
+        var application = CreateApplication(
+            new CapturingPlanner(),
+            new StaticDoctor(new DispatchDoctorReport(
+            [
+                DispatchDoctorCheck.Pass("Operating system", "Windows host detected.", "Microsoft Windows")
+            ])));
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--output", "yaml"], CancellationToken.None));
+
+        Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+        Assert.Contains("checks:", output);
+        Assert.Contains("name: Operating system", output);
+        Assert.Contains("status: pass", output);
+        Assert.Contains("succeeded: True", output);
+    }
+
+    [Fact]
+    public async Task DoctorRouteRejectsUnsupportedOutputBeforeRunningChecks()
+    {
+        var doctor = new StaticDoctor(new DispatchDoctorReport(
+        [
+            DispatchDoctorCheck.Pass("Transport scope", "Checking local prerequisites.", "auto")
+        ]));
+        var application = CreateApplication(new CapturingPlanner(), doctor);
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(["doctor", "--output", "xml"], CancellationToken.None));
+
+        Assert.Equal(1, exitCode);
+        Assert.Empty(output);
+        Assert.Null(doctor.LastRequest);
+        Assert.Contains("Unsupported output mode 'xml'", error);
+    }
+
+    [Fact]
     public async Task DoctorRouteRejectsUnsupportedTransportBeforeRunningChecks()
     {
         var doctor = new StaticDoctor(new DispatchDoctorReport(
@@ -134,6 +229,8 @@ public sealed class DispatchCliApplicationTests
         Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
         Assert.Contains("--transport", output);
         Assert.Contains("auto|psexec|psrp|winrm", output);
+        Assert.Contains("--output", output);
+        Assert.Contains("rich, table, json, ndjson, yaml", output);
     }
 
     [Fact]
@@ -156,6 +253,9 @@ public sealed class DispatchCliApplicationTests
             Assert.DoesNotContain(report.Checks, static check => check.Status == DispatchDoctorStatus.Fail);
             Assert.Contains(report.Checks, static check => check is { Name: "PsExec", Status: DispatchDoctorStatus.Pass });
             Assert.Contains(report.Checks, static check => check is { Name: "Output path", Status: DispatchDoctorStatus.Pass });
+            Assert.Contains(report.Checks, static check => check is { Name: ".NET runtime", Status: DispatchDoctorStatus.Pass });
+            Assert.Contains(report.Checks, static check => check is { Name: "User context", Status: DispatchDoctorStatus.Pass });
+            Assert.Contains(report.Checks, static check => check is { Name: "Policy restrictions", Status: DispatchDoctorStatus.Pass });
         }
         finally
         {

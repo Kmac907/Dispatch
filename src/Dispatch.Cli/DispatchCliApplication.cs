@@ -567,8 +567,14 @@ public sealed class DispatchCliApplication(
         return 0;
     }
 
-    internal int RunDoctorCommand(string? transport)
+    internal int RunDoctorCommand(string? transport, string? outputValue)
     {
+        if (!TryParseOutputMode(outputValue, out var outputMode, out var outputError))
+        {
+            SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Doctor", outputError!);
+            return 1;
+        }
+
         if (!TryParseDoctorTransport(transport, out var transportScope, out var error))
         {
             SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Doctor", error);
@@ -576,7 +582,7 @@ public sealed class DispatchCliApplication(
         }
 
         var report = doctor.Run(new DispatchDoctorRequest(transportScope));
-        SpectreConsoleRenderer.RenderDoctorReport(Console.Out, report);
+        DispatchStructuredOutputRenderer.RenderDoctorReport(Console.Out, report, outputMode);
         return report.Succeeded ? 0 : 1;
     }
 

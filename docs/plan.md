@@ -1378,7 +1378,7 @@ Current implementation boundary:
 - `dispatch init config`, `dispatch init hosts`, `dispatch init job`, and `dispatch init all` generate starter YAML files in the current directory.
 - Init scaffolding refuses to overwrite existing starter files.
 - `dispatch hosts list`, `dispatch hosts validate`, `dispatch hosts test`, `dispatch hosts graph`, and `dispatch hosts vars` are implemented.
-- `dispatch doctor --transport auto|psexec|psrp|winrm` is implemented for local transport-scoped prerequisite checks. Broader diagnostics and structured doctor output modes remain Roadmap 6.8 work.
+- `dispatch doctor --transport auto|psexec|psrp|winrm` is implemented for local transport-scoped prerequisite checks. Roadmap 6.8 adds stable doctor output modes and continues broader diagnostics migration work.
 - `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Completed `dispatch apply` execution preserves those same stable underlying run exit codes for executed `ps`, `cmd`, and `exe` tasks. Completed `dispatch push` transfer/execute results and `dispatch hosts test` endpoint-probe results map target failure categories to the same stable process exit-code contract. Usage/config/inventory/YAML/planning validation and local lifecycle/inspection command failures still return `1`. Policy failures, including LocalSystem policy failures and PsExec fallback approval failures, now return plan/check policy exit code `7` before planning or endpoint work.
 
 #### 6.7 CLI Safety, Policy, And Exit Codes
@@ -1441,7 +1441,7 @@ Dependencies:
 Definition of done:
 - `dispatch doctor` returns a clear success/failure summary.
 - Missing PsExec or inaccessible default paths are reported with actionable messages.
-- PowerShell wrapper can expose the same behavior through `Test-Dispatch`.
+- The CLI emits a stable structured diagnostics contract that Roadmap 7 can expose through `Test-Dispatch` without parsing rich terminal output.
 
 #### 7. PowerShell Module Wrapper
 
