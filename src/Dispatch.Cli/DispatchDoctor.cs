@@ -1,6 +1,8 @@
 using Dispatch.Core.Configuration;
 using Microsoft.Extensions.Options;
+using Microsoft.Win32;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Security.Principal;
 
 namespace Dispatch.Cli;
@@ -10,8 +12,22 @@ public interface IDispatchDoctor
     DispatchDoctorReport Run(DispatchDoctorRequest request);
 }
 
-public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatchDoctor
+public sealed class DispatchDoctor : IDispatchDoctor
 {
+    private readonly IOptions<DispatchOptions> options;
+    private readonly IPsExecEulaStateReader psexecEulaStateReader;
+
+    public DispatchDoctor(IOptions<DispatchOptions> options)
+        : this(options, RegistryPsExecEulaStateReader.Instance)
+    {
+    }
+
+    internal DispatchDoctor(IOptions<DispatchOptions> options, IPsExecEulaStateReader psexecEulaStateReader)
+    {
+        this.options = options;
+        this.psexecEulaStateReader = psexecEulaStateReader;
+    }
+
     public DispatchDoctorReport Run() => Run(DispatchDoctorRequest.Auto);
 
     public DispatchDoctorReport Run(DispatchDoctorRequest request)
@@ -22,6 +38,7 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
             CheckDotNetRuntime(),
             CheckPowerShell(),
             CheckLocalRunRoot(),
+            CheckRunHistoryLayout(),
             CheckTransportScope(request.Transport),
             CheckCurrentUserContext(),
             CheckPolicyRestrictions()
@@ -30,6 +47,8 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
         if (request.Transport is DispatchDoctorTransportScope.Auto or DispatchDoctorTransportScope.PsExec)
         {
             checks.Add(CheckPsExec());
+            checks.Add(CheckPsExecLocalPolicy());
+            checks.Add(CheckPsExecEula());
             checks.Add(CheckAdminContext());
         }
 
@@ -133,6 +152,69 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
         }
     }
 
+    private DispatchDoctorCheck CheckRunHistoryLayout()
+    {
+        var localRunRoot = options.Value.LocalRunRoot;
+        if (string.IsNullOrWhiteSpace(localRunRoot))
+        {
+            return DispatchDoctorCheck.Fail("Run-history layout", "Local run root is not configured.", "Set Dispatch:LocalRunRoot.");
+        }
+
+        string? probeRunRoot = null;
+        try
+        {
+            var fullPath = Path.GetFullPath(localRunRoot);
+            if (File.Exists(fullPath))
+            {
+                return DispatchDoctorCheck.Fail("Run-history layout", "Local run root points to a file.", RedactPath(fullPath));
+            }
+
+            probeRunRoot = Path.Combine(fullPath, $".dispatch-doctor-layout-{Guid.NewGuid():N}");
+            var adminRoot = Path.Combine(probeRunRoot, "Admin");
+            var targetsRoot = Path.Combine(probeRunRoot, "Targets");
+            Directory.CreateDirectory(adminRoot);
+            Directory.CreateDirectory(targetsRoot);
+
+            var resultsPath = Path.Combine(adminRoot, "results.json");
+            var eventsPath = Path.Combine(adminRoot, "events.ndjson");
+            File.WriteAllText(resultsPath, "{}");
+            File.WriteAllText(eventsPath, string.Empty);
+            File.Delete(resultsPath);
+            File.Delete(eventsPath);
+
+            return DispatchDoctorCheck.Pass(
+                "Run-history layout",
+                "Run-history Admin and Targets layout is writable.",
+                $"root={RedactPath(fullPath)}; admin=Admin; targets=Targets; results=Admin{Path.DirectorySeparatorChar}results.json; events=Admin{Path.DirectorySeparatorChar}events.ndjson");
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or IOException
+            or NotSupportedException
+            or UnauthorizedAccessException)
+        {
+            return DispatchDoctorCheck.Fail(
+                "Run-history layout",
+                "Run-history layout could not be created under the local run root.",
+                $"{RedactPath(localRunRoot)}: {exception.Message}");
+        }
+        finally
+        {
+            if (!string.IsNullOrWhiteSpace(probeRunRoot) && Directory.Exists(probeRunRoot))
+            {
+                try
+                {
+                    Directory.Delete(probeRunRoot, recursive: true);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+    }
+
     private static DispatchDoctorCheck CheckAdminContext()
     {
         if (!OperatingSystem.IsWindows())
@@ -181,6 +263,40 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
             "Policy restrictions",
             "Effective local policy settings loaded.",
             $"LocalSystem={runAsSystem}; PsExecFallback={psexecFallback}");
+    }
+
+    private DispatchDoctorCheck CheckPsExecLocalPolicy()
+    {
+        var runAsSystem = options.Value.AllowRunAsSystem ? "allowed" : "blocked";
+        var psexecFallback = options.Value.AllowPsExecFallback ? "allowed" : "blocked";
+        return DispatchDoctorCheck.Pass(
+            "PsExec local policy",
+            "Effective PsExec local policy settings loaded.",
+            $"explicitPsExec=allowed; LocalSystem={runAsSystem}; implicitFallback={psexecFallback}");
+    }
+
+    private DispatchDoctorCheck CheckPsExecEula()
+    {
+        var state = psexecEulaStateReader.Read();
+        return state.Status switch
+        {
+            PsExecEulaStateStatus.Accepted => DispatchDoctorCheck.Pass(
+                "PsExec EULA",
+                "PsExec EULA acceptance is recorded for the current user.",
+                state.Detail),
+            PsExecEulaStateStatus.Unavailable => DispatchDoctorCheck.Warning(
+                "PsExec EULA",
+                "PsExec EULA registry check is only available on Windows.",
+                state.Detail),
+            PsExecEulaStateStatus.ReadFailed => DispatchDoctorCheck.Warning(
+                "PsExec EULA",
+                "PsExec EULA registry state could not be read.",
+                state.Detail),
+            _ => DispatchDoctorCheck.Warning(
+                "PsExec EULA",
+                "PsExec EULA acceptance was not detected for the current user.",
+                $"{state.Detail} Doctor does not accept or remediate PsExec EULA state.")
+        };
     }
 
     private static DispatchDoctorCheck CheckTransportScope(DispatchDoctorTransportScope transport) =>
@@ -270,6 +386,78 @@ public sealed class DispatchDoctor(IOptions<DispatchOptions> options) : IDispatc
 
         return path;
     }
+}
+
+internal interface IPsExecEulaStateReader
+{
+    PsExecEulaState Read();
+}
+
+internal sealed record PsExecEulaState(PsExecEulaStateStatus Status, string Detail);
+
+internal enum PsExecEulaStateStatus
+{
+    Accepted,
+    NotAccepted,
+    Unavailable,
+    ReadFailed
+}
+
+internal sealed class RegistryPsExecEulaStateReader : IPsExecEulaStateReader
+{
+    internal static RegistryPsExecEulaStateReader Instance { get; } = new();
+
+    private const string RegistryPath = @"Software\Sysinternals\PsExec";
+    private const string ValueName = "EulaAccepted";
+
+    public PsExecEulaState Read()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return new PsExecEulaState(
+                PsExecEulaStateStatus.Unavailable,
+                $@"HKCU\{RegistryPath}\{ValueName} was not read.");
+        }
+
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(RegistryPath, writable: false);
+            var value = key?.GetValue(ValueName);
+            if (IsRegistryEnabled(value))
+            {
+                return new PsExecEulaState(
+                    PsExecEulaStateStatus.Accepted,
+                    $@"HKCU\{RegistryPath}\{ValueName}=1");
+            }
+
+            var detail = value is null
+                ? $@"HKCU\{RegistryPath}\{ValueName} is not set."
+                : $@"HKCU\{RegistryPath}\{ValueName}={value}.";
+            return new PsExecEulaState(PsExecEulaStateStatus.NotAccepted, detail);
+        }
+        catch (SecurityException exception)
+        {
+            return new PsExecEulaState(PsExecEulaStateStatus.ReadFailed, exception.Message);
+        }
+        catch (IOException exception)
+        {
+            return new PsExecEulaState(PsExecEulaStateStatus.ReadFailed, exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            return new PsExecEulaState(PsExecEulaStateStatus.ReadFailed, exception.Message);
+        }
+    }
+
+    private static bool IsRegistryEnabled(object? value) =>
+        value switch
+        {
+            int intValue => intValue == 1,
+            long longValue => longValue == 1,
+            string stringValue => stringValue.Equals("1", StringComparison.OrdinalIgnoreCase)
+                || stringValue.Equals("true", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
 }
 
 public sealed record DispatchDoctorRequest(DispatchDoctorTransportScope Transport)

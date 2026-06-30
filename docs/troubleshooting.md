@@ -69,7 +69,7 @@ Common causes:
 
 ## What Doctor Proves
 
-`dispatch doctor` proves local prerequisites for the selected transport scope. Use `--transport psexec`, `--transport psrp`, or `--transport winrm` when a failure only matters for one remoting path. Omitted `--transport` and `--transport auto` check the current local transport prerequisite set. Use `--output json`, `--output ndjson`, or `--output yaml` when automation needs a machine-readable report. It does not prove that every endpoint can execute a job, and it does not remediate endpoint settings.
+`dispatch doctor` proves local prerequisites for the selected transport scope. Use `--transport psexec`, `--transport psrp`, or `--transport winrm` when a failure only matters for one remoting path. Omitted `--transport` and `--transport auto` check the current local transport prerequisite set. Current shared checks include runtime, shell, output path, run-history layout, user context, and local policy state. The PsExec scope also checks configured PsExec path, effective PsExec policy, current-user PsExec EULA registry state, and local admin-token state; EULA is read-only and reported as a warning when missing. Use `--output json`, `--output ndjson`, or `--output yaml` when automation needs a machine-readable report. It does not prove that every endpoint can execute a job, and it does not remediate endpoint settings.
 
 ## Script Succeeded But Artifacts Are Missing
 

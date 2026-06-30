@@ -240,11 +240,13 @@ public sealed class DispatchCliApplicationTests
         var psexecPath = Path.Combine(root, "PsExec.exe");
         Directory.CreateDirectory(root);
         File.WriteAllText(psexecPath, "fake psexec");
-        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
-        {
-            LocalRunRoot = root,
-            PsExecPath = psexecPath
-        }));
+        var doctor = new DispatchDoctor(
+            Options.Create(new DispatchOptions
+            {
+                LocalRunRoot = root,
+                PsExecPath = psexecPath
+            }),
+            new StaticPsExecEulaStateReader(new PsExecEulaState(PsExecEulaStateStatus.Accepted, @"HKCU\Software\Sysinternals\PsExec\EulaAccepted=1")));
 
         try
         {
@@ -253,9 +255,12 @@ public sealed class DispatchCliApplicationTests
             Assert.DoesNotContain(report.Checks, static check => check.Status == DispatchDoctorStatus.Fail);
             Assert.Contains(report.Checks, static check => check is { Name: "PsExec", Status: DispatchDoctorStatus.Pass });
             Assert.Contains(report.Checks, static check => check is { Name: "Output path", Status: DispatchDoctorStatus.Pass });
+            Assert.Contains(report.Checks, static check => check is { Name: "Run-history layout", Status: DispatchDoctorStatus.Pass });
             Assert.Contains(report.Checks, static check => check is { Name: ".NET runtime", Status: DispatchDoctorStatus.Pass });
             Assert.Contains(report.Checks, static check => check is { Name: "User context", Status: DispatchDoctorStatus.Pass });
             Assert.Contains(report.Checks, static check => check is { Name: "Policy restrictions", Status: DispatchDoctorStatus.Pass });
+            Assert.Contains(report.Checks, static check => check is { Name: "PsExec local policy", Status: DispatchDoctorStatus.Pass });
+            Assert.Contains(report.Checks, static check => check is { Name: "PsExec EULA", Status: DispatchDoctorStatus.Pass });
         }
         finally
         {
@@ -308,6 +313,7 @@ public sealed class DispatchCliApplicationTests
 
             Assert.DoesNotContain(report.Checks, static item => item.Name == "PsExec");
             Assert.Contains(report.Checks, static item => item is { Name: "WinRM client" });
+            Assert.DoesNotContain(report.Checks, static item => item.Name is "PsExec local policy" or "PsExec EULA");
         }
         finally
         {
@@ -341,6 +347,61 @@ public sealed class DispatchCliApplicationTests
             {
                 Directory.Delete(root, recursive: true);
             }
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsRunHistoryLayoutFileConflict()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
+        File.WriteAllText(root, "not a directory");
+        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        {
+            LocalRunRoot = root
+        }));
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.WinRm));
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Run-history layout");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("points to a file", check.Message);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            File.Delete(root);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsPsExecEulaWarningWhenAcceptanceIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
+        var psexecPath = Path.Combine(root, "PsExec.exe");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(psexecPath, "fake psexec");
+        var doctor = new DispatchDoctor(
+            Options.Create(new DispatchOptions
+            {
+                LocalRunRoot = root,
+                PsExecPath = psexecPath
+            }),
+            new StaticPsExecEulaStateReader(new PsExecEulaState(PsExecEulaStateStatus.NotAccepted, @"HKCU\Software\Sysinternals\PsExec\EulaAccepted is not set.")));
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "PsExec EULA");
+            Assert.Equal(DispatchDoctorStatus.Warning, check.Status);
+            Assert.Contains("does not accept or remediate", check.Detail);
+            Assert.True(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 
@@ -9440,4 +9501,8 @@ credentials:
         }
     }
 
+    private sealed class StaticPsExecEulaStateReader(PsExecEulaState state) : IPsExecEulaStateReader
+    {
+        public PsExecEulaState Read() => state;
+    }
 }

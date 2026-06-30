@@ -233,11 +233,11 @@ dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin
 dispatch doctor [--transport auto|psexec|psrp|winrm] [--output rich|table|json|ndjson|yaml]
 ```
 
-Status: current for local transport-scoped prerequisite checks, stable output modes, and the first expanded local diagnostics. Some broader diagnostics remain planned v1.
+Status: current for local transport-scoped prerequisite checks, stable output modes, run-history layout checks, and PsExec local policy/EULA diagnostics. Some broader diagnostics remain planned v1.
 
 `doctor` reports local readiness. It does not remediate endpoints.
 
-Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set and can report PsExec readiness, but this does not approve PsExec fallback for host-targeting commands. `--transport psexec` includes the configured PsExec path and local admin-token checks. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing. Shared local checks now include the operating system, .NET runtime, PowerShell availability, local output path writability, current user context, and effective local policy flags.
+Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set and can report PsExec readiness, but this does not approve PsExec fallback for host-targeting commands. `--transport psexec` includes the configured PsExec path, local admin-token check, effective PsExec local policy, and read-only current-user PsExec EULA registry state. `doctor` reports missing PsExec EULA acceptance as a warning and does not accept, repair, or invoke PsExec. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing. Shared local checks now include the operating system, .NET runtime, PowerShell availability, local output path writability, run-history `Admin`/`Targets` layout writability, current user context, and effective local policy flags.
 
 `--output rich` renders the human Spectre report. `--output table` emits stable plain text. `--output json`, `--output ndjson`, and `--output yaml` emit machine-readable reports suitable for automation and future PowerShell module wrappers.
 
