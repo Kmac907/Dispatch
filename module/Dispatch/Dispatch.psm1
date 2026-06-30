@@ -192,6 +192,253 @@ function Test-Dispatch {
     $report
 }
 
+function Invoke-DispatchPowerShell {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Script,
+
+        [string] $Target,
+
+        [string] $Inventory,
+
+        [string] $Config,
+
+        [string] $Exclude,
+
+        [string] $CredentialName,
+
+        [ValidateSet('auto', 'psexec', 'psrp', 'winrm')]
+        [string] $Transport,
+
+        [int[]] $ExpectedExitCode,
+
+        [int] $Throttle,
+
+        [string[]] $ArtifactPath,
+
+        [string] $OutputRoot,
+
+        [string] $RemoteRoot,
+
+        [string] $TargetFile,
+
+        [string[]] $Secret,
+
+        [string[]] $ArgumentList,
+
+        [switch] $Plan,
+
+        [switch] $RunAsSystem,
+
+        [switch] $NoColor,
+
+        [switch] $Quiet,
+
+        [switch] $Trace,
+
+        [string] $DispatchPath,
+
+        [switch] $Raw
+    )
+
+    $arguments = [System.Collections.Generic.List[string]]::new()
+    $arguments.Add('run')
+    $arguments.Add('ps')
+    $arguments.Add($Script)
+    Add-DispatchRunCommonArguments -Arguments $arguments -Target $Target -Inventory $Inventory -Config $Config -Exclude $Exclude -CredentialName $CredentialName -Transport $Transport -ExpectedExitCode $ExpectedExitCode -Throttle $Throttle -ArtifactPath $ArtifactPath -OutputRoot $OutputRoot -RemoteRoot $RemoteRoot -TargetFile $TargetFile -Plan:$Plan -RunAsSystem:$RunAsSystem -NoColor:$NoColor -Quiet:$Quiet -VerboseEnabled:($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']) -Trace:$Trace
+    Add-DispatchRepeatedArgumentValue -Arguments $arguments -Name '--secret' -Value $Secret
+    Add-DispatchStructuredOutputArguments -Arguments $arguments
+    Add-DispatchRemainingArguments -Arguments $arguments -Value $ArgumentList
+
+    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+}
+
+function Invoke-DispatchStructuredRun {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]] $ArgumentList,
+
+        [string] $DispatchPath,
+
+        [switch] $Raw
+    )
+
+    $result = Invoke-DispatchNative -ArgumentList $ArgumentList -DispatchPath $DispatchPath
+    if ($Raw) {
+        return $result
+    }
+
+    try {
+        $runResult = ConvertFrom-DispatchJson -Json $result.StdOut
+    }
+    catch {
+        $message = if ([string]::IsNullOrWhiteSpace($result.StdErr)) { $result.StdOut } else { $result.StdErr }
+        throw "dispatch.exe run did not return valid JSON. Exit code: $($result.ExitCode). $message"
+    }
+
+    $runResult | Add-Member -NotePropertyName ExitCode -NotePropertyValue $result.ExitCode -Force
+    $runResult | Add-Member -NotePropertyName DispatchPath -NotePropertyValue $result.DispatchPath -Force
+    $runResult
+}
+
+function Add-DispatchStructuredOutputArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]] $Arguments
+    )
+
+    $Arguments.Add('--output')
+    $Arguments.Add('json')
+    $Arguments.Add('--no-progress')
+}
+
+function Add-DispatchRunCommonArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]] $Arguments,
+
+        [string] $Target,
+
+        [string] $Inventory,
+
+        [string] $Config,
+
+        [string] $Exclude,
+
+        [string] $CredentialName,
+
+        [string] $Transport,
+
+        [int[]] $ExpectedExitCode,
+
+        [int] $Throttle,
+
+        [string[]] $ArtifactPath,
+
+        [string] $OutputRoot,
+
+        [string] $RemoteRoot,
+
+        [string] $TargetFile,
+
+        [switch] $Plan,
+
+        [switch] $RunAsSystem,
+
+        [switch] $NoColor,
+
+        [switch] $Quiet,
+
+        [bool] $VerboseEnabled,
+
+        [switch] $Trace
+    )
+
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--target' -Value $Target
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--inventory' -Value $Inventory
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--config' -Value $Config
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--exclude' -Value $Exclude
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--credential' -Value $CredentialName
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--transport' -Value $Transport
+    if ($ExpectedExitCode -and $ExpectedExitCode.Count -gt 0) {
+        Add-DispatchArgumentValue -Arguments $Arguments -Name '--expected-exit-code' -Value ($ExpectedExitCode -join ',')
+    }
+
+    if ($Throttle -gt 0) {
+        Add-DispatchArgumentValue -Arguments $Arguments -Name '--throttle' -Value ([string] $Throttle)
+    }
+
+    Add-DispatchRepeatedArgumentValue -Arguments $Arguments -Name '--artifact-path' -Value $ArtifactPath
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--output-root' -Value $OutputRoot
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--remote-root' -Value $RemoteRoot
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--target-file' -Value $TargetFile
+
+    if ($Plan) {
+        $Arguments.Add('--plan')
+    }
+
+    if ($RunAsSystem) {
+        $Arguments.Add('--run-as-system')
+    }
+
+    if ($NoColor) {
+        $Arguments.Add('--no-color')
+    }
+
+    if ($Quiet) {
+        $Arguments.Add('--quiet')
+    }
+
+    if ($VerboseEnabled) {
+        $Arguments.Add('--verbose')
+    }
+
+    if ($Trace) {
+        $Arguments.Add('--trace')
+    }
+}
+
+function Add-DispatchArgumentValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]] $Arguments,
+
+        [Parameter(Mandatory)]
+        [string] $Name,
+
+        [AllowEmptyString()]
+        [string] $Value
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Value)) {
+        return
+    }
+
+    $Arguments.Add($Name)
+    $Arguments.Add($Value)
+}
+
+function Add-DispatchRepeatedArgumentValue {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]] $Arguments,
+
+        [Parameter(Mandatory)]
+        [string] $Name,
+
+        [string[]] $Value
+    )
+
+    foreach ($item in $Value) {
+        Add-DispatchArgumentValue -Arguments $Arguments -Name $Name -Value $item
+    }
+}
+
+function Add-DispatchRemainingArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]] $Arguments,
+
+        [string[]] $Value
+    )
+
+    if ($null -eq $Value -or $Value.Count -eq 0) {
+        return
+    }
+
+    $Arguments.Add('--')
+    foreach ($item in $Value) {
+        $Arguments.Add($item)
+    }
+}
+
 function ConvertFrom-DispatchJson {
     [CmdletBinding()]
     param(
@@ -207,4 +454,4 @@ function ConvertFrom-DispatchJson {
     $Json | ConvertFrom-Json
 }
 
-Export-ModuleMember -Function Get-DispatchVersion, Test-Dispatch
+Export-ModuleMember -Function Get-DispatchVersion, Invoke-DispatchPowerShell, Test-Dispatch

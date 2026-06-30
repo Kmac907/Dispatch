@@ -11,11 +11,13 @@ public sealed class PowerShellModuleTests
         Directory.CreateDirectory(root);
 
         var fakeDispatch = Path.Combine(root, "dispatch.cmd");
+        var argumentLog = Path.Combine(root, "dispatch-args.txt");
         var scriptPath = Path.Combine(root, "module-test.ps1");
         var moduleManifest = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "module", "Dispatch", "Dispatch.psd1"));
 
         await File.WriteAllTextAsync(fakeDispatch, """
             @echo off
+            echo %*>> "%DISPATCH_TEST_ARGUMENT_LOG%"
             if "%1"=="version" (
               echo Dispatch
               echo Version: 9.9.9-test
@@ -24,6 +26,10 @@ public sealed class PowerShellModuleTests
             )
             if "%1"=="doctor" (
               echo {"checks":[{"name":"fake","status":"pass","message":"ok","detail":"ok"}],"succeeded":true}
+              exit /b 0
+            )
+            if "%1"=="run" (
+              echo {"succeeded":true,"targets":[{"name":"PC001","state":"succeeded"}]}
               exit /b 0
             )
             echo unexpected arguments: %*
@@ -37,12 +43,17 @@ public sealed class PowerShellModuleTests
             $commands = Get-Command -Module Dispatch |
                 Select-Object -ExpandProperty Name |
                 Sort-Object
-            $expected = @('Get-DispatchVersion', 'Test-Dispatch')
+            $expected = @(
+                'Get-DispatchVersion',
+                'Invoke-DispatchPowerShell',
+                'Test-Dispatch'
+            )
             if (($commands -join '|') -ne ($expected -join '|')) {
                 throw "Unexpected exported commands: $($commands -join ', ')"
             }
 
             $env:DISPATCH_EXE = '{{EscapePowerShellSingleQuotedString(fakeDispatch)}}'
+            $env:DISPATCH_TEST_ARGUMENT_LOG = '{{EscapePowerShellSingleQuotedString(argumentLog)}}'
 
             $version = Get-DispatchVersion
             if ($version.Product -ne 'Dispatch') {
@@ -65,6 +76,27 @@ public sealed class PowerShellModuleTests
             if ($doctor.ExitCode -ne 0) {
                 throw "Unexpected doctor exit code: $($doctor.ExitCode)"
             }
+
+            $psResult = Invoke-DispatchPowerShell `
+                -Script 'C:\Scripts\Fix Me.ps1' `
+                -Target PC001 `
+                -Transport psrp `
+                -CredentialName admin-session `
+                -Plan `
+                -ExpectedExitCode 0,3010 `
+                -Secret 'packageSas=prod-package-sas' `
+                -ArgumentList '-Mode', 'Audit'
+            if (-not $psResult.succeeded -or $psResult.targets[0].name -ne 'PC001') {
+                throw 'PowerShell wrapper did not parse structured run output.'
+            }
+            if ($psResult.ExitCode -ne 0) {
+                throw "Unexpected PowerShell wrapper exit code: $($psResult.ExitCode)"
+            }
+
+            $argumentLines = Get-Content -LiteralPath '{{EscapePowerShellSingleQuotedString(argumentLog)}}'
+            if (-not ($argumentLines | Where-Object { $_ -like '*run ps*--target PC001*--credential admin-session*--transport psrp*--expected-exit-code 0,3010*--plan*--secret packageSas=prod-package-sas*--output json*--no-progress*-- -Mode Audit*' })) {
+                throw "PowerShell wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
+            }
             """);
 
         try
@@ -78,7 +110,9 @@ public sealed class PowerShellModuleTests
             Assert.NotEmpty(results);
             foreach (var result in results)
             {
-                Assert.Equal(0, result.ExitCode);
+                Assert.True(
+                    result.ExitCode == 0,
+                    $"PowerShell shell '{result.ShellPath}' failed with exit code {result.ExitCode}.{Environment.NewLine}STDOUT:{Environment.NewLine}{result.StandardOutput}{Environment.NewLine}STDERR:{Environment.NewLine}{result.StandardError}");
                 Assert.Equal(string.Empty, result.StandardError.Trim());
             }
         }

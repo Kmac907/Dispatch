@@ -11,12 +11,12 @@ Implemented wrapper commands:
 ```powershell
 Test-Dispatch
 Get-DispatchVersion
+Invoke-DispatchPowerShell
 ```
 
-Planned execution wrapper commands:
+Planned remaining execution wrapper commands:
 
 ```powershell
-Invoke-DispatchPowerShell
 Invoke-DispatchCommand
 Invoke-DispatchExecutable
 Invoke-DispatchJob
@@ -28,27 +28,34 @@ Invoke-DispatchJob
 Import-Module Dispatch
 Test-Dispatch
 Get-DispatchVersion
+Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp -Plan
 ```
 
 When the module is installed by the future packaging slice, it resolves the bundled `bin\win-x64\dispatch.exe`. In developer or test checkouts, use `-DispatchPath <path>` or set `DISPATCH_EXE` to point at the CLI executable.
 
-Planned execution wrapper examples:
+Current PowerShell execution wrapper:
 
 ```powershell
 Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
+Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp -CredentialName admin-session
+```
+
+Planned remaining execution wrapper examples:
+
+```powershell
 Invoke-DispatchCommand -Command "whoami" -Target PC001 -Transport winrm
 Invoke-DispatchJob -Job .\job.yml
 ```
 
 ## Automation Rule
 
-Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. `Test-Dispatch` calls `dispatch.exe doctor --output json` and returns the parsed diagnostics object with `ExitCode` and `DispatchPath` attached. `Get-DispatchVersion` calls `dispatch.exe version` and returns a small object with the product, version, command service, resolved dispatch path, and raw output.
+Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. `Test-Dispatch` calls `dispatch.exe doctor --output json` and returns the parsed diagnostics object with `ExitCode` and `DispatchPath` attached. `Get-DispatchVersion` calls `dispatch.exe version` and returns a small object with the product, version, command service, resolved dispatch path, and raw output. `Invoke-DispatchPowerShell` calls `dispatch.exe run ps <script.ps1> --output json --no-progress`, returns the parsed run result with `ExitCode` and `DispatchPath` attached, and passes `-CredentialName <name>` through to the existing CLI `--credential <name>` endpoint credential reference.
 
 ## PSCredential Handoff
 
 `provider: pscredential` is only valid through the PowerShell module wrapper.
 
-Planned execution wrappers accept `-CredentialName <name>` to select a configured credential reference. For `provider: pscredential`, `-Credential <PSCredential>` is optional.
+`Invoke-DispatchPowerShell` currently accepts `-CredentialName <name>` and passes it through to Dispatch as `--credential <name>`. Planned remaining execution wrappers will do the same. For the later `provider: pscredential` handoff slice, `-Credential <PSCredential>` is optional.
 
 If `-Credential` is supplied, the module uses that live object:
 
