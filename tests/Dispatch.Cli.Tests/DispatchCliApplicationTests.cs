@@ -3315,6 +3315,99 @@ credentials:
         }
     }
 
+    [Theory]
+    [InlineData(FailureCategory.ExecutionFailed, 2)]
+    [InlineData(FailureCategory.ScriptTransferFailed, 2)]
+    [InlineData(FailureCategory.UnexpectedExitCode, 2)]
+    [InlineData(FailureCategory.CleanupFailed, 2)]
+    [InlineData(FailureCategory.ProbeFailed, 3)]
+    [InlineData(FailureCategory.TimedOut, 3)]
+    [InlineData(FailureCategory.AuthenticationFailed, 4)]
+    [InlineData(FailureCategory.AuthorizationFailed, 4)]
+    [InlineData(FailureCategory.TransportUnavailable, 5)]
+    [InlineData(FailureCategory.Cancelled, 6)]
+    [InlineData(FailureCategory.InternalError, 10)]
+    public async Task PushExecutionUsesStableResultExitCodes(
+        FailureCategory failureCategory,
+        int expectedExitCode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var uploader = new RecordingWinRmTransferClient(
+            WinRmScriptTransferResult.Failed(failureCategory, $"{failureCategory} failure."));
+        var application = CreateApplication(new CapturingPlanner(), winRmTransferClient: uploader);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    "winrm",
+                    "--output",
+                    "json"
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(expectedExitCode, exitCode);
+            Assert.Empty(error);
+            Assert.Single(uploader.Requests);
+
+            using var json = JsonDocument.Parse(output);
+            Assert.False(json.RootElement.GetProperty("succeeded").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.False(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(JsonNamingPolicy.CamelCase.ConvertName(failureCategory.ToString()), target.GetProperty("failureCategory").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("winrm")]
+    [InlineData("psrp")]
+    public async Task PushExecutionReturnsTransportUnavailableWhenTransferClientIsMissing(string transport)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-push-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        File.WriteAllText(sourcePath, "payload");
+        var application = CreateApplication(new CapturingPlanner());
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                [
+                    "push",
+                    sourcePath,
+                    "--dest",
+                    @"C:\Temp\payload.txt",
+                    "--target",
+                    "PC001",
+                    "--transport",
+                    transport
+                ],
+                CancellationToken.None));
+
+            Assert.Equal(5, exitCode);
+            Assert.Empty(output);
+            Assert.Contains("upload support is unavailable", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task PushExecutionExecutesSinglePowerShellFileThroughWinRm()
     {

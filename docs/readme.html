@@ -48,7 +48,7 @@
 <h1>Dispatch Documentation</h1>
 <p>Dispatch is a Windows-native endpoint automation runner for administrators who need to run scripts, commands, and declared YAML jobs across Windows hosts with durable results and explicit transport behavior.</p>
 <p>Dispatch is not an endpoint agent, package manager, or full configuration-management platform. It focuses on target selection, execution planning, transport execution, credential references, live status, logs, results, and copied-back script-created files.</p>
-<p>Endpoint credentials and script secret handoff are separate models. <code>--credential &lt;name&gt;</code> selects the remoting credential. The script input surface is <code>dispatch run ps ... --secret name=reference</code>; Dispatch resolves the reference from a configured provider and binds the value to the named script parameter, while plan output shows only a redacted binding such as <code>-packageSas [redacted]</code>.</p>
+<p>Endpoint credentials and script secret handoff are separate models. <code>--credential &lt;name&gt;</code> selects the remoting credential. The script input surface is <code>dispatch run ps ... --secret name=reference</code>; current support validates the option shape and renders only a redacted binding such as <code>-packageSas [redacted]</code> in plan/dry-run output. Runtime provider resolution and safe transport parameter binding are planned Roadmap 10 work.</p>
 <h2>Start Here</h2>
 <ul>
 <li><a href="getting-started.html">Getting Started</a> - first install, validation, and run.</li>

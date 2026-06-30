@@ -263,12 +263,41 @@ public sealed class DispatchCliApplication(
             return 0;
         }
 
+        return GetStableFailureExitCode(
+            failureCategories,
+            result.TimedOutCount > 0,
+            result.CancelledCount > 0);
+    }
+
+    private static int GetPushResultExitCode(DispatchPushResult result)
+    {
+        var failureCategories = result.Targets
+            .Where(static target => !target.Succeeded || target.FailureCategory != FailureCategory.None)
+            .Select(static target => target.FailureCategory)
+            .ToArray();
+
+        if (result.Succeeded && failureCategories.Length == 0)
+        {
+            return 0;
+        }
+
+        return GetStableFailureExitCode(
+            failureCategories,
+            failureCategories.Contains(FailureCategory.TimedOut),
+            failureCategories.Contains(FailureCategory.Cancelled));
+    }
+
+    private static int GetStableFailureExitCode(
+        IReadOnlyCollection<FailureCategory> failureCategories,
+        bool hasTimedOutFailure,
+        bool hasCancelledFailure)
+    {
         if (failureCategories.Contains(FailureCategory.InternalError))
         {
             return 10;
         }
 
-        if (result.CancelledCount > 0 || failureCategories.Contains(FailureCategory.Cancelled))
+        if (hasCancelledFailure || failureCategories.Contains(FailureCategory.Cancelled))
         {
             return 6;
         }
@@ -284,7 +313,7 @@ public sealed class DispatchCliApplication(
             return 5;
         }
 
-        if (result.TimedOutCount > 0
+        if (hasTimedOutFailure
             || failureCategories.Contains(FailureCategory.TimedOut)
             || failureCategories.Contains(FailureCategory.ProbeFailed))
         {
@@ -607,7 +636,7 @@ public sealed class DispatchCliApplication(
                 Console.Error,
                 "Dispatch Push Failed",
                 "Raw WinRM upload support is unavailable in this Dispatch runtime.");
-            return 1;
+            return 5;
         }
 
         if (pushPlan.Transport == TransportKind.Psrp && psrpFileTransferClient is null)
@@ -616,12 +645,12 @@ public sealed class DispatchCliApplication(
                 Console.Error,
                 "Dispatch Push Failed",
                 "PSRP upload support is unavailable in this Dispatch runtime.");
-            return 1;
+            return 5;
         }
 
         var result = await ExecutePushPlanAsync(pushPlan, noProgress, cancellationToken).ConfigureAwait(false);
         DispatchStructuredOutputRenderer.RenderPushResult(Console.Out, result, outputMode);
-        return result.Succeeded ? 0 : 2;
+        return GetPushResultExitCode(result);
     }
 
     internal async Task<int> RunApplyCommandAsync(

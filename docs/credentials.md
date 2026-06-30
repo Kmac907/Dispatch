@@ -14,7 +14,7 @@ Script secret handoff is a separate surface:
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 ```
 
-The default script secret handoff is script parameter binding. The script declares a matching parameter such as `param([string]$packageSas)`. Dispatch validates the option shape, resolves the configured secret reference, and binds the value to the script parameter through the selected transport. Plan and dry-run paths render redacted parameter bindings such as `-packageSas [redacted]` and do not resolve or print secret values.
+The default script secret handoff design is script parameter binding. The script declares a matching parameter such as `param([string]$packageSas)`. Current support validates the option shape and renders redacted parameter bindings such as `-packageSas [redacted]` in plan and dry-run output without resolving or printing secret values. Roadmap 10 owns runtime provider resolution and safe transport parameter binding.
 
 ## Global Credential Catalog
 
@@ -115,7 +115,7 @@ Runtime credential resolution is implemented for PSRP and raw WinRM execution. P
 
 `provider: pscredential` is planned for the PowerShell module wrapper, not direct `dispatch.exe`. A module command will select it with `-CredentialName <name>`. If `-Credential <PSCredential>` is supplied, the module uses that live object; if it is omitted, the module prompts with `Get-Credential`, using the configured username when present. Direct `dispatch.exe --credential <name>` must reject `pscredential` unless a compatible protected wrapper handoff is present. `provider: prompt` stays Dispatch-owned, so the module should let Dispatch perform the prompt instead of prompting itself.
 
-Script secrets follow their own `--secret name=reference` model. In the final pass-off flow, Dispatch resolves `reference` from the configured secret provider on the admin side and binds it to the script parameter named by `name`. Secret values must never be passed as ordinary command-line script arguments or serialized into Dispatch logs or results.
+Script secrets follow their own `--secret name=reference` model. Current support is plan/dry-run redacted parameter rendering only. In the future Roadmap 10 final pass-off flow, Dispatch resolves `reference` from the configured secret provider on the admin side and binds it to the script parameter named by `name`. Secret values must never be passed as ordinary command-line script arguments or serialized into Dispatch logs or results.
 
 ## Azure Key Vault Auth
 

@@ -77,7 +77,7 @@ dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-packag
 <pre><code>
 param([string]$packageSas)
 </code></pre>
-<p>Dispatch resolves <code>prod-package-sas</code> from the configured secret provider on the admin side and binds the resolved value to <code>$packageSas</code> through the selected transport. Plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example <code>-packageSas [redacted]</code>.</p>
+<p>Current support validates the option shape and shows only the redacted parameter the script would receive in plan/dry-run output, for example <code>-packageSas [redacted]</code>, without resolving <code>prod-package-sas</code>. Roadmap 10 owns runtime provider resolution and safe transport binding to <code>$packageSas</code>.</p>
 <p>Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.</p>
 <h2>Output Modes</h2>
 <pre><code>

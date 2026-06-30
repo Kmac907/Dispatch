@@ -92,7 +92,7 @@ dispatch run ps .\Fix.ps1 --target PC001 --credential prod-admin
 <pre><code>
 dispatch run ps .\Install-App.ps1 --target PC001 --secret packageSas=prod-package-sas --plan --output json
 </code></pre>
-<p>The <code>--secret name=reference</code> surface resolves the configured secret reference and binds it to a script parameter. In this example the script should declare <code>param([string]$packageSas)</code>, and plan output may show only <code>-packageSas [redacted]</code>. Secret values are not ordinary command-line arguments and must not appear in logs or results.</p>
+<p>The <code>--secret name=reference</code> surface maps a configured secret reference to a script parameter. In this example the script should declare <code>param([string]$packageSas)</code>, and current plan/dry-run output may show only <code>-packageSas [redacted]</code> without resolving the reference. Roadmap 10 owns runtime provider resolution and safe transport parameter binding. Secret values are not ordinary command-line arguments and must not appear in logs or results.</p>
 <h2>Logs</h2>
 <pre><code>
 dispatch logs list

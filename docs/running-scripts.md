@@ -50,7 +50,7 @@ The default handoff is script parameter binding. The script declares a matching 
 param([string]$packageSas)
 ```
 
-Dispatch resolves `prod-package-sas` from the configured secret provider on the admin side and binds the resolved value to `$packageSas` through the selected transport. Plan and dry-run output validate the option shape and show only the redacted parameter the script would receive, for example `-packageSas [redacted]`.
+Current support validates the option shape and shows only the redacted parameter the script would receive in plan/dry-run output, for example `-packageSas [redacted]`, without resolving `prod-package-sas`. Roadmap 10 owns runtime provider resolution and safe transport binding to `$packageSas`.
 
 Dispatch must not print or serialize the value in command lines, logs, results, traces, artifacts, or structured output.
 
