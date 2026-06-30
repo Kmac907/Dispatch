@@ -1,6 +1,6 @@
 # Credential Store Plan
 
-This document is the canonical credential store and credential resolution design for Dispatch. It applies to the direct `dispatch.exe` command surface and to the planned PowerShell module wrapper.
+This document is the canonical credential store and credential resolution design for Dispatch. It applies to the direct `dispatch.exe` command surface and to the PowerShell module wrapper. Module credential handoff for `provider: pscredential` remains planned under Roadmap `7`.
 
 ## Scope Distinction
 

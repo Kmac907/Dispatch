@@ -47,28 +47,35 @@
   <article class="doc-content">
 <h1>PowerShell Module</h1>
 <p>The PowerShell module is a wrapper over the bundled <code>dispatch.exe</code>. The direct <code>dispatch</code> command remains the canonical engine and command surface.</p>
-<p>Status: planned v1.</p>
+<p>Status: partial Roadmap <code>7</code>.</p>
 <h2>Commands</h2>
-<p>Planned wrapper commands:</p>
+<p>Implemented wrapper commands:</p>
+<pre><code>
+Test-Dispatch
+Get-DispatchVersion
+</code></pre>
+<p>Planned execution wrapper commands:</p>
 <pre><code>
 Invoke-DispatchPowerShell
 Invoke-DispatchCommand
 Invoke-DispatchExecutable
 Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
 </code></pre>
 <h2>Examples</h2>
 <pre><code>
 Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
 Test-Dispatch
 Get-DispatchVersion
 </code></pre>
+<p>When the module is installed by the future packaging slice, it resolves the bundled <code>bin\win-x64\dispatch.exe</code>. In developer or test checkouts, use <code>-DispatchPath &lt;path&gt;</code> or set <code>DISPATCH_EXE</code> to point at the CLI executable.</p>
+<p>Planned execution wrapper examples:</p>
+<pre><code>
+Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
+Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
+Invoke-DispatchJob -Job .\job.yml
+</code></pre>
 <h2>Automation Rule</h2>
-<p>Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.</p>
+<p>Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. <code>Test-Dispatch</code> calls <code>dispatch.exe doctor --output json</code> and returns the parsed diagnostics object with <code>ExitCode</code> and <code>DispatchPath</code> attached. <code>Get-DispatchVersion</code> calls <code>dispatch.exe version</code> and returns a small object with the product, version, command service, resolved dispatch path, and raw output.</p>
 <h2>PSCredential Handoff</h2>
 <p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
 <p>Planned execution wrappers accept <code>-CredentialName &lt;name&gt;</code> to select a configured credential reference. For <code>provider: pscredential</code>, <code>-Credential &lt;PSCredential&gt;</code> is optional.</p>

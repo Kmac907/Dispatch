@@ -2,35 +2,47 @@
 
 The PowerShell module is a wrapper over the bundled `dispatch.exe`. The direct `dispatch` command remains the canonical engine and command surface.
 
-Status: planned v1.
+Status: partial Roadmap `7`.
 
 ## Commands
 
-Planned wrapper commands:
+Implemented wrapper commands:
+
+```powershell
+Test-Dispatch
+Get-DispatchVersion
+```
+
+Planned execution wrapper commands:
 
 ```powershell
 Invoke-DispatchPowerShell
 Invoke-DispatchCommand
 Invoke-DispatchExecutable
 Invoke-DispatchJob
-Test-Dispatch
-Get-DispatchVersion
 ```
 
 ## Examples
 
 ```powershell
 Import-Module Dispatch
-Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
-Invoke-DispatchCommand -Command "whoami" -Target PC001 -Transport winrm
-Invoke-DispatchJob -Job .\job.yml
 Test-Dispatch
 Get-DispatchVersion
 ```
 
+When the module is installed by the future packaging slice, it resolves the bundled `bin\win-x64\dispatch.exe`. In developer or test checkouts, use `-DispatchPath <path>` or set `DISPATCH_EXE` to point at the CLI executable.
+
+Planned execution wrapper examples:
+
+```powershell
+Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
+Invoke-DispatchCommand -Command "whoami" -Target PC001 -Transport winrm
+Invoke-DispatchJob -Job .\job.yml
+```
+
 ## Automation Rule
 
-Wrapper commands should rely on structured output or result files. They should not parse rich terminal rendering.
+Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. `Test-Dispatch` calls `dispatch.exe doctor --output json` and returns the parsed diagnostics object with `ExitCode` and `DispatchPath` attached. `Get-DispatchVersion` calls `dispatch.exe version` and returns a small object with the product, version, command service, resolved dispatch path, and raw output.
 
 ## PSCredential Handoff
 

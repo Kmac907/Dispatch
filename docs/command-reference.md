@@ -1,6 +1,6 @@
 # Command Reference
 
-`dispatch.exe` is the canonical command surface. The planned PowerShell module will wrap this executable and will not provide a separate execution engine.
+`dispatch.exe` is the canonical command surface. The PowerShell module wraps this executable and does not provide a separate execution engine. Current module support exposes diagnostic/version wrappers; execution wrappers remain planned under Roadmap `7`.
 
 Status legend:
 
@@ -239,7 +239,7 @@ Status: current for local transport-scoped prerequisite checks, stable output mo
 
 Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set and can report PsExec readiness, but this does not approve PsExec fallback for host-targeting commands. `--transport psexec` includes the configured PsExec path, local admin-token check, effective PsExec local policy, and read-only current-user PsExec EULA registry state. `doctor` reports missing PsExec EULA acceptance as a warning and does not accept, repair, or invoke PsExec. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing. Shared local checks now include the operating system, .NET runtime, PowerShell availability, global Dispatch config parseability, configured host inventory schema availability, configured credential provider availability, local output path writability, run-history `Admin`/`Targets` layout writability, current user context, and effective local policy flags. The `Host schema` check proves the supported inventory parser/contract is available when no inventory is configured. When `dispatch.inventory` / `Dispatch:Inventory` is configured, it validates that file through the same parser used by `hosts validate` and fails with validation error codes if the configured inventory is missing or invalid. The credential provider check reports the configured provider status without prompting, decrypting DPAPI files, reading Windows Credential Manager targets, querying Key Vault secrets, or listing credential references. A missing global config file is a warning because defaults and environment variables can still run Dispatch; an invalid or inaccessible global config file is a failure. Malformed YAML/JSON and plaintext secret fields are invalid config failures. On the `doctor` path, malformed global config is reported in the doctor output instead of crashing before diagnostics.
 
-`--output rich` renders the human Spectre report. `--output table` emits stable plain text. `--output json`, `--output ndjson`, and `--output yaml` emit machine-readable reports suitable for automation and future PowerShell module wrappers.
+`--output rich` renders the human Spectre report. `--output table` emits stable plain text. `--output json`, `--output ndjson`, and `--output yaml` emit machine-readable reports suitable for automation and PowerShell module wrappers.
 
 Use `doctor` when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use `hosts test` for endpoint-specific transport probes; `doctor` is not a fleet scan.
 

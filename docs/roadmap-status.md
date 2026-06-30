@@ -25,6 +25,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `dispatch hosts graph` local inventory group/child relationship inspection.
 - `dispatch hosts vars` local effective host metadata inspection.
 - `dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml` local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, host inventory schema availability, credential provider availability, run-history layout checks, and PsExec local policy/EULA diagnostics.
+- PowerShell module import with `Test-Dispatch` and `Get-DispatchVersion` wrappers over the canonical CLI.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -42,10 +43,11 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 - Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is current `dispatch run ps ... --secret name=reference` plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.
 - Raw `stdout.txt`, raw `stderr.txt`, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.
+- PowerShell module execution wrappers remain planned. Current module support is limited to diagnostics/version wrappers, with bundled-exe packaging, command/job execution wrappers, `-CredentialName`, and protected `PSCredential` handoff still remaining in Roadmap `7`.
 
 ## Planned Next
 
-- Implement PowerShell module wrapper.
+- Continue PowerShell module wrapper work with execution wrappers, bundled-exe packaging, and protected credential handoff.
 - Implement source install and local packaging.
 - Implement script secret handoff in staged slices: plan/dry-run validation first, then safe transport-specific parameter binding.
 
