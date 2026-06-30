@@ -48,6 +48,7 @@ public static class DispatchCliHost
         builder.Services.AddDispatchWinRmTransport();
         builder.Services.AddSingleton<IDispatchDoctor>(services => new DispatchDoctor(
             services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Dispatch.Core.Configuration.DispatchOptions>>(),
+            services.GetRequiredService<ICredentialProvider>(),
             RegistryPsExecEulaStateReader.Instance,
             globalConfigPath));
         builder.Services.AddSingleton(static services => new DispatchCliApplication(

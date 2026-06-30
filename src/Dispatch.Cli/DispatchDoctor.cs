@@ -1,4 +1,5 @@
 using Dispatch.Core.Configuration;
+using Dispatch.Core.Credentials;
 using Dispatch.Core.Defaults;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -17,25 +18,28 @@ public interface IDispatchDoctor
 public sealed class DispatchDoctor : IDispatchDoctor
 {
     private readonly IOptions<DispatchOptions> options;
+    private readonly ICredentialProvider credentialProvider;
     private readonly IPsExecEulaStateReader psexecEulaStateReader;
     private readonly string globalConfigPath;
 
     public DispatchDoctor(IOptions<DispatchOptions> options)
-        : this(options, RegistryPsExecEulaStateReader.Instance, DispatchDefaults.GlobalConfigPath)
+        : this(options, new UnavailableCredentialProvider(options), RegistryPsExecEulaStateReader.Instance, DispatchDefaults.GlobalConfigPath)
     {
     }
 
     internal DispatchDoctor(IOptions<DispatchOptions> options, IPsExecEulaStateReader psexecEulaStateReader)
-        : this(options, psexecEulaStateReader, DispatchDefaults.GlobalConfigPath)
+        : this(options, new UnavailableCredentialProvider(options), psexecEulaStateReader, DispatchDefaults.GlobalConfigPath)
     {
     }
 
     internal DispatchDoctor(
         IOptions<DispatchOptions> options,
+        ICredentialProvider credentialProvider,
         IPsExecEulaStateReader psexecEulaStateReader,
         string globalConfigPath)
     {
         this.options = options;
+        this.credentialProvider = credentialProvider;
         this.psexecEulaStateReader = psexecEulaStateReader;
         this.globalConfigPath = globalConfigPath;
     }
@@ -50,6 +54,7 @@ public sealed class DispatchDoctor : IDispatchDoctor
             CheckDotNetRuntime(),
             CheckPowerShell(),
             CheckGlobalConfigFile(),
+            CheckCredentialProvider(),
             CheckLocalRunRoot(),
             CheckRunHistoryLayout(),
             CheckTransportScope(request.Transport),
@@ -159,6 +164,47 @@ public sealed class DispatchDoctor : IDispatchDoctor
                 "Dispatch config",
                 "Global Dispatch config file is inaccessible.",
                 $"{RedactPath(globalConfigPath)}: {exception.Message}");
+        }
+    }
+
+    private DispatchDoctorCheck CheckCredentialProvider()
+    {
+        try
+        {
+            var status = credentialProvider.GetStatusAsync(CancellationToken.None)
+                .GetAwaiter()
+                .GetResult();
+            if (status is null)
+            {
+                return DispatchDoctorCheck.Fail(
+                    "Credential provider",
+                    "Credential provider status could not be checked.",
+                    "Provider returned no status.");
+            }
+
+            var providerName = string.IsNullOrWhiteSpace(status.ProviderName)
+                ? "unknown"
+                : status.ProviderName.Trim();
+            var detail = string.IsNullOrWhiteSpace(status.Message)
+                ? $"provider={providerName}"
+                : $"provider={providerName}; {status.Message}";
+
+            return status.IsAvailable
+                ? DispatchDoctorCheck.Pass(
+                    "Credential provider",
+                    "Configured credential provider is available.",
+                    detail)
+                : DispatchDoctorCheck.Warning(
+                    "Credential provider",
+                    "Configured credential provider is not available.",
+                    detail);
+        }
+        catch (Exception exception)
+        {
+            return DispatchDoctorCheck.Fail(
+                "Credential provider",
+                "Credential provider status could not be checked.",
+                $"{exception.GetType().Name}: {exception.Message}");
         }
     }
 

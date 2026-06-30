@@ -69,7 +69,7 @@
 <li><code>dispatch hosts test</code> transport endpoint probing for selected inventory targets.</li>
 <li><code>dispatch hosts graph</code> local inventory group/child relationship inspection.</li>
 <li><code>dispatch hosts vars</code> local effective host metadata inspection.</li>
-<li><code>dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml</code> local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, run-history layout checks, and PsExec local policy/EULA diagnostics.</li>
+<li><code>dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml</code> local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, credential provider availability, run-history layout checks, and PsExec local policy/EULA diagnostics.</li>
 <li><code>dispatch init config|hosts|job|all</code> starter YAML scaffolding.</li>
 <li>Logs commands over local run history.</li>
 <li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
@@ -80,7 +80,7 @@
 </ul>
 <h2>Partial</h2>
 <ul>
-<li><code>doctor</code> supports local transport-scoped prerequisite checks, stable output modes, global Dispatch config parseability, run-history layout checks, and PsExec local policy/EULA diagnostics, but credential-provider/host-schema diagnostics and some broader checks remain planned.</li>
+<li><code>doctor</code> supports local transport-scoped prerequisite checks, stable output modes, global Dispatch config parseability, credential provider availability, run-history layout checks, and PsExec local policy/EULA diagnostics, but host-schema diagnostics and some broader checks remain planned.</li>
   <li><code>push</code> supports file and recursive directory transfer over raw WinRM or PSRP, including <code>--transport auto</code> selection through inventory/config/default transport policy, <code>--backup</code> pre-replacement backup, <code>--checksum</code> push-result SHA-256 enforcement/reporting, single-file <code>.ps1</code> execute-after-copy through <code>--execute</code>, and post-execute script removal through <code>--cleanup</code>. Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.</li>
 <li><code>hosts</code> command group has current <code>list</code>, <code>validate</code>, <code>graph</code>, <code>vars</code>, and transport-probe <code>test</code> over the supported v1 inventory subset.</li>
 <li>Inventory support covers the v1 subset needed by current run paths.</li>

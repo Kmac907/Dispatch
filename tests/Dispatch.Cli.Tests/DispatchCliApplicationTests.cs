@@ -388,6 +388,83 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public void DoctorReportsAvailableCredentialProvider()
+    {
+        var (options, root) = CreateDoctorOptionsWithFakePsExec();
+        var provider = new CapturingCredentialProvider(available: true);
+        var doctor = CreateDoctor(
+            options,
+            credentialProvider: provider);
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Credential provider");
+            Assert.Equal(DispatchDoctorStatus.Pass, check.Status);
+            Assert.Contains("available", check.Message);
+            Assert.Contains("provider=test-provider", check.Detail);
+            Assert.Equal("status", provider.LastOperation);
+            Assert.True(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsUnavailableCredentialProviderAsWarning()
+    {
+        var (options, root) = CreateDoctorOptionsWithFakePsExec();
+        var provider = new CapturingCredentialProvider(available: false);
+        var doctor = CreateDoctor(
+            options,
+            credentialProvider: provider);
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Credential provider");
+            Assert.Equal(DispatchDoctorStatus.Warning, check.Status);
+            Assert.Contains("not available", check.Message);
+            Assert.Contains("test-provider is unavailable", check.Detail);
+            Assert.Equal("status", provider.LastOperation);
+            Assert.True(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsCredentialProviderStatusFailure()
+    {
+        var (options, root) = CreateDoctorOptionsWithFakePsExec();
+        var doctor = CreateDoctor(
+            options,
+            credentialProvider: new ThrowingCredentialProvider(new InvalidOperationException("provider status failed")));
+
+        try
+        {
+            var report = doctor.Run(new DispatchDoctorRequest(DispatchDoctorTransportScope.PsExec));
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Credential provider");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("could not be checked", check.Message);
+            Assert.Contains("InvalidOperationException", check.Detail);
+            Assert.Contains("provider status failed", check.Detail);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void DoctorChecksConfiguredPsExecAndWritableOutputPath()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
@@ -9533,11 +9610,14 @@ credentials:
 
         public CredentialReferenceRequest? LastReferenceRequest { get; private set; }
 
-        public Task<CredentialProviderStatus> GetStatusAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(new CredentialProviderStatus(
+        public Task<CredentialProviderStatus> GetStatusAsync(CancellationToken cancellationToken)
+        {
+            LastOperation = "status";
+            return Task.FromResult(new CredentialProviderStatus(
                 ProviderName,
                 available,
                 available ? "test-provider is available." : "test-provider is unavailable."));
+        }
 
         public Task<CredentialProviderOperationResult> AddAsync(
             CredentialAddRequest request,
@@ -9619,6 +9699,30 @@ credentials:
                 []);
     }
 
+    private sealed class ThrowingCredentialProvider(Exception exception) : ICredentialProvider
+    {
+        public Task<CredentialProviderStatus> GetStatusAsync(CancellationToken cancellationToken) =>
+            Task.FromException<CredentialProviderStatus>(exception);
+
+        public Task<CredentialProviderOperationResult> AddAsync(
+            CredentialAddRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CredentialProviderOperationResult> ListAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CredentialProviderOperationResult> TestAsync(
+            CredentialReferenceRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<CredentialProviderOperationResult> RemoveAsync(
+            CredentialReferenceRequest request,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
     private sealed class RecordingEndpointProbe(
         TransportKind kind,
         Func<TransportEndpointProbeRequest, TransportEndpointProbeResult>? resultFactory = null) : ITransportEndpointProbe
@@ -9657,11 +9761,26 @@ credentials:
     private static DispatchDoctor CreateDoctor(
         DispatchOptions options,
         string? configPath = null,
-        IPsExecEulaStateReader? eulaStateReader = null) =>
+        IPsExecEulaStateReader? eulaStateReader = null,
+        ICredentialProvider? credentialProvider = null) =>
         new(
             Options.Create(options),
+            credentialProvider ?? new CapturingCredentialProvider(available: true),
             eulaStateReader ?? new StaticPsExecEulaStateReader(new PsExecEulaState(PsExecEulaStateStatus.Accepted, @"HKCU\Software\Sysinternals\PsExec\EulaAccepted=1")),
             configPath ?? Path.Combine(Path.GetTempPath(), $"dispatch-missing-global-config-{Guid.NewGuid():N}", "config.yml"));
+
+    private static (DispatchOptions Options, string Root) CreateDoctorOptionsWithFakePsExec()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var psexecPath = Path.Combine(root, "PsExec.exe");
+        File.WriteAllText(psexecPath, "fake psexec");
+        return (new DispatchOptions
+        {
+            LocalRunRoot = root,
+            PsExecPath = psexecPath
+        }, root);
+    }
 
     private sealed class StaticPsExecEulaStateReader(PsExecEulaState state) : IPsExecEulaStateReader
     {
