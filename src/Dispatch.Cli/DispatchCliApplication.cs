@@ -696,7 +696,7 @@ public sealed class DispatchCliApplication(
         if (apply!.Mode == "execute" && apply.Tasks.Count == 1)
         {
             var outcome = await RunParsedCommandAsync(apply.Tasks[0].Command!, renderOutput: true, cancellationToken).ConfigureAwait(false);
-            return GetApplyTaskExitCode(outcome.ExitCode);
+            return outcome.ExitCode;
         }
 
         if (apply.Mode == "execute")
@@ -734,7 +734,7 @@ public sealed class DispatchCliApplication(
                 outcome.Result));
             if (outcome.ExitCode != 0)
             {
-                exitCode = GetApplyTaskExitCode(outcome.ExitCode);
+                exitCode = outcome.ExitCode;
                 break;
             }
         }
@@ -749,8 +749,6 @@ public sealed class DispatchCliApplication(
 
         return exitCode;
     }
-
-    private static int GetApplyTaskExitCode(int runExitCode) => runExitCode == 0 ? 0 : 1;
 
     private async Task<int> RunApplyPlanAsync(
         DispatchApplyJobParser.ApplyParseResult apply,

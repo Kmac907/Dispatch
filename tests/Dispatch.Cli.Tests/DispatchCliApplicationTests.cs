@@ -4978,6 +4978,56 @@ credentials:
         }
     }
 
+    [Theory]
+    [InlineData(TargetExecutionState.Succeeded, FailureCategory.None, 0)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.ExecutionFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.ProbeFailed, 3)]
+    [InlineData(TargetExecutionState.TimedOut, FailureCategory.TimedOut, 3)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.AuthenticationFailed, 4)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.AuthorizationFailed, 4)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.TransportUnavailable, 5)]
+    [InlineData(TargetExecutionState.Cancelled, FailureCategory.Cancelled, 6)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.InternalError, 10)]
+    public async Task ApplyExecutionPreservesStableRunResultExitCodes(
+        TargetExecutionState state,
+        FailureCategory failureCategory,
+        int expectedExitCode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: winrm
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            executor: new StaticRunResultExecutor(CreateRunResult(state, failureCategory)));
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--no-progress"],
+                CancellationToken.None));
+
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(expectedExitCode, exitCode);
+            Assert.Empty(error);
+            Assert.NotEmpty(output);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task ApplyDiffFailsBeforePlanningUntilDiffSlice()
     {
@@ -5648,7 +5698,7 @@ credentials:
                 ["apply", jobPath, "--output", "json"],
                 CancellationToken.None));
 
-            Assert.Equal(1, exitCode);
+            Assert.Equal(2, exitCode);
             Assert.Empty(error);
             Assert.Single(planner.Requests);
             var executedPlan = Assert.Single(executor.Plans);
@@ -5658,6 +5708,57 @@ credentials:
             var task = Assert.Single(json.RootElement.GetProperty("tasks").EnumerateArray());
             Assert.Equal(1, task.GetProperty("index").GetInt32());
             Assert.Equal(1, task.GetProperty("result").GetProperty("failedCount").GetInt32());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyExecutionPreservesStableRunExitCodeForFailedLaterTask()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var firstScriptPath = Path.Combine(root, "First.ps1");
+        var secondScriptPath = Path.Combine(root, "Second.ps1");
+        var thirdScriptPath = Path.Combine(root, "Third.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(firstScriptPath, "Write-Output 'first'");
+        File.WriteAllText(secondScriptPath, "Write-Output 'second'");
+        File.WriteAllText(thirdScriptPath, "Write-Output 'third'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            transport: psrp
+            tasks:
+              - ps: .\First.ps1
+              - ps: .\Second.ps1
+              - ps: .\Third.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var executor = new SequenceRunResultExecutor(
+            CreateRunResult(TargetExecutionState.Succeeded, FailureCategory.None),
+            CreateRunResult(TargetExecutionState.Failed, FailureCategory.AuthorizationFailed),
+            CreateRunResult(TargetExecutionState.Succeeded, FailureCategory.None));
+        var application = CreateApplication(planner, executor: executor);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--output", "json"],
+                CancellationToken.None));
+
+            Assert.Equal(4, exitCode);
+            Assert.Empty(error);
+            Assert.Equal(2, planner.Requests.Count);
+            Assert.Equal(2, executor.Plans.Count);
+
+            using var json = JsonDocument.Parse(output);
+            var tasks = json.RootElement.GetProperty("tasks").EnumerateArray().ToArray();
+            Assert.Equal([1, 2], tasks.Select(static task => task.GetProperty("index").GetInt32()).ToArray());
+            Assert.Equal(1, tasks[1].GetProperty("result").GetProperty("failedCount").GetInt32());
         }
         finally
         {
@@ -8843,6 +8944,30 @@ credentials:
                         ResultPath: plan.Job.ResultPolicy.WritePerTargetJson ? target.PlannedLocalResultPath ?? string.Empty : string.Empty)
                 ],
                 ResultPath: plan.LocalResultsJsonPath);
+        }
+    }
+
+    private sealed class SequenceRunResultExecutor(params DispatchRunResult[] results) : IDispatchExecutor
+    {
+        private readonly Queue<DispatchRunResult> results = new(results);
+
+        public List<ExecutionPlan> Plans { get; } = [];
+
+        public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
+            ExecuteAsync(plan, NullDispatchExecutionObserver.Instance, cancellationToken);
+
+        public Task<DispatchRunResult> ExecuteAsync(
+            ExecutionPlan plan,
+            IDispatchExecutionObserver observer,
+            CancellationToken cancellationToken)
+        {
+            Plans.Add(plan);
+            if (results.Count == 0)
+            {
+                throw new InvalidOperationException("No run result was configured for this apply task.");
+            }
+
+            return Task.FromResult(results.Dequeue());
         }
     }
 

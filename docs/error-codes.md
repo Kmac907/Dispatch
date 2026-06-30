@@ -12,7 +12,7 @@ Stable v1 exit-code contract:
 | Code | Meaning |
 | --- | --- |
 | `0` | Success. |
-| `1` | Usage, config, inventory, or YAML validation error. |
+| `1` | Usage, config, inventory, YAML, or planning validation error. |
 | `2` | One or more hosts failed. |
 | `3` | One or more hosts were unreachable. |
 | `4` | Authentication or authorization failure. |
@@ -21,7 +21,7 @@ Stable v1 exit-code contract:
 | `7` | Plan/check policy failure. |
 | `10` | Internal error. |
 
-Current `dispatch run` execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return `1`. Current `dispatch run` LocalSystem policy failures and `dispatch run`/`dispatch apply` missing PsExec fallback approval return `7` before planning or endpoint work. Broader command-family alignment remains Roadmap `6.7` work. Automation should prefer `Admin\results.json` for detailed per-target outcomes.
+Current `dispatch run` execution results use this stable mapping after endpoint execution completes. Completed `dispatch apply` execution preserves the same stable underlying run exit codes for executed `ps`, `cmd`, and `exe` tasks. Usage, configuration, inventory, YAML, and planning validation errors still return `1`. Policy failures, including current `dispatch run` LocalSystem policy failures and `dispatch run`/`dispatch apply` missing PsExec fallback approval, return `7` before planning or endpoint work. Broader command-family alignment remains Roadmap `6.7` work. Automation should prefer `Admin\results.json` for detailed per-target outcomes.
 
 ## Target Failure Categories
 

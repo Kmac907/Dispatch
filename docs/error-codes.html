@@ -56,7 +56,7 @@
 <table><tbody>
 <tr><th>Code</th><th>Meaning</th></tr>
 <tr><td><code>0</code></td><td>Success.</td></tr>
-<tr><td><code>1</code></td><td>Usage, config, inventory, or YAML validation error.</td></tr>
+<tr><td><code>1</code></td><td>Usage, config, inventory, YAML, or planning validation error.</td></tr>
 <tr><td><code>2</code></td><td>One or more hosts failed.</td></tr>
 <tr><td><code>3</code></td><td>One or more hosts were unreachable.</td></tr>
 <tr><td><code>4</code></td><td>Authentication or authorization failure.</td></tr>
@@ -65,7 +65,7 @@
 <tr><td><code>7</code></td><td>Plan/check policy failure.</td></tr>
 <tr><td><code>10</code></td><td>Internal error.</td></tr>
 </tbody></table>
-<p>Current <code>dispatch run</code> execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return <code>1</code>. Current <code>dispatch run</code> LocalSystem policy failures and <code>dispatch run</code>/<code>dispatch apply</code> missing PsExec fallback approval return <code>7</code> before planning or endpoint work. Broader command-family alignment remains Roadmap <code>6.7</code> work. Automation should prefer <code>Admin\results.json</code> for detailed per-target outcomes.</p>
+<p>Current <code>dispatch run</code> execution results use this stable mapping after endpoint execution completes. Completed <code>dispatch apply</code> execution preserves the same stable underlying run exit codes for executed <code>ps</code>, <code>cmd</code>, and <code>exe</code> tasks. Usage, configuration, inventory, YAML, and planning validation errors still return <code>1</code>. Policy failures, including current <code>dispatch run</code> LocalSystem policy failures and <code>dispatch run</code>/<code>dispatch apply</code> missing PsExec fallback approval, return <code>7</code> before planning or endpoint work. Broader command-family alignment remains Roadmap <code>6.7</code> work. Automation should prefer <code>Admin\results.json</code> for detailed per-target outcomes.</p>
 <h2>Target Failure Categories</h2>
 <p>Stable categories include:</p>
 <ul>
