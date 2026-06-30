@@ -30,6 +30,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
 - `dispatch run` execution results return stable process exit codes for current result categories: `0` success, `2` host/execution failure, `3` probe/unreachable/timeout, `4` authentication/authorization, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage/config/planning errors remain `1`.
 - `dispatch run --system` is policy-gated for PsExec LocalSystem execution and returns policy exit code `7` before planning or endpoint work when policy approval is missing or the selected transport does not support LocalSystem.
+- Omitted `--transport` and `--transport auto` cannot implicitly select PsExec unless fallback policy is approved with `dispatch.allow_psexec_fallback: true` in config or supported inventory `allow_psexec_fallback: true`; explicit `--transport psexec` remains the CLI opt-in. Missing approval returns policy exit code `7` before planning or endpoint work.
 
 ## Partial
 
@@ -40,11 +41,11 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 - Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is current `dispatch run ps ... --secret name=reference` plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.
-- PsExec fallback permission policy, broader command-family exit-code alignment, and full redaction validation remain planned under `6.7`.
+- Broader command-family exit-code alignment and full redaction validation remain planned under `6.7`.
 
 ## Planned Next
 
-- Finish remaining `6.7` CLI safety and policy items outside the current `dispatch run` execution-result exit-code mapping and LocalSystem policy gate.
+- Finish remaining `6.7` CLI safety and policy items outside the current `dispatch run` execution-result exit-code mapping, LocalSystem policy gate, and PsExec fallback approval gate.
 - Implement `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.
 - Implement source install and local packaging.

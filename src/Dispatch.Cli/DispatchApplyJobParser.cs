@@ -146,6 +146,15 @@ internal static class DispatchApplyJobParser
             return false;
         }
 
+        var concreteTransportSupplied = IsConcreteTransport(options.Transport) || IsConcreteTransport(job.Transport);
+        var requiresPsExecFallbackApproval = !concreteTransportSupplied && transport == TransportKind.PsExec;
+        var inventoryAllowsPsExecFallback = targetResolution.InventoryPsExecFallbackPolicies is not null
+            && targetResolution.Targets.Count > 0
+            && targetResolution.Targets.All(target =>
+                targetResolution.InventoryPsExecFallbackPolicies.TryGetValue(target.Name, out var allow)
+                && allow == true);
+        var allowPsExecFallback = config.AllowPsExecFallback || inventoryAllowsPsExecFallback;
+
         if (options.CredentialReference is { Length: > 0 } && string.IsNullOrWhiteSpace(options.CredentialReference))
         {
             error = "--credential requires a non-empty credential reference name.";
@@ -163,11 +172,15 @@ internal static class DispatchApplyJobParser
                 transport,
                 options,
                 expectedExitCodes,
+                requiresPsExecFallbackApproval,
+                allowPsExecFallback,
                 job))
             .ToArray();
         result = new ApplyParseResult(
             validateOnly ? options.Check ? "check" : "plan" : "execute",
             commands,
+            requiresPsExecFallbackApproval,
+            allowPsExecFallback,
             options.OutputMode,
             options.Quiet);
         return true;
@@ -180,6 +193,8 @@ internal static class DispatchApplyJobParser
         TransportKind transport,
         ApplyCommandOptions options,
         IReadOnlyList<int> expectedExitCodes,
+        bool requiresPsExecFallbackApproval,
+        bool allowPsExecFallback,
         ParsedApplyJob job)
     {
         if (task.Copy is { } copy)
@@ -218,6 +233,8 @@ internal static class DispatchApplyJobParser
                 CredentialReference: NormalizeOptional(options.CredentialReference) ?? job.CredentialReference,
                 RunAsSystem: false,
                 AllowRunAsSystem: false,
+                RequiresPsExecFallbackApproval: requiresPsExecFallbackApproval,
+                AllowPsExecFallback: allowPsExecFallback,
                 NoDashboard: validateOnly || options.NoProgress,
                 OutputMode: options.OutputMode,
                 NoColor: options.NoColor,
@@ -1035,7 +1052,8 @@ internal static class DispatchApplyJobParser
         config = new DispatchRunConfig
         {
             Inventory = ambientConfig.Inventory,
-            DefaultTransport = ambientConfig.DefaultTransport
+            DefaultTransport = ambientConfig.DefaultTransport,
+            AllowPsExecFallback = ambientConfig.AllowPsExecFallback
         };
         error = string.Empty;
 
@@ -1054,7 +1072,11 @@ internal static class DispatchApplyJobParser
         {
             var configuration = DispatchConfigFileReader.Load(configPath);
             var section = configuration.GetSection(DispatchOptions.SectionName);
-            config = config with { Inventory = section["Inventory"] ?? config.Inventory };
+            config = config with
+            {
+                Inventory = section["Inventory"] ?? config.Inventory,
+                AllowPsExecFallback = section.GetValue("AllowPsExecFallback", config.AllowPsExecFallback)
+            };
 
             var configuredTransport = section["DefaultTransport"];
             if (!string.IsNullOrWhiteSpace(configuredTransport))
@@ -1164,6 +1186,10 @@ internal static class DispatchApplyJobParser
             || value.Equals("winrm", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsConcreteTransport(string? value) =>
+        !string.IsNullOrWhiteSpace(value)
+        && !value.Trim().Equals("auto", StringComparison.OrdinalIgnoreCase);
+
     private static bool TryParseExpectedExitCodes(string value, out IReadOnlyList<int> expectedExitCodes)
     {
         var normalized = value.Trim();
@@ -1262,6 +1288,8 @@ internal static class DispatchApplyJobParser
     internal sealed record ApplyParseResult(
         string Mode,
         IReadOnlyList<ApplyTaskCommand> Tasks,
+        bool RequiresPsExecFallbackApproval,
+        bool AllowPsExecFallback,
         DispatchOutputMode OutputMode,
         bool Quiet);
 
@@ -1318,6 +1346,8 @@ internal static class DispatchApplyJobParser
         public string? Inventory { get; init; }
 
         public TransportKind? DefaultTransport { get; init; }
+
+        public bool AllowPsExecFallback { get; init; }
     }
 
     private sealed record YamlPathPart(int Indent, string Key);

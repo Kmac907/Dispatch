@@ -75,6 +75,7 @@
 </ul>
 <h2>No Silent Fallback</h2>
 <p>Dispatch does not silently fall back from one transport to another. Transport decisions must be explicit through CLI, job, inventory, or config.</p>
+<p>Omitted <code>--transport</code> and <code>--transport auto</code> must not implicitly select PsExec unless fallback policy is approved. Explicit <code>--transport psexec</code> remains the CLI opt-in. Config approval is <code>dispatch.allow_psexec_fallback: true</code>; inventory approval can be <code>allow_psexec_fallback: true</code> on defaults, group vars, host entries, or host vars where supported by the implementation. Missing approval returns policy exit code <code>7</code> before planning or endpoint work.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>

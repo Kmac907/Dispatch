@@ -19,6 +19,7 @@ public static class TargetResolver
             .ToArray();
         var inventoryTransportPolicies = inventory.ResolveTransportPoliciesForTargets(targets, errors);
         var inventoryCredentialReferences = inventory.ResolveCredentialReferencesForTargets(targets, errors);
+        var inventoryPsExecFallbackPolicies = inventory.ResolvePsExecFallbackPoliciesForTargets(targets, errors);
         if (errors.Count > 0)
         {
             return new InventoryInspectionResult(inventoryPath, [], errors);
@@ -30,7 +31,8 @@ public static class TargetResolver
                 target.Source,
                 inventory.ResolveGroupNamesForHost(target.Name),
                 inventoryTransportPolicies.TryGetValue(target.Name, out var transport) ? transport : null,
-                inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference) ? credentialReference : null))
+                inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference) ? credentialReference : null,
+                inventoryPsExecFallbackPolicies.TryGetValue(target.Name, out var allowPsExecFallback) ? allowPsExecFallback : null))
             .OrderBy(static host => host.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -51,6 +53,7 @@ public static class TargetResolver
             .ToArray();
         var inventoryTransportPolicies = inventory.ResolveTransportPoliciesForTargets(targets, errors);
         var inventoryCredentialReferences = inventory.ResolveCredentialReferencesForTargets(targets, errors);
+        var inventoryPsExecFallbackPolicies = inventory.ResolvePsExecFallbackPoliciesForTargets(targets, errors);
         if (errors.Count > 0)
         {
             return new InventoryGraphInspectionResult(inventoryPath, [], [], [], errors);
@@ -62,7 +65,8 @@ public static class TargetResolver
                 target.Source,
                 inventory.ResolveGroupNamesForHost(target.Name),
                 inventoryTransportPolicies.TryGetValue(target.Name, out var transport) ? transport : null,
-                inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference) ? credentialReference : null))
+                inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference) ? credentialReference : null,
+                inventoryPsExecFallbackPolicies.TryGetValue(target.Name, out var allowPsExecFallback) ? allowPsExecFallback : null))
             .OrderBy(static host => host.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var ungroupedHosts = hosts
@@ -127,6 +131,9 @@ public static class TargetResolver
         var inventoryCredentialReferences = errors.Count == 0
             ? inventory.ResolveCredentialReferencesForTargets(targets, errors)
             : new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var inventoryPsExecFallbackPolicies = errors.Count == 0
+            ? inventory.ResolvePsExecFallbackPoliciesForTargets(targets, errors)
+            : new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
         IReadOnlyList<TargetSpec> resolvedTargets = inventoryCredentialReferences.Count > 0
             ? targets
                 .Select(target => inventoryCredentialReferences.TryGetValue(target.Name, out var credentialReference)
@@ -140,7 +147,13 @@ public static class TargetResolver
             errors.Add(new("TargetsRequired", "At least one target is required from --target, --inventory, --computer-name, or --target-file."));
         }
 
-        return new TargetResolutionResult(resolvedTargets, errors, inventoryTransport, inventoryTransportPolicies, inventoryCredentialReferences);
+        return new TargetResolutionResult(
+            resolvedTargets,
+            errors,
+            inventoryTransport,
+            inventoryTransportPolicies,
+            inventoryCredentialReferences,
+            inventoryPsExecFallbackPolicies);
     }
 
     private static void AddComputerNameTargets(
@@ -511,8 +524,10 @@ public static class TargetResolver
         private readonly Dictionary<string, List<string>> tags;
         private readonly Dictionary<string, TransportKind> groupTransports;
         private readonly Dictionary<string, string> groupCredentialReferences;
+        private readonly Dictionary<string, bool> groupPsExecFallbackPolicies;
         private readonly TransportKind? defaultTransport;
         private readonly string? defaultCredentialReference;
+        private readonly bool? defaultPsExecFallbackPolicy;
 
         private InventoryTargets(
             Dictionary<string, InventoryHost> hosts,
@@ -520,16 +535,20 @@ public static class TargetResolver
             Dictionary<string, List<string>> tags,
             Dictionary<string, TransportKind> groupTransports,
             Dictionary<string, string> groupCredentialReferences,
+            Dictionary<string, bool> groupPsExecFallbackPolicies,
             TransportKind? defaultTransport,
-            string? defaultCredentialReference)
+            string? defaultCredentialReference,
+            bool? defaultPsExecFallbackPolicy)
         {
             this.hosts = hosts;
             this.groups = groups;
             this.tags = tags;
             this.groupTransports = groupTransports;
             this.groupCredentialReferences = groupCredentialReferences;
+            this.groupPsExecFallbackPolicies = groupPsExecFallbackPolicies;
             this.defaultTransport = defaultTransport;
             this.defaultCredentialReference = defaultCredentialReference;
+            this.defaultPsExecFallbackPolicy = defaultPsExecFallbackPolicy;
         }
 
         public static InventoryTargets Empty { get; } = new(
@@ -538,6 +557,8 @@ public static class TargetResolver
             new(StringComparer.OrdinalIgnoreCase),
             new(StringComparer.OrdinalIgnoreCase),
             new(StringComparer.OrdinalIgnoreCase),
+            new(StringComparer.OrdinalIgnoreCase),
+            null,
             null,
             null);
 
@@ -551,7 +572,8 @@ public static class TargetResolver
                     group.Value.Hosts.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
                     group.Value.Children.Order(StringComparer.OrdinalIgnoreCase).ToArray(),
                     groupTransports.TryGetValue(group.Key, out var transport) ? transport : null,
-                    groupCredentialReferences.TryGetValue(group.Key, out var credentialReference) ? credentialReference : null))
+                    groupCredentialReferences.TryGetValue(group.Key, out var credentialReference) ? credentialReference : null,
+                    groupPsExecFallbackPolicies.TryGetValue(group.Key, out var allowPsExecFallback) ? allowPsExecFallback : null))
                 .ToArray();
 
         public static InventoryTargets FromText(string path, IReadOnlyList<string> lines)
@@ -579,6 +601,8 @@ public static class TargetResolver
                 new(StringComparer.OrdinalIgnoreCase),
                 new(StringComparer.OrdinalIgnoreCase),
                 new(StringComparer.OrdinalIgnoreCase),
+                new(StringComparer.OrdinalIgnoreCase),
+                null,
                 null,
                 null);
         }
@@ -590,8 +614,10 @@ public static class TargetResolver
             var tags = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
             var groupTransports = new Dictionary<string, TransportKind>(StringComparer.OrdinalIgnoreCase);
             var groupCredentialReferences = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var groupPsExecFallbackPolicies = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
             TransportKind? defaultTransport = null;
             string? defaultCredentialReference = null;
+            bool? defaultPsExecFallbackPolicy = null;
             string? section = null;
             string? currentGroup = null;
             string? currentHost = null;
@@ -626,7 +652,8 @@ public static class TargetResolver
                         inlineDefaultsValue,
                         errors,
                         transport => defaultTransport = transport,
-                        credential => defaultCredentialReference = credential);
+                        credential => defaultCredentialReference = credential,
+                        allow => defaultPsExecFallbackPolicy = allow);
                     continue;
                 }
 
@@ -702,6 +729,15 @@ public static class TargetResolver
                         errors,
                         "Inventory defaults",
                         credential => defaultCredentialReference = credential))
+                    {
+                        continue;
+                    }
+
+                    if (TryApplyPsExecFallbackPolicyAssignment(
+                        trimmed,
+                        errors,
+                        "Inventory defaults",
+                        allow => defaultPsExecFallbackPolicy = allow))
                     {
                         continue;
                     }
@@ -786,7 +822,8 @@ public static class TargetResolver
                             errors,
                             currentGroup,
                             transport => groupTransports[currentGroup] = transport,
-                            credential => groupCredentialReferences[currentGroup] = credential);
+                            credential => groupCredentialReferences[currentGroup] = credential,
+                            allow => groupPsExecFallbackPolicies[currentGroup] = allow);
                         continue;
                     }
 
@@ -845,6 +882,17 @@ public static class TargetResolver
                             errors,
                             $"Group '{currentGroup}'",
                             credential => groupCredentialReferences[currentGroup] = credential))
+                    {
+                        continue;
+                    }
+
+                    if (currentGroup is not null
+                        && indent >= 4
+                        && TryApplyPsExecFallbackPolicyAssignment(
+                            trimmed,
+                            errors,
+                            $"Group '{currentGroup}'",
+                            allow => groupPsExecFallbackPolicies[currentGroup] = allow))
                     {
                         continue;
                     }
@@ -989,6 +1037,17 @@ public static class TargetResolver
                         continue;
                     }
 
+                    if (currentHost is not null
+                        && indent >= 4
+                        && TryApplyPsExecFallbackPolicyAssignment(
+                            trimmed,
+                            errors,
+                            $"Host '{currentHost}'",
+                            allow => hosts[currentHost] = hosts[currentHost] with { AllowPsExecFallback = allow }))
+                    {
+                        continue;
+                    }
+
                     if (currentHost is null)
                     {
                         errors.Add(new("InventorySchemaInvalid", $"Inventory host entry '{trimmed}' appears before a host name."));
@@ -1029,7 +1088,16 @@ public static class TargetResolver
             }
 
             ValidateGroupGraph(groups, errors);
-            return new(hosts, groups, tags, groupTransports, groupCredentialReferences, defaultTransport, defaultCredentialReference);
+            return new(
+                hosts,
+                groups,
+                tags,
+                groupTransports,
+                groupCredentialReferences,
+                groupPsExecFallbackPolicies,
+                defaultTransport,
+                defaultCredentialReference,
+                defaultPsExecFallbackPolicy);
         }
 
         public bool ContainsGroupOrHost(string selector) =>
@@ -1106,6 +1174,26 @@ public static class TargetResolver
             }
 
             return resolvedReferences;
+        }
+
+        public IReadOnlyDictionary<string, bool?> ResolvePsExecFallbackPoliciesForTargets(
+            IEnumerable<TargetSpec> targets,
+            ICollection<DispatchValidationError> errors)
+        {
+            var resolvedPolicies = new Dictionary<string, bool?>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var target in targets)
+            {
+                if (!TryResolvePsExecFallbackPolicyForHost(target.Name, errors, out var allowPsExecFallback)
+                    || allowPsExecFallback is null)
+                {
+                    continue;
+                }
+
+                resolvedPolicies[target.Name] = allowPsExecFallback.Value;
+            }
+
+            return resolvedPolicies;
         }
 
         private bool TryResolveTransportForHost(
@@ -1220,6 +1308,62 @@ public static class TargetResolver
             return false;
         }
 
+        private bool TryResolvePsExecFallbackPolicyForHost(
+            string hostName,
+            ICollection<DispatchValidationError> errors,
+            out bool? allowPsExecFallback)
+        {
+            allowPsExecFallback = null;
+
+            if (!hosts.TryGetValue(hostName, out var host))
+            {
+                return false;
+            }
+
+            if (host.AllowPsExecFallback is not null)
+            {
+                allowPsExecFallback = host.AllowPsExecFallback.Value;
+                return true;
+            }
+
+            bool? groupPolicy = null;
+            foreach (var groupName in ResolveGroupsForHost(hostName))
+            {
+                if (!groupPsExecFallbackPolicies.TryGetValue(groupName, out var candidatePolicy))
+                {
+                    continue;
+                }
+
+                if (groupPolicy is null)
+                {
+                    groupPolicy = candidatePolicy;
+                    continue;
+                }
+
+                if (groupPolicy != candidatePolicy)
+                {
+                    errors.Add(new(
+                        "InventoryPolicyConflict",
+                        $"Host '{hostName}' inherits conflicting group allow_psexec_fallback policies '{groupPolicy.Value}' and '{candidatePolicy}'."));
+                    return false;
+                }
+            }
+
+            if (groupPolicy is not null)
+            {
+                allowPsExecFallback = groupPolicy.Value;
+                return true;
+            }
+
+            if (defaultPsExecFallbackPolicy is not null)
+            {
+                allowPsExecFallback = defaultPsExecFallbackPolicy.Value;
+                return true;
+            }
+
+            return false;
+        }
+
         private static void AddInventoryGroupHost(
             string path,
             IDictionary<string, InventoryHost> hosts,
@@ -1306,6 +1450,15 @@ public static class TargetResolver
                     continue;
                 }
 
+                if (TryApplyPsExecFallbackPolicyAssignment(
+                    field,
+                    errors,
+                    $"Host '{hostName}'",
+                    allow => hosts[hostName] = hosts[hostName] with { AllowPsExecFallback = allow }))
+                {
+                    continue;
+                }
+
                 if (TryParseInlineMap(field, "vars", out var inlineHostVars))
                 {
                     ApplyInlineHostVarsMap(hosts, errors, hostName, inlineHostVars);
@@ -1325,7 +1478,8 @@ public static class TargetResolver
             string inlineDefaultsMap,
             ICollection<DispatchValidationError> errors,
             Action<TransportKind> applyTransport,
-            Action<string> applyCredentialReference)
+            Action<string> applyCredentialReference,
+            Action<bool> applyPsExecFallbackPolicy)
         {
             foreach (var field in SplitInlineMapFields(inlineDefaultsMap))
             {
@@ -1346,6 +1500,11 @@ public static class TargetResolver
                     continue;
                 }
 
+                if (TryApplyPsExecFallbackPolicyAssignment(field, errors, "Inventory defaults", applyPsExecFallbackPolicy))
+                {
+                    continue;
+                }
+
                 if (TryRejectPlaintextSecretField(field, errors, "Inventory defaults"))
                 {
                     continue;
@@ -1360,7 +1519,8 @@ public static class TargetResolver
             ICollection<DispatchValidationError> errors,
             string groupName,
             Action<TransportKind> applyTransport,
-            Action<string> applyCredentialReference)
+            Action<string> applyCredentialReference,
+            Action<bool> applyPsExecFallbackPolicy)
         {
             foreach (var field in SplitInlineMapFields(inlineGroupVars))
             {
@@ -1377,6 +1537,11 @@ public static class TargetResolver
                 }
 
                 if (TryApplyCredentialReferenceAssignment(field, errors, $"Group '{groupName}' var", applyCredentialReference))
+                {
+                    continue;
+                }
+
+                if (TryApplyPsExecFallbackPolicyAssignment(field, errors, $"Group '{groupName}' var", applyPsExecFallbackPolicy))
                 {
                     continue;
                 }
@@ -1415,6 +1580,15 @@ public static class TargetResolver
                     errors,
                     $"Host '{hostName}' var",
                     credential => hosts[hostName] = hosts[hostName] with { CredentialReference = credential }))
+                {
+                    continue;
+                }
+
+                if (TryApplyPsExecFallbackPolicyAssignment(
+                    field,
+                    errors,
+                    $"Host '{hostName}' var",
+                    allow => hosts[hostName] = hosts[hostName] with { AllowPsExecFallback = allow }))
                 {
                     continue;
                 }
@@ -1585,6 +1759,53 @@ public static class TargetResolver
             }
 
             applyCredentialReference(credentialReference.Trim());
+            return true;
+        }
+
+        private static bool TryApplyPsExecFallbackPolicyAssignment(
+            string value,
+            ICollection<DispatchValidationError> errors,
+            string context,
+            Action<bool> applyPsExecFallbackPolicy)
+        {
+            if (!TryParseBooleanAssignment(value, "allow_psexec_fallback", out var allowPsExecFallback, out var assigned))
+            {
+                return false;
+            }
+
+            if (allowPsExecFallback is null)
+            {
+                errors.Add(new("InventoryPolicyInvalid", $"{context} allow_psexec_fallback value '{assigned}' is not supported. Expected true or false."));
+                return true;
+            }
+
+            applyPsExecFallbackPolicy(allowPsExecFallback.Value);
+            return true;
+        }
+
+        private static bool TryParseBooleanAssignment(
+            string value,
+            string fieldName,
+            out bool? parsed,
+            out string assigned)
+        {
+            parsed = null;
+            assigned = string.Empty;
+            if (!value.StartsWith($"{fieldName}:", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            assigned = ReadAssignedValue(value);
+            if (assigned.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = true;
+            }
+            else if (assigned.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                parsed = false;
+            }
+
             return true;
         }
 
@@ -1796,6 +2017,11 @@ public static class TargetResolver
         }
     }
 
-    private sealed record InventoryHost(string Name, string Source, TransportKind? Transport, string? CredentialReference);
+    private sealed record InventoryHost(
+        string Name,
+        string Source,
+        TransportKind? Transport,
+        string? CredentialReference,
+        bool? AllowPsExecFallback = null);
     private sealed record InventoryGroup(List<string> Hosts, List<string> Children);
 }

@@ -17,6 +17,8 @@ V1 supports current admin context and explicit system execution where policy per
 
 LocalSystem execution must be explicit through `dispatch run ... --system` and the selected config must set `dispatch.allow_run_as_system: true`. Without that config approval, Dispatch returns policy exit code `7` before planning or endpoint work. Dispatch does not silently elevate or switch contexts.
 
+PsExec fallback is separately policy-gated. Omitted `--transport` and `--transport auto` must not implicitly select PsExec unless fallback policy is approved. Explicit `--transport psexec` remains the CLI opt-in. Config approval is `dispatch.allow_psexec_fallback: true`; inventory approval can be `allow_psexec_fallback: true` on defaults, group vars, host entries, or host vars where supported by the implementation. Without fallback approval, Dispatch returns policy exit code `7` before planning or endpoint work.
+
 ## Current Boundaries
 
 - No plaintext `psexec -u/-p` style password passing.

@@ -30,4 +30,6 @@ public sealed class DispatchOptions
     public string CredentialStorePath { get; set; } = DispatchDefaults.CredentialStorePath;
 
     public bool AllowRunAsSystem { get; set; }
+
+    public bool AllowPsExecFallback { get; set; }
 }

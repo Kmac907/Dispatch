@@ -17,6 +17,8 @@ internal sealed record DispatchRunCommand(
     string? CredentialReference,
     bool RunAsSystem,
     bool AllowRunAsSystem,
+    bool RequiresPsExecFallbackApproval,
+    bool AllowPsExecFallback,
     bool NoDashboard,
     DispatchOutputMode OutputMode,
     bool NoColor,

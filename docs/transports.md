@@ -34,3 +34,5 @@ Each transport implements the same core model: probe, prepare, execute, collect 
 ## No Silent Fallback
 
 Dispatch does not silently fall back from one transport to another. Transport decisions must be explicit through CLI, job, inventory, or config.
+
+Omitted `--transport` and `--transport auto` must not implicitly select PsExec unless fallback policy is approved. Explicit `--transport psexec` remains the CLI opt-in. Config approval is `dispatch.allow_psexec_fallback: true`; inventory approval can be `allow_psexec_fallback: true` on defaults, group vars, host entries, or host vars where supported by the implementation. Missing approval returns policy exit code `7` before planning or endpoint work.

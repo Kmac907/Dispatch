@@ -58,6 +58,8 @@ Use `--target <selector>` to override `hosts` from the job file for the current 
 
 Use `--transport <value>` to override job, inventory, and config transport policy. `--transport auto` is a fall-through value: Dispatch uses non-`auto` `job.transport`, then inventory transport policy, then config/default transport. If the selected inventory hosts resolve to conflicting transport policies and no explicit non-`auto` transport is supplied, validation fails before planning.
 
+Omitted `--transport` and `--transport auto` must not implicitly select PsExec unless fallback policy is approved. Explicit `--transport psexec` remains the CLI opt-in. Config approval is `dispatch.allow_psexec_fallback: true`; inventory approval can be `allow_psexec_fallback: true` on defaults, group vars, host entries, or host vars where supported by the implementation. Missing approval returns policy exit code `7` before planning or endpoint work.
+
 Use `--tags <tags>` to select `ps`, `cmd`, `exe`, and plan/check `copy` tasks when at least one task tag matches. Use `--skip-tags <tags>` to exclude supported tasks when any task tag matches. Tag values are comma-separated, and a filter that excludes every supported task fails before endpoint work. Execution runs the selected `ps`, `cmd`, and `exe` tasks in YAML order and stops after the first failed task run. Real `copy` execution is rejected before endpoint planning until file transfer execution is implemented.
 
 Use `--plan` to inspect the resolved plan. Use `--check` to validate and render the supported job subset without endpoint work. The current check mode does not simulate task side effects.
@@ -144,7 +146,7 @@ Options and behavior:
 - `--execute` runs the uploaded file after a successful upload when the source is a single `.ps1` file. The current implementation invokes `powershell.exe -NoProfile -ExecutionPolicy Bypass -File <remote-path>` through the selected WinRM or PSRP transport, records execution metadata in the push result, and fails the target if execution fails or exits with a nonzero code. Directory execution, non-PowerShell payload execution, and argument passing remain later push work.
 - `--cleanup` requires `--execute` and removes the uploaded `.ps1` file after successful execution. Cleanup failures are reported separately as `cleanupFailed` target failures with cleanup metadata; Dispatch does not run cleanup when upload or execution fails.
 - `--plan` and `--check` resolve targets and render the planned transfer without opening a remote shell or writing files.
-- `--transport winrm` and `--transport psrp` are the current real push transports. Omitted transport or `--transport auto` follows inventory transport policy first, then configured/default transport; the resolved transport must be WinRM or PSRP for push. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
+- `--transport winrm` and `--transport psrp` are the current real push transports. Omitted transport or `--transport auto` follows inventory transport policy first, then configured/default transport; the resolved transport must be WinRM or PSRP for push. If omitted/auto resolution would select PsExec, fallback approval is still required before Dispatch rejects PsExec push as unsupported. PsExec push remains deferred unless its SMB/admin-share staging boundary is explicitly reopened.
 
 ## Hosts
 
@@ -235,7 +237,7 @@ Status: current for local transport-scoped prerequisite checks. Structured `doct
 
 `doctor` reports local readiness. It does not remediate endpoints.
 
-Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set. `--transport psexec` includes the configured PsExec path and local admin-token checks. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing.
+Current diagnostics are local prerequisite checks only. Omitted `--transport` or `--transport auto` runs shared checks plus local checks for the current transport set and can report PsExec readiness, but this does not approve PsExec fallback for host-targeting commands. `--transport psexec` includes the configured PsExec path and local admin-token checks. `--transport psrp` and `--transport winrm` include shared local checks and WinRM client availability, but they do not fail solely because PsExec is missing.
 
 Use `doctor` when validating the admin workstation or explaining why Dispatch cannot start a local workflow. Use `hosts test` for endpoint-specific transport probes; `doctor` is not a fleet scan.
 
@@ -273,4 +275,4 @@ Automation should prefer result files or structured output modes instead of pars
 
 ## Exit Behavior
 
-Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed `dispatch run` execution results, process exit codes now follow the stable result mapping: `0` success, `2` host execution failure or unexpected exit code, `3` probe failure or timed-out target, `4` authentication or authorization failure, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage, configuration, inventory, YAML, and planning validation errors return `1`. Current `dispatch run` LocalSystem policy failures return `7` before planning or endpoint work. Broader command-family alignment remains Roadmap `6.7` work. Automation should read `Admin\results.json` for per-target detail.
+Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed `dispatch run` execution results, process exit codes now follow the stable result mapping: `0` success, `2` host execution failure or unexpected exit code, `3` probe failure or timed-out target, `4` authentication or authorization failure, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage, configuration, inventory, YAML, and planning validation errors return `1`. Current `dispatch run` LocalSystem policy failures and `dispatch run`/`dispatch apply` PsExec fallback approval failures return `7` before planning or endpoint work. Broader command-family alignment remains Roadmap `6.7` work. Automation should read `Admin\results.json` for per-target detail.

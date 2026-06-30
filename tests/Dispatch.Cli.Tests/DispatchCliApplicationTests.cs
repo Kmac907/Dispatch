@@ -352,6 +352,125 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public async Task RunImplicitPsExecFallbackWithoutPolicyApprovalReturnsPolicyExitCodeBeforePlanning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["run", "ps", scriptPath, "--target", "PC001", "--transport", "auto", "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(7, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Implicit PsExec fallback requires explicit policy approval", error);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunExplicitPsExecTransportDoesNotRequireFallbackApproval()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["run", "ps", scriptPath, "--target", "PC001", "--transport", "psexec", "--plan"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunImplicitPsExecFallbackCanBeApprovedByExplicitConfig()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-policy-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var configPath = Path.Combine(root, "config.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(
+            configPath,
+            """
+            dispatch:
+              default_transport: psexec
+              allow_psexec_fallback: true
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["run", "ps", scriptPath, "--target", "PC001", "--transport", "auto", "--config", configPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RunImplicitPsExecFallbackCanBeApprovedByInventoryPolicy()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-policy-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            defaults:
+              transport: psexec
+              allow_psexec_fallback: true
+            hosts:
+              PC001:
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["run", "ps", scriptPath, "--target", "PC001", "--inventory", inventoryPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 0, $"Stdout: {output}. Stderr: {error}");
+            Assert.NotNull(planner.LastRequest);
+            Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task RunSystemPolicyApprovalCanComeFromExplicitConfig()
     {
         var configPath = Path.Combine(Path.GetTempPath(), $"dispatch-config-{Guid.NewGuid():N}.yml");
@@ -811,7 +930,11 @@ public sealed class DispatchCliApplicationTests
         var scriptPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.ps1");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         var planner = new CapturingPlanner();
-        var application = CreateApplication(planner);
+        var application = CreateApplication(planner, options: new DispatchOptions
+        {
+            ExpectedExitCodes = [0],
+            AllowPsExecFallback = true
+        });
 
         try
         {
@@ -894,7 +1017,7 @@ public sealed class DispatchCliApplicationTests
                 hosts: [WEB01, WEB02]
             hosts:
               WEB01:
-                vars: { transport: psexec }
+                vars: { transport: psexec, allow_psexec_fallback: true }
               APP01:
                 tags: [prod]
             """);
@@ -942,6 +1065,8 @@ public sealed class DispatchCliApplicationTests
         var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              allow_psexec_fallback: true
             hosts: [WEB01, WEB02]
             """);
         var planner = new CapturingPlanner();
@@ -980,7 +1105,7 @@ public sealed class DispatchCliApplicationTests
         await File.WriteAllTextAsync(inventoryPath, """
             defaults: { transport: winrm }
             hosts:
-              WEB01: { tags: [prod], vars: { transport: psexec } }
+              WEB01: { tags: [prod], vars: { transport: psexec, allow_psexec_fallback: true } }
               WEB02: { tags: [test] }
             """);
         var planner = new CapturingPlanner();
@@ -1270,6 +1395,8 @@ public sealed class DispatchCliApplicationTests
         await File.WriteAllTextAsync(inventoryPath, """
             groups:
               web:
+                vars:
+                  allow_psexec_fallback: true
                 hosts:
                   - WEB01
                   - WEB02
@@ -1431,6 +1558,8 @@ public sealed class DispatchCliApplicationTests
         var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.json");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              allow_psexec_fallback: true
             groups:
               web:
                 hosts:
@@ -1484,6 +1613,8 @@ public sealed class DispatchCliApplicationTests
         var configPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              allow_psexec_fallback: true
             groups:
               web:
                 hosts:
@@ -1748,6 +1879,8 @@ public sealed class DispatchCliApplicationTests
         var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              allow_psexec_fallback: true
             groups:
               web:
                 hosts:
@@ -1792,6 +1925,8 @@ public sealed class DispatchCliApplicationTests
         var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              allow_psexec_fallback: true
             groups:
               web:
                 children:
@@ -1837,6 +1972,8 @@ public sealed class DispatchCliApplicationTests
         var inventoryPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.yml");
         await File.WriteAllTextAsync(scriptPath, "Write-Output 'ok'");
         await File.WriteAllTextAsync(inventoryPath, """
+            defaults:
+              allow_psexec_fallback: true
             groups:
               web:
                 children: [prod]
@@ -2054,6 +2191,8 @@ public sealed class DispatchCliApplicationTests
                     scriptPath,
                     "--target",
                     "PC001",
+                    "--transport",
+                    "psexec",
                     "--plan",
                     "--quiet",
                     "--no-color",
@@ -2092,6 +2231,8 @@ public sealed class DispatchCliApplicationTests
                     scriptPath,
                     "--target",
                     "PC001",
+                    "--transport",
+                    "psexec",
                     "--plan",
                     "--output",
                     "json"
@@ -2127,6 +2268,8 @@ public sealed class DispatchCliApplicationTests
                     scriptPath,
                     "--target",
                     "PC001",
+                    "--transport",
+                    "psexec",
                     "--plan",
                     "--quiet",
                     "--output",
@@ -2163,6 +2306,8 @@ public sealed class DispatchCliApplicationTests
                     scriptPath,
                     "--target",
                     "PC001",
+                    "--transport",
+                    "psexec",
                     "--output",
                     "ndjson"
                 ],
@@ -2203,6 +2348,8 @@ public sealed class DispatchCliApplicationTests
                     scriptPath,
                     "--target",
                     "PC001",
+                    "--transport",
+                    "psexec",
                     "--output",
                     "ndjson",
                     "--trace"
@@ -2242,6 +2389,8 @@ public sealed class DispatchCliApplicationTests
                     scriptPath,
                     "--target",
                     "PC001",
+                    "--transport",
+                    "psexec",
                     "--plan",
                     "--output",
                     "yaml"
@@ -4486,6 +4635,79 @@ credentials:
             Assert.Empty(error);
             Assert.NotNull(planner.LastRequest);
             Assert.Equal(TransportKind.PsExec, planner.LastRequest!.Transport);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanImplicitPsExecFallbackWithoutPolicyApprovalReturnsPolicyExitCodeBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var scriptPath = Path.Combine(root, "Fix.ps1");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(scriptPath, "Write-Output 'ok'");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            tasks:
+              - ps: .\Fix.ps1
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(7, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Implicit PsExec fallback requires explicit policy approval", error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ApplyPlanCopyTaskImplicitPsExecFallbackWithoutPolicyApprovalReturnsPolicyExitCodeBeforePlanning()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-apply-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var sourcePath = Path.Combine(root, "payload.txt");
+        var jobPath = Path.Combine(root, "job.yml");
+        File.WriteAllText(sourcePath, "payload");
+        File.WriteAllText(
+            jobPath,
+            """
+            hosts: PC001
+            tasks:
+              - copy:
+                src: .\payload.txt
+                dest: C:\Temp\payload.txt
+                overwrite: true
+            """);
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(planner);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["apply", jobPath, "--plan"],
+                CancellationToken.None));
+
+            Assert.Equal(7, exitCode);
+            Assert.Empty(output);
+            Assert.Null(planner.LastRequest);
+            Assert.Contains("Implicit PsExec fallback requires explicit policy approval", error);
         }
         finally
         {

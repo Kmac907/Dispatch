@@ -329,6 +329,15 @@ internal sealed class DispatchRunCommandParser
             return false;
         }
 
+        var requiresPsExecFallbackApproval = transportOverride is null
+            && resolvedTransport == TransportKind.PsExec;
+        var inventoryAllowsPsExecFallback = targetResolution.InventoryPsExecFallbackPolicies is not null
+            && targetResolution.Targets.Count > 0
+            && targetResolution.Targets.All(target =>
+                targetResolution.InventoryPsExecFallbackPolicies.TryGetValue(target.Name, out var allow)
+                && allow == true);
+        var allowPsExecFallback = config.AllowPsExecFallback || inventoryAllowsPsExecFallback;
+
         command = new DispatchRunCommand(
             DryRun: dryRun,
             Payload: payload,
@@ -344,6 +353,8 @@ internal sealed class DispatchRunCommandParser
             CredentialReference: credentialReference,
             RunAsSystem: runAsSystem,
             AllowRunAsSystem: config.AllowRunAsSystem,
+            RequiresPsExecFallbackApproval: requiresPsExecFallbackApproval,
+            AllowPsExecFallback: allowPsExecFallback,
             NoDashboard: noDashboard,
             OutputMode: outputMode,
             NoColor: noColor,
@@ -407,7 +418,8 @@ internal sealed class DispatchRunCommandParser
             Target = ambientConfig.Target,
             Exclude = ambientConfig.Exclude,
             DefaultTransport = ambientConfig.DefaultTransport,
-            AllowRunAsSystem = ambientConfig.AllowRunAsSystem
+            AllowRunAsSystem = ambientConfig.AllowRunAsSystem,
+            AllowPsExecFallback = ambientConfig.AllowPsExecFallback
         };
         error = string.Empty;
 
@@ -432,7 +444,8 @@ internal sealed class DispatchRunCommandParser
                 Inventory = section["Inventory"] ?? config.Inventory,
                 Target = section["Target"] ?? config.Target,
                 Exclude = section["Exclude"] ?? config.Exclude,
-                AllowRunAsSystem = section.GetValue("AllowRunAsSystem", config.AllowRunAsSystem)
+                AllowRunAsSystem = section.GetValue("AllowRunAsSystem", config.AllowRunAsSystem),
+                AllowPsExecFallback = section.GetValue("AllowPsExecFallback", config.AllowPsExecFallback)
             };
 
             var configuredTransport = section["DefaultTransport"];
@@ -563,7 +576,8 @@ internal sealed class DispatchRunCommandParser
         string? Target,
         string? Exclude,
         TransportKind DefaultTransport,
-        bool AllowRunAsSystem);
+        bool AllowRunAsSystem,
+        bool AllowPsExecFallback);
 
     private sealed record DispatchRunConfig
     {
@@ -576,5 +590,7 @@ internal sealed class DispatchRunCommandParser
         public TransportKind? DefaultTransport { get; init; }
 
         public bool AllowRunAsSystem { get; init; }
+
+        public bool AllowPsExecFallback { get; init; }
     }
 }

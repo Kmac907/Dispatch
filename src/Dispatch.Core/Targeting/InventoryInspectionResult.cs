@@ -16,7 +16,8 @@ public sealed record InventoryHostInspection(
     string? Source,
     IReadOnlyList<string> Groups,
     TransportKind? Transport,
-    string? CredentialReference);
+    string? CredentialReference,
+    bool? AllowPsExecFallback = null);
 
 public sealed record InventoryGraphInspectionResult(
     string InventoryPath,
@@ -33,4 +34,5 @@ public sealed record InventoryGraphGroup(
     IReadOnlyList<string> Hosts,
     IReadOnlyList<string> Children,
     TransportKind? Transport,
-    string? CredentialReference);
+    string? CredentialReference,
+    bool? AllowPsExecFallback = null);

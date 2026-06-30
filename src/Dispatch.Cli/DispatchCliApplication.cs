@@ -113,7 +113,8 @@ public sealed class DispatchCliApplication(
                     options.Value.Target,
                     options.Value.Exclude,
                     options.Value.DefaultTransport,
-                    options.Value.AllowRunAsSystem),
+                    options.Value.AllowRunAsSystem,
+                    options.Value.AllowPsExecFallback),
                 options.Value.ExpectedExitCodes,
                 out var command,
                 out var error))
@@ -297,6 +298,15 @@ public sealed class DispatchCliApplication(
 
     private static bool TryValidateRunPolicy(DispatchRunCommand command)
     {
+        if (command.RequiresPsExecFallbackApproval && !command.AllowPsExecFallback)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Policy Failed",
+                "Implicit PsExec fallback requires explicit policy approval. Use --transport psexec for an explicit PsExec request, or set dispatch.allow_psexec_fallback: true in config or allow_psexec_fallback: true in inventory policy before relying on omitted/auto transport resolution to PsExec.");
+            return false;
+        }
+
         if (!command.RunAsSystem)
         {
             return true;
@@ -317,6 +327,20 @@ public sealed class DispatchCliApplication(
                 Console.Error,
                 "Dispatch Policy Failed",
                 "LocalSystem execution requires explicit policy approval. Set dispatch.allow_run_as_system: true in the selected Dispatch config before using --system.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryValidateApplyPolicy(DispatchApplyJobParser.ApplyParseResult apply)
+    {
+        if (apply.RequiresPsExecFallbackApproval && !apply.AllowPsExecFallback)
+        {
+            SpectreConsoleRenderer.RenderError(
+                Console.Error,
+                "Dispatch Policy Failed",
+                "Implicit PsExec fallback requires explicit policy approval. Use --transport psexec for an explicit PsExec request, or set dispatch.allow_psexec_fallback: true in config or allow_psexec_fallback: true in inventory policy before relying on omitted/auto transport resolution to PsExec.");
             return false;
         }
 
@@ -654,13 +678,19 @@ public sealed class DispatchCliApplication(
                     options.Value.Target,
                     options.Value.Exclude,
                     options.Value.DefaultTransport,
-                    options.Value.AllowRunAsSystem),
+                    options.Value.AllowRunAsSystem,
+                    options.Value.AllowPsExecFallback),
                 options.Value.ExpectedExitCodes,
                 out var apply,
                 out var error))
         {
             SpectreConsoleRenderer.RenderError(Console.Error, "Invalid Dispatch Job", error);
             return 1;
+        }
+
+        if (!TryValidateApplyPolicy(apply!))
+        {
+            return 7;
         }
 
         if (apply!.Mode == "execute" && apply.Tasks.Count == 1)
@@ -728,6 +758,11 @@ public sealed class DispatchCliApplication(
     {
         foreach (var task in apply.Tasks)
         {
+            if (task.Command is not null && !TryValidateRunPolicy(task.Command))
+            {
+                return 7;
+            }
+
             if (task.Command is not null
                 && !await TryValidateCredentialReferenceAsync(task.Command, cancellationToken).ConfigureAwait(false))
             {

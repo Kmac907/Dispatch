@@ -140,6 +140,7 @@ internal static class DispatchConfigFileReader
             "expected_exit_codes" => "ExpectedExitCodes",
             "psexec_path" => "PsExecPath",
             "allow_run_as_system" => "AllowRunAsSystem",
+            "allow_psexec_fallback" => "AllowPsExecFallback",
             _ => ToPascalCase(key)
         };
 

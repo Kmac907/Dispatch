@@ -75,6 +75,7 @@
 <li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
 <li><code>dispatch run</code> execution results return stable process exit codes for current result categories: <code>0</code> success, <code>2</code> host/execution failure, <code>3</code> probe/unreachable/timeout, <code>4</code> authentication/authorization, <code>5</code> transport unavailable, <code>6</code> cancelled, and <code>10</code> internal error. Usage/config/planning errors remain <code>1</code>.</li>
 <li><code>dispatch run --system</code> is policy-gated for PsExec LocalSystem execution and returns policy exit code <code>7</code> before planning or endpoint work when policy approval is missing or the selected transport does not support LocalSystem.</li>
+<li>Omitted <code>--transport</code> and <code>--transport auto</code> cannot implicitly select PsExec unless fallback policy is approved with <code>dispatch.allow_psexec_fallback: true</code> in config or supported inventory <code>allow_psexec_fallback: true</code>; explicit <code>--transport psexec</code> remains the CLI opt-in. Missing approval returns policy exit code <code>7</code> before planning or endpoint work.</li>
 </ul>
 <h2>Partial</h2>
 <ul>
@@ -85,11 +86,11 @@
 <li>YAML task execution beyond <code>ps</code>/<code>cmd</code>/<code>exe</code>, including real <code>copy</code> transfer execution, remains planned.</li>
 <li>Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
 <li>Script secret handoff is separate from endpoint <code>--credential</code>. The approved initial boundary is current <code>dispatch run ps ... --secret name=reference</code> plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.</li>
-<li>PsExec fallback permission policy, broader command-family exit-code alignment, and full redaction validation remain planned under <code>6.7</code>.</li>
+<li>Broader command-family exit-code alignment and full redaction validation remain planned under <code>6.7</code>.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>
-<li>Finish remaining <code>6.7</code> CLI safety and policy items outside the current <code>dispatch run</code> execution-result exit-code mapping and LocalSystem policy gate.</li>
+<li>Finish remaining <code>6.7</code> CLI safety and policy items outside the current <code>dispatch run</code> execution-result exit-code mapping, LocalSystem policy gate, and PsExec fallback approval gate.</li>
 <li>Implement <code>6.8</code> diagnostics migration.</li>
 <li>Implement PowerShell module wrapper.</li>
 <li>Implement source install and local packaging.</li>

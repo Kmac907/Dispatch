@@ -347,7 +347,8 @@ internal static class DispatchStructuredOutputRenderer
                     var groups = host.Groups.Count == 0 ? "-" : string.Join(",", host.Groups);
                     var transport = host.Transport?.ToDispatchString() ?? "-";
                     var credential = string.IsNullOrWhiteSpace(host.CredentialReference) ? "-" : host.CredentialReference;
-                    writer.WriteLine($"{host.Name} | groups={groups} | transport={transport} | credential={credential} | source={host.Source}");
+                    var allowPsExecFallback = host.AllowPsExecFallback?.ToString().ToLowerInvariant() ?? "-";
+                    writer.WriteLine($"{host.Name} | groups={groups} | transport={transport} | credential={credential} | allow_psexec_fallback={allowPsExecFallback} | source={host.Source}");
                 }
 
                 break;
@@ -429,7 +430,8 @@ internal static class DispatchStructuredOutputRenderer
                     var children = group.Children.Count == 0 ? "-" : string.Join(",", group.Children);
                     var transport = group.Transport?.ToDispatchString() ?? "-";
                     var credential = string.IsNullOrWhiteSpace(group.CredentialReference) ? "-" : group.CredentialReference;
-                    writer.WriteLine($"{group.Name} | children={children} | hosts={hosts} | transport={transport} | credential={credential}");
+                    var allowPsExecFallback = group.AllowPsExecFallback?.ToString().ToLowerInvariant() ?? "-";
+                    writer.WriteLine($"{group.Name} | children={children} | hosts={hosts} | transport={transport} | credential={credential} | allow_psexec_fallback={allowPsExecFallback}");
                 }
 
                 if (result.UngroupedHosts.Count > 0)
@@ -469,6 +471,7 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Groups: {(result.Host.Groups.Count == 0 ? "-" : string.Join(",", result.Host.Groups))}");
                 writer.WriteLine($"Transport: {result.Host.Transport?.ToDispatchString() ?? "-"}");
                 writer.WriteLine($"Credential: {(string.IsNullOrWhiteSpace(result.Host.CredentialReference) ? "-" : result.Host.CredentialReference)}");
+                writer.WriteLine($"Allow PsExec fallback: {result.Host.AllowPsExecFallback?.ToString().ToLowerInvariant() ?? "-"}");
                 break;
         }
     }

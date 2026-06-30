@@ -79,6 +79,7 @@
 <p>Scripts are still responsible for not writing secrets to their own stdout/stderr, logs, or artifacts.</p>
 <h2>Transport Risk Notes</h2>
 <p>PSRP and WinRM depend on endpoint remoting policy. PsExec depends on SMB/admin shares and endpoint security policy. Dispatch reports readiness and failures but does not silently change endpoint policy.</p>
+<p>Omitted <code>--transport</code> and <code>--transport auto</code> must not implicitly select PsExec unless fallback policy is approved. Explicit <code>--transport psexec</code> remains the CLI opt-in. Config approval is <code>dispatch.allow_psexec_fallback: true</code>; inventory approval can be <code>allow_psexec_fallback: true</code> on defaults, group vars, host entries, or host vars where supported by the implementation. Missing approval returns policy exit code <code>7</code> before planning or endpoint work.</p>
 <h2>Admin Context</h2>
 <p>Remote execution uses the current admin context or a configured credential reference, depending on transport support and selected provider. PsExec LocalSystem execution must be explicit through <code>--system</code> and policy-approved with <code>dispatch.allow_run_as_system: true</code>; otherwise Dispatch returns policy exit code <code>7</code> before planning or endpoint work.</p>
 <h2>Script-Owned Payload Boundary</h2>

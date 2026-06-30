@@ -8,7 +8,8 @@ public sealed record TargetResolutionResult(
     IReadOnlyList<DispatchValidationError> Errors,
     TransportKind? InventoryTransport = null,
     IReadOnlyDictionary<string, TransportKind?>? InventoryTransportPolicies = null,
-    IReadOnlyDictionary<string, string?>? InventoryCredentialReferences = null)
+    IReadOnlyDictionary<string, string?>? InventoryCredentialReferences = null,
+    IReadOnlyDictionary<string, bool?>? InventoryPsExecFallbackPolicies = null)
 {
     public bool IsValid => Errors.Count == 0;
 }

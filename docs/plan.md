@@ -1379,7 +1379,7 @@ Current implementation boundary:
 - Init scaffolding refuses to overwrite existing starter files.
 - `dispatch hosts list`, `dispatch hosts validate`, `dispatch hosts test`, `dispatch hosts graph`, and `dispatch hosts vars` are implemented.
 - `dispatch doctor --transport auto|psexec|psrp|winrm` is implemented for local transport-scoped prerequisite checks. Broader diagnostics and structured doctor output modes remain Roadmap 6.8 work.
-- `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Usage/config/inventory/YAML/planning validation still returns `1`. LocalSystem policy failures now return plan/check policy exit code `7` before planning or endpoint work. PsExec fallback permission policy, broader command-family exit-code alignment, and full redaction validation remain Roadmap `6.7` work.
+- `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Usage/config/inventory/YAML/planning validation still returns `1`. LocalSystem policy failures and PsExec fallback approval failures now return plan/check policy exit code `7` before planning or endpoint work. Broader command-family exit-code alignment and full redaction validation remain Roadmap `6.7` work.
 
 #### 6.7 CLI Safety, Policy, And Exit Codes
 
@@ -1392,7 +1392,7 @@ Reference:
 Scope:
 - Implement stable exit codes: `0` success, `1` usage/config/inventory/YAML validation error, `2` host failure, `3` unreachable host, `4` authentication/authorization failure, `5` transport initialization failure, `6` canceled, `7` plan/check policy failure, `10` internal error.
 - Require explicit `--system` for LocalSystem execution and policy approval when configured.
-- Require explicit PsExec fallback permission through CLI/config/inventory policy.
+- Require explicit PsExec fallback permission through config or supported inventory policy when `--transport` is omitted or `--transport auto` would otherwise resolve to PsExec. Explicit `--transport psexec` remains the CLI opt-in. Config approval is `dispatch.allow_psexec_fallback: true`; inventory approval can be `allow_psexec_fallback: true` on defaults, group vars, host entries, or host vars where supported by the implementation. Missing approval returns policy exit code `7` before planning or endpoint work.
 - Redact secrets from console output, logs, result JSON, CSV, dry-run/plan output, and traces.
 
 Non-goals:
@@ -1405,7 +1405,7 @@ Dependencies:
 
 Definition of done:
 - Exit codes are covered by tests.
-- Policy failures happen before endpoint work.
+- Policy failures happen before planning or endpoint work.
 - Transport decisions are logged per host.
 
 #### 6.8 Operator Diagnostics Migration
