@@ -7321,6 +7321,97 @@ credentials:
         }
     }
 
+    [Theory]
+    [InlineData(FailureCategory.ExecutionFailed, 2)]
+    [InlineData(FailureCategory.ProbeFailed, 3)]
+    [InlineData(FailureCategory.TimedOut, 3)]
+    [InlineData(FailureCategory.AuthenticationFailed, 4)]
+    [InlineData(FailureCategory.AuthorizationFailed, 4)]
+    [InlineData(FailureCategory.TransportUnavailable, 5)]
+    [InlineData(FailureCategory.Cancelled, 6)]
+    [InlineData(FailureCategory.InternalError, 10)]
+    public async Task HostsTestUsesStableProbeResultExitCodes(
+        FailureCategory failureCategory,
+        int expectedExitCode)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            hosts:
+              WEB01:
+                transport: psrp
+            """);
+        var probe = new RecordingEndpointProbe(
+            TransportKind.Psrp,
+            _ => new TransportEndpointProbeResult(
+                false,
+                DateTimeOffset.UnixEpoch,
+                DateTimeOffset.UnixEpoch.AddSeconds(1),
+                failureCategory,
+                $"{failureCategory} failure.",
+                new Dictionary<string, string>
+                {
+                    ["probe"] = "psrp"
+                }));
+        var application = CreateApplication(new CapturingPlanner(), endpointProbes: [probe]);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "test", "--inventory", inventoryPath, "--target", "WEB01", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.Equal(expectedExitCode, exitCode);
+            Assert.Empty(error);
+            Assert.Equal(["WEB01"], probe.Targets);
+            using var json = JsonDocument.Parse(output);
+            Assert.False(json.RootElement.GetProperty("succeeded").GetBoolean());
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.False(target.GetProperty("succeeded").GetBoolean());
+            Assert.Equal(JsonNamingPolicy.CamelCase.ConvertName(failureCategory.ToString()), target.GetProperty("failureCategory").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task HostsTestReturnsTransportUnavailableWhenSelectedProbeIsMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-hosts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var inventoryPath = Path.Combine(root, "hosts.yml");
+        await File.WriteAllTextAsync(
+            inventoryPath,
+            """
+            hosts:
+              WEB01:
+                transport: psrp
+            """);
+        var application = CreateApplication(new CapturingPlanner(), endpointProbes: []);
+
+        try
+        {
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["hosts", "test", "--inventory", inventoryPath, "--target", "WEB01", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.Equal(5, exitCode);
+            Assert.Empty(error);
+            using var json = JsonDocument.Parse(output);
+            var target = Assert.Single(json.RootElement.GetProperty("targets").EnumerateArray());
+            Assert.Equal("transportUnavailable", target.GetProperty("failureCategory").GetString());
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Fact]
     public async Task HostsTestRequiresTargetSelector()
     {
@@ -9200,7 +9291,9 @@ credentials:
                 []);
     }
 
-    private sealed class RecordingEndpointProbe(TransportKind kind) : ITransportEndpointProbe
+    private sealed class RecordingEndpointProbe(
+        TransportKind kind,
+        Func<TransportEndpointProbeRequest, TransportEndpointProbeResult>? resultFactory = null) : ITransportEndpointProbe
     {
         public TransportKind Kind { get; } = kind;
 
@@ -9211,7 +9304,7 @@ credentials:
             CancellationToken cancellationToken)
         {
             Targets.Add(request.Target.Target.Name);
-            return Task.FromResult(new TransportEndpointProbeResult(
+            return Task.FromResult(resultFactory?.Invoke(request) ?? new TransportEndpointProbeResult(
                 true,
                 DateTimeOffset.UnixEpoch,
                 DateTimeOffset.UnixEpoch,

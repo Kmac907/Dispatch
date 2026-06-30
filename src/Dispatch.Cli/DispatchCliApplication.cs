@@ -287,6 +287,24 @@ public sealed class DispatchCliApplication(
             failureCategories.Contains(FailureCategory.Cancelled));
     }
 
+    private static int GetHostTestResultExitCode(DispatchHostTestResult result)
+    {
+        var failureCategories = result.Targets
+            .Where(static target => !target.Succeeded || target.FailureCategory != FailureCategory.None)
+            .Select(static target => target.FailureCategory)
+            .ToArray();
+
+        if (result.Succeeded && failureCategories.Length == 0)
+        {
+            return 0;
+        }
+
+        return GetStableFailureExitCode(
+            failureCategories,
+            failureCategories.Contains(FailureCategory.TimedOut),
+            failureCategories.Contains(FailureCategory.Cancelled));
+    }
+
     private static int GetStableFailureExitCode(
         IReadOnlyCollection<FailureCategory> failureCategories,
         bool hasTimedOutFailure,
@@ -1250,7 +1268,7 @@ public sealed class DispatchCliApplication(
             DateTimeOffset.UtcNow,
             results);
         DispatchStructuredOutputRenderer.RenderHostTestResult(Console.Out, result, outputMode);
-        return result.Succeeded ? 0 : 1;
+        return GetHostTestResultExitCode(result);
     }
 
     internal async Task<int> RunCredsAddCommandAsync(
