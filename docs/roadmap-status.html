@@ -76,6 +76,7 @@
 <li><code>dispatch run</code> execution results, completed <code>dispatch apply</code> execution for supported <code>ps</code>, <code>cmd</code>, and <code>exe</code> tasks, completed <code>dispatch push</code> transfer/execute results, and <code>dispatch hosts test</code> endpoint-probe results return stable process exit codes for current result categories: <code>0</code> success, <code>2</code> host/execution failure, <code>3</code> probe/unreachable/timeout, <code>4</code> authentication/authorization, <code>5</code> transport unavailable, <code>6</code> cancelled, and <code>10</code> internal error. Usage/config/inventory/YAML/planning and local lifecycle/inspection command failures remain <code>1</code>.</li>
 <li><code>dispatch run --system</code> is policy-gated for PsExec LocalSystem execution and returns policy exit code <code>7</code> before planning or endpoint work when policy approval is missing or the selected transport does not support LocalSystem.</li>
 <li>Omitted <code>--transport</code> and <code>--transport auto</code> cannot implicitly select PsExec unless fallback policy is approved with <code>dispatch.allow_psexec_fallback: true</code> in config or supported inventory <code>allow_psexec_fallback: true</code>; explicit <code>--transport psexec</code> remains the CLI opt-in. Missing approval returns policy exit code <code>7</code> before planning or endpoint work.</li>
+<li>Dispatch-owned rich/table output, structured JSON/NDJSON/YAML output, durable <code>Admin\events.ndjson</code>, durable <code>Admin\results.json</code>, optional per-target <code>result.json</code>, optional <code>Admin\results.csv</code>, and optional <code>Admin\dispatch.log</code> redact secret-looking values before writing.</li>
 </ul>
 <h2>Partial</h2>
 <ul>
@@ -86,11 +87,10 @@
 <li>YAML task execution beyond <code>ps</code>/<code>cmd</code>/<code>exe</code>, including real <code>copy</code> transfer execution, remains planned.</li>
 <li>Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
 <li>Script secret handoff is separate from endpoint <code>--credential</code>. The approved initial boundary is current <code>dispatch run ps ... --secret name=reference</code> plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.</li>
-<li>Remaining <code>6.7</code> work is redaction validation.</li>
+<li>Raw <code>stdout.txt</code>, raw <code>stderr.txt</code>, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>
-<li>Finish remaining <code>6.7</code> redaction validation.</li>
 <li>Implement <code>6.8</code> diagnostics migration.</li>
 <li>Implement PowerShell module wrapper.</li>
 <li>Implement source install and local packaging.</li>

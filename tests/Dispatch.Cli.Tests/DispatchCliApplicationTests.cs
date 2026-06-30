@@ -8119,13 +8119,13 @@ credentials:
                     Transport: TransportKind.Psrp,
                     PayloadType: PayloadKind.Command,
                     PayloadName: "whoami",
-                    State: TargetExecutionState.Succeeded,
-                    ExitCode: 0,
+                    State: TargetExecutionState.Failed,
+                    ExitCode: null,
                     ExpectedExitCodes: [0],
                     StartedAt: DateTimeOffset.Parse("2026-06-18T08:00:00Z"),
                     EndedAt: DateTimeOffset.Parse("2026-06-18T08:00:04Z"),
-                    FailureCategory: FailureCategory.None,
-                    FailureMessage: null,
+                    FailureCategory: FailureCategory.AuthenticationFailed,
+                    FailureMessage: "auth failed password=export-secret sig=export-signature",
                     StdoutPath: @"C:\Dispatch\Tests\Runs\20260618080000-h\Targets\PC008\stdout.txt",
                     StderrPath: @"C:\Dispatch\Tests\Runs\20260618080000-h\Targets\PC008\stderr.txt")
             ],
@@ -8134,7 +8134,7 @@ credentials:
         var eventPath = Path.Combine(runRoot, result.RunId, "Admin", "events.ndjson");
         File.WriteAllText(
             eventPath,
-            "{\"type\":\"run.summary\",\"runId\":\"20260618080000-h\",\"timestamp\":\"2026-06-18T08:00:05Z\"}");
+            "{\"type\":\"run.summary\",\"runId\":\"20260618080000-h\",\"timestamp\":\"2026-06-18T08:00:05Z\",\"message\":\"token=event-secret\"}");
         var exportRoot = Path.Combine(Path.GetTempPath(), $"dispatch-export-{Guid.NewGuid():N}");
         var application = CreateApplication(new CapturingPlanner(), options: new DispatchOptions
         {
@@ -8160,11 +8160,21 @@ credentials:
             Assert.True(File.Exists(exportedResults), exportedResults);
             Assert.True(File.Exists(exportedEvents), exportedEvents);
             Assert.True(File.Exists(exportedCsv), exportedCsv);
-            Assert.Contains("20260618080000-h", File.ReadAllText(exportedResults));
-            Assert.Contains("run.summary", File.ReadAllText(exportedEvents));
+            var exportedResultsText = File.ReadAllText(exportedResults);
+            var exportedEventsText = File.ReadAllText(exportedEvents);
+            Assert.Contains("20260618080000-h", exportedResultsText);
+            Assert.Contains("run.summary", exportedEventsText);
+            Assert.DoesNotContain("export-secret", exportedResultsText);
+            Assert.DoesNotContain("export-signature", exportedResultsText);
+            Assert.DoesNotContain("event-secret", exportedEventsText);
+            Assert.Contains("[redacted]", exportedResultsText);
+            Assert.Contains("[redacted]", exportedEventsText);
             var csv = File.ReadAllText(exportedCsv);
             Assert.Contains("RunId,RunStartedAt", csv);
             Assert.Contains("PC008", csv);
+            Assert.DoesNotContain("export-secret", csv);
+            Assert.DoesNotContain("export-signature", csv);
+            Assert.Contains("[redacted]", csv);
         }
         finally
         {
@@ -8534,8 +8544,8 @@ credentials:
                 TargetExecutionState.Executing,
                 DateTimeOffset.UnixEpoch.AddSeconds(1),
                 Details: new DispatchExecutionProgressDetails(
-                    Operation: "winrm-upload",
-                    Location: @"C:\ProgramData\Dispatch\Runs\run-test\script\Fix.ps1",
+                    Operation: "winrm-upload token=live-progress-secret",
+                    Location: @"C:\ProgramData\Dispatch\Runs\run-test\script\Fix.ps1?sig=live-location-secret",
                     CompletedUnits: 1,
                     TotalUnits: 4,
                     UnitLabel: "chunks",
@@ -8552,7 +8562,7 @@ credentials:
                 TargetExecutionState.Failed,
                 DateTimeOffset.UnixEpoch.AddSeconds(4),
                 FailureCategory.ExecutionFailed,
-                "Installer returned 1603."));
+                "Installer returned 1603 password=live-message-secret."));
 
             using var writer = new StringWriter();
             dashboard.RenderSnapshot(writer);
@@ -8570,6 +8580,10 @@ credentials:
             Assert.Contains("01:09", output);
             Assert.Contains("PC002", output);
             Assert.Contains("Installer returned 1603", output);
+            Assert.DoesNotContain("live-progress-secret", output);
+            Assert.DoesNotContain("live-location-secret", output);
+            Assert.DoesNotContain("live-message-secret", output);
+            Assert.Contains("[redacted]", output);
             Assert.Contains("00:02", output);
             Assert.DoesNotContain(" 65%", output);
             Assert.True(output.IndexOf("PC001", StringComparison.Ordinal) < output.IndexOf("PC002", StringComparison.Ordinal));

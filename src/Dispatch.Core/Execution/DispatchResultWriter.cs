@@ -1,5 +1,6 @@
 using System.Text;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 
 namespace Dispatch.Core.Execution;
 
@@ -29,14 +30,14 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
                 if (!string.IsNullOrWhiteSpace(target.ResultPath))
                 {
                     Directory.CreateDirectory(Path.GetDirectoryName(target.ResultPath)!);
-                    await File.WriteAllTextAsync(target.ResultPath, DispatchJson.Serialize(target), cancellationToken).ConfigureAwait(false);
+                    await File.WriteAllTextAsync(target.ResultPath, DispatchRedactor.RedactJson(DispatchJson.Serialize(target), writeIndented: true), cancellationToken).ConfigureAwait(false);
                 }
             }
         }
 
         if (plan.Job.ResultPolicy.WriteJson)
         {
-            await File.WriteAllTextAsync(plan.LocalResultsJsonPath, DispatchJson.Serialize(result), cancellationToken).ConfigureAwait(false);
+            await File.WriteAllTextAsync(plan.LocalResultsJsonPath, DispatchRedactor.RedactJson(DispatchJson.Serialize(result), writeIndented: true), cancellationToken).ConfigureAwait(false);
         }
 
         if (plan.Job.ResultPolicy.WriteCsv)
@@ -111,18 +112,18 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
                 target.EndedAt.ToString("O"),
                 target.DurationMs.ToString(),
                 target.FailureCategory.ToString(),
-                target.FailureMessage ?? string.Empty,
+                DispatchRedactor.Redact(target.FailureMessage) ?? string.Empty,
                 target.StdoutPath ?? string.Empty,
                 target.StderrPath ?? string.Empty,
                 target.ResultPath,
                 string.Join(';', target.Artifacts ?? []),
                 target.ArtifactCollectionStatus ?? string.Empty,
-                target.ArtifactCollectionFailureMessage ?? string.Empty,
+                DispatchRedactor.Redact(target.ArtifactCollectionFailureMessage) ?? string.Empty,
                 target.SecretHandoffStatus ?? string.Empty,
                 target.CleanupStatus ?? string.Empty);
         }
 
-        return builder.ToString();
+        return DispatchRedactor.Redact(builder.ToString()) ?? string.Empty;
     }
 
     private static string CreateLog(DispatchRunResult result)
@@ -139,7 +140,7 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
         {
             var failure = target.FailureCategory == FailureCategory.None
                 ? string.Empty
-                : $"; Failure: {target.FailureCategory} {target.FailureMessage}";
+                : $"; Failure: {target.FailureCategory} {DispatchRedactor.Redact(target.FailureMessage)}";
             var artifactStatus = string.IsNullOrWhiteSpace(target.ArtifactCollectionStatus)
                 ? string.Empty
                 : $"; Artifacts: {target.ArtifactCollectionStatus}";
@@ -158,7 +159,7 @@ internal sealed class DispatchResultWriter : IDispatchResultWriter
                 builder.Append(',');
             }
 
-            builder.Append(EscapeCsv(values[index]));
+            builder.Append(EscapeCsv(DispatchRedactor.Redact(values[index]) ?? string.Empty));
         }
 
         builder.AppendLine();

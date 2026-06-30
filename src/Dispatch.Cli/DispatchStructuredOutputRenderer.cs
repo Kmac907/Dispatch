@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Dispatch.Core;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 using Dispatch.Core.Targeting;
 using Dispatch.Core.Validation;
 
@@ -16,7 +17,7 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(plan));
+                writer.WriteLine(SerializeDispatchRedacted(plan));
                 break;
             case DispatchOutputMode.Ndjson:
                 var planStream = new DispatchNdjsonStreamWriter(writer, verbose: false, trace: false);
@@ -39,7 +40,7 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
                 var resultStream = new DispatchNdjsonStreamWriter(writer, verbose: false, trace: false);
@@ -61,12 +62,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(plan));
+                writer.WriteLine(SerializeDispatchRedacted(plan));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    new { type = "apply.plan", apply = plan },
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(new { type = "apply.plan", apply = plan }));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, plan);
@@ -77,15 +76,15 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Apply {plan.Mode}: {plan.Tasks.Count} selected tasks");
                 foreach (var task in plan.Tasks)
                 {
-                    writer.WriteLine($"Task {task.Index}: {task.Type} {task.DisplayValue}");
+                    writer.WriteLine($"Task {task.Index}: {task.Type} {DispatchRedactor.Redact(task.DisplayValue)}");
                     if (task.Plan is not null)
                     {
                         SpectreConsoleRenderer.RenderDryRunPlan(writer, task.Plan);
                     }
                     else if (task.Type.Equals("copy", StringComparison.OrdinalIgnoreCase))
                     {
-                        writer.WriteLine($"  Source: {task.SourcePath}");
-                        writer.WriteLine($"  Destination: {task.DestinationPath}");
+                        writer.WriteLine($"  Source: {DispatchRedactor.Redact(task.SourcePath)}");
+                        writer.WriteLine($"  Destination: {DispatchRedactor.Redact(task.DestinationPath)}");
                         writer.WriteLine($"  Overwrite: {task.Overwrite}");
                         writer.WriteLine($"  Transport: {task.Transport?.ToDispatchString()}");
                         writer.WriteLine($"  Targets: {string.Join(", ", task.Targets ?? [])}");
@@ -101,12 +100,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(execution));
+                writer.WriteLine(SerializeDispatchRedacted(execution));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    new { type = "apply.execute", apply = execution },
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(new { type = "apply.execute", apply = execution }));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, execution);
@@ -117,7 +114,7 @@ internal static class DispatchStructuredOutputRenderer
                 writer.WriteLine($"Apply {execution.Mode}: {execution.Tasks.Count} executed tasks");
                 foreach (var task in execution.Tasks)
                 {
-                    writer.WriteLine($"Task {task.Index}: {task.Type} {task.DisplayValue}");
+                    writer.WriteLine($"Task {task.Index}: {task.Type} {DispatchRedactor.Redact(task.DisplayValue)}");
                     SpectreConsoleRenderer.RenderRunResult(writer, task.Result);
                 }
 
@@ -130,12 +127,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(plan));
+                writer.WriteLine(SerializeDispatchRedacted(plan));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    new { type = "push.plan", push = plan },
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(new { type = "push.plan", push = plan }));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, plan);
@@ -144,8 +139,8 @@ internal static class DispatchStructuredOutputRenderer
             case DispatchOutputMode.Table:
             default:
                 writer.WriteLine("Dispatch push plan");
-                writer.WriteLine($"Source: {plan.SourcePath}");
-                writer.WriteLine($"Destination: {plan.DestinationPath}");
+                writer.WriteLine($"Source: {DispatchRedactor.Redact(plan.SourcePath)}");
+                writer.WriteLine($"Destination: {DispatchRedactor.Redact(plan.DestinationPath)}");
                 writer.WriteLine($"Transport: {plan.Transport.ToDispatchString()}");
                 writer.WriteLine($"Targets: {string.Join(", ", plan.TargetNames)}");
                 writer.WriteLine($"Overwrite: {plan.Overwrite}");
@@ -163,12 +158,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    new { type = "push.result", push = result },
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(new { type = "push.result", push = result }));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, result);
@@ -177,13 +170,13 @@ internal static class DispatchStructuredOutputRenderer
             case DispatchOutputMode.Table:
             default:
                 writer.WriteLine(result.Succeeded ? "Dispatch push complete" : "Dispatch push completed with failures");
-                writer.WriteLine($"Source: {result.Plan.SourcePath}");
-                writer.WriteLine($"Destination: {result.Plan.DestinationPath}");
+                writer.WriteLine($"Source: {DispatchRedactor.Redact(result.Plan.SourcePath)}");
+                writer.WriteLine($"Destination: {DispatchRedactor.Redact(result.Plan.DestinationPath)}");
                 writer.WriteLine($"Transport: {result.Plan.Transport.ToDispatchString()}");
                 foreach (var target in result.Targets)
                 {
                     var status = target.Succeeded ? "succeeded" : "failed";
-                    writer.WriteLine($"{target.Target}: {status}; bytes={target.BytesUploaded}; failure={target.FailureMessage ?? "-"}");
+                    writer.WriteLine($"{target.Target}: {status}; bytes={target.BytesUploaded}; failure={DispatchRedactor.Redact(target.FailureMessage) ?? "-"}");
                 }
 
                 break;
@@ -195,14 +188,12 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(runs));
+                writer.WriteLine(SerializeDispatchRedacted(runs));
                 break;
             case DispatchOutputMode.Ndjson:
                 foreach (var run in runs)
                 {
-                    writer.WriteLine(JsonSerializer.Serialize(
-                        run,
-                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                    writer.WriteLine(SerializeRedacted(run));
                 }
 
                 break;
@@ -222,12 +213,12 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(tail));
+                writer.WriteLine(SerializeDispatchRedacted(tail));
                 break;
             case DispatchOutputMode.Ndjson:
                 foreach (var entry in tail.Events)
                 {
-                    writer.WriteLine(entry.Event.ToJsonString(new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                    writer.WriteLine(DispatchRedactor.RedactJson(entry.Event.ToJsonString(new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false })));
                 }
 
                 break;
@@ -247,12 +238,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    result,
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(result));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, result);
@@ -270,12 +259,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(retryPlan));
+                writer.WriteLine(SerializeDispatchRedacted(retryPlan));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    retryPlan,
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(retryPlan));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, retryPlan);
@@ -296,12 +283,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    result,
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(result));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, result);
@@ -322,14 +307,12 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
                 foreach (var host in result.Hosts)
                 {
-                    writer.WriteLine(JsonSerializer.Serialize(
-                        new { type = "hosts.host", inventory = result.InventoryPath, host },
-                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                    writer.WriteLine(SerializeRedacted(new { type = "hosts.host", inventory = result.InventoryPath, host }));
                 }
 
                 break;
@@ -368,12 +351,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(validation));
+                writer.WriteLine(SerializeDispatchRedacted(validation));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    new { type = "hosts.validation", validation },
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(new { type = "hosts.validation", validation }));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, validation);
@@ -396,21 +377,17 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
                 foreach (var group in result.Groups)
                 {
-                    writer.WriteLine(JsonSerializer.Serialize(
-                        new { type = "hosts.graph.group", inventory = result.InventoryPath, group },
-                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                    writer.WriteLine(SerializeRedacted(new { type = "hosts.graph.group", inventory = result.InventoryPath, group }));
                 }
 
                 foreach (var host in result.UngroupedHosts)
                 {
-                    writer.WriteLine(JsonSerializer.Serialize(
-                        new { type = "hosts.graph.ungrouped", inventory = result.InventoryPath, host },
-                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                    writer.WriteLine(SerializeRedacted(new { type = "hosts.graph.ungrouped", inventory = result.InventoryPath, host }));
                 }
 
                 break;
@@ -451,12 +428,10 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
-                writer.WriteLine(JsonSerializer.Serialize(
-                    new { type = "hosts.vars", inventory = result.InventoryPath, target = result.Target, host = result.Host },
-                    new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                writer.WriteLine(SerializeRedacted(new { type = "hosts.vars", inventory = result.InventoryPath, target = result.Target, host = result.Host }));
                 break;
             case DispatchOutputMode.Yaml:
                 WriteYaml(writer, result);
@@ -484,14 +459,12 @@ internal static class DispatchStructuredOutputRenderer
         switch (mode)
         {
             case DispatchOutputMode.Json:
-                writer.WriteLine(DispatchJson.Serialize(result));
+                writer.WriteLine(SerializeDispatchRedacted(result));
                 break;
             case DispatchOutputMode.Ndjson:
                 foreach (var target in result.Targets)
                 {
-                    writer.WriteLine(JsonSerializer.Serialize(
-                        new { type = "hosts.test.target", inventory = result.InventoryPath, target },
-                        new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
+                    writer.WriteLine(SerializeRedacted(new { type = "hosts.test.target", inventory = result.InventoryPath, target }));
                 }
 
                 break;
@@ -508,7 +481,7 @@ internal static class DispatchStructuredOutputRenderer
                 foreach (var target in result.Targets)
                 {
                     var status = target.Succeeded ? "reachable" : "failed";
-                    var failure = string.IsNullOrWhiteSpace(target.FailureMessage) ? "-" : target.FailureMessage;
+                    var failure = string.IsNullOrWhiteSpace(target.FailureMessage) ? "-" : DispatchRedactor.Redact(target.FailureMessage);
                     writer.WriteLine($"{target.Target} | transport={target.Transport.ToDispatchString()} | status={status} | failure={failure}");
                 }
 
@@ -518,7 +491,7 @@ internal static class DispatchStructuredOutputRenderer
 
     private static void WriteYaml<T>(TextWriter writer, T value)
     {
-        var node = JsonSerializer.SerializeToNode(value, DispatchJson.Options);
+        var node = DispatchRedactor.RedactJsonNode(JsonSerializer.SerializeToNode(value, DispatchJson.Options));
         if (node is not null)
         {
             WriteYamlNode(writer, node, 0);
@@ -608,6 +581,12 @@ internal static class DispatchStructuredOutputRenderer
 
     private static void WriteIndent(TextWriter writer, int indent) =>
         writer.Write(new string(' ', indent));
+
+    private static string SerializeDispatchRedacted<T>(T value) =>
+        DispatchRedactor.RedactJson(DispatchJson.Serialize(value), writeIndented: true);
+
+    private static string SerializeRedacted<T>(T value) =>
+        DispatchRedactor.RedactJson(JsonSerializer.Serialize(value, new JsonSerializerOptions(DispatchJson.Options) { WriteIndented = false }));
 }
 
 internal sealed record DispatchApplyPlan(

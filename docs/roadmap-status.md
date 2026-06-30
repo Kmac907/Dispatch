@@ -31,6 +31,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `dispatch run` execution results, completed `dispatch apply` execution for supported `ps`, `cmd`, and `exe` tasks, completed `dispatch push` transfer/execute results, and `dispatch hosts test` endpoint-probe results return stable process exit codes for current result categories: `0` success, `2` host/execution failure, `3` probe/unreachable/timeout, `4` authentication/authorization, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage/config/inventory/YAML/planning and local lifecycle/inspection command failures remain `1`.
 - `dispatch run --system` is policy-gated for PsExec LocalSystem execution and returns policy exit code `7` before planning or endpoint work when policy approval is missing or the selected transport does not support LocalSystem.
 - Omitted `--transport` and `--transport auto` cannot implicitly select PsExec unless fallback policy is approved with `dispatch.allow_psexec_fallback: true` in config or supported inventory `allow_psexec_fallback: true`; explicit `--transport psexec` remains the CLI opt-in. Missing approval returns policy exit code `7` before planning or endpoint work.
+- Dispatch-owned rich/table output, structured JSON/NDJSON/YAML output, durable `Admin\events.ndjson`, durable `Admin\results.json`, optional per-target `result.json`, optional `Admin\results.csv`, and optional `Admin\dispatch.log` redact secret-looking values before writing.
 
 ## Partial
 
@@ -41,11 +42,10 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
 - Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 - Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is current `dispatch run ps ... --secret name=reference` plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.
-- Remaining `6.7` work is redaction validation.
+- Raw `stdout.txt`, raw `stderr.txt`, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.
 
 ## Planned Next
 
-- Finish remaining `6.7` redaction validation.
 - Implement `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.
 - Implement source install and local packaging.

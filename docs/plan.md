@@ -1379,7 +1379,7 @@ Current implementation boundary:
 - Init scaffolding refuses to overwrite existing starter files.
 - `dispatch hosts list`, `dispatch hosts validate`, `dispatch hosts test`, `dispatch hosts graph`, and `dispatch hosts vars` are implemented.
 - `dispatch doctor --transport auto|psexec|psrp|winrm` is implemented for local transport-scoped prerequisite checks. Broader diagnostics and structured doctor output modes remain Roadmap 6.8 work.
-- `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Completed `dispatch apply` execution preserves those same stable underlying run exit codes for executed `ps`, `cmd`, and `exe` tasks. Completed `dispatch push` transfer/execute results and `dispatch hosts test` endpoint-probe results map target failure categories to the same stable process exit-code contract. Usage/config/inventory/YAML/planning validation and local lifecycle/inspection command failures still return `1`. Policy failures, including LocalSystem policy failures and PsExec fallback approval failures, now return plan/check policy exit code `7` before planning or endpoint work. After this exit-code alignment slice, the remaining Roadmap `6.7` work is redaction validation.
+- `dispatch run` maps completed execution results to stable process exit codes for success, host failure, probe/timeout, authentication/authorization, transport unavailable, cancellation, and internal error outcomes. Completed `dispatch apply` execution preserves those same stable underlying run exit codes for executed `ps`, `cmd`, and `exe` tasks. Completed `dispatch push` transfer/execute results and `dispatch hosts test` endpoint-probe results map target failure categories to the same stable process exit-code contract. Usage/config/inventory/YAML/planning validation and local lifecycle/inspection command failures still return `1`. Policy failures, including LocalSystem policy failures and PsExec fallback approval failures, now return plan/check policy exit code `7` before planning or endpoint work.
 
 #### 6.7 CLI Safety, Policy, And Exit Codes
 
@@ -1407,6 +1407,13 @@ Definition of done:
 - Exit codes are covered by tests.
 - Policy failures happen before planning or endpoint work.
 - Transport decisions are logged per host.
+- Dispatch-owned output redaction is covered by tests for durable results/events and structured CLI output.
+
+Current implementation boundary:
+- Stable execution/result exit codes are implemented for `dispatch run`, supported `dispatch apply` execution, completed `dispatch push` transfer/execute results, and `dispatch hosts test` endpoint-probe results.
+- LocalSystem and implicit PsExec fallback policy failures return exit code `7` before planning or endpoint work.
+- Dispatch-owned rich/table output, structured JSON/NDJSON/YAML output, durable `Admin\events.ndjson`, durable `Admin\results.json`, optional per-target `result.json`, optional `Admin\results.csv`, and optional `Admin\dispatch.log` redact secret-looking values before writing.
+- Raw `stdout.txt`, raw `stderr.txt`, and copied artifact content are script-authored output. Dispatch records and points to those files, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.
 
 #### 6.8 Operator Diagnostics Migration
 

@@ -1,6 +1,7 @@
 using System.Text;
 using Dispatch.Core;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 
 namespace Dispatch.Cli;
 
@@ -12,13 +13,16 @@ internal sealed class DispatchRunLogExporter
         Directory.CreateDirectory(exportRoot);
 
         var resultsJsonPath = Path.Combine(exportRoot, "results.json");
-        File.Copy(run.ResultPath, resultsJsonPath, overwrite: true);
+        File.WriteAllText(resultsJsonPath, DispatchRedactor.RedactJson(File.ReadAllText(run.ResultPath), writeIndented: true), Encoding.UTF8);
 
         string? eventsNdjsonPath = null;
         if (File.Exists(run.EventPath))
         {
             eventsNdjsonPath = Path.Combine(exportRoot, "events.ndjson");
-            File.Copy(run.EventPath, eventsNdjsonPath, overwrite: true);
+            File.WriteAllLines(
+                eventsNdjsonPath,
+                File.ReadLines(run.EventPath).Select(line => DispatchRedactor.RedactJson(line)),
+                Encoding.UTF8);
         }
 
         var resultsCsvPath = Path.Combine(exportRoot, "results.csv");
@@ -93,13 +97,13 @@ internal sealed class DispatchRunLogExporter
                 target.EndedAt.ToString("O"),
                 target.DurationMs.ToString(),
                 target.FailureCategory.ToString(),
-                target.FailureMessage ?? string.Empty,
+                DispatchRedactor.Redact(target.FailureMessage) ?? string.Empty,
                 target.StdoutPath ?? string.Empty,
                 target.StderrPath ?? string.Empty,
                 target.ResultPath,
                 string.Join(';', target.Artifacts ?? []),
                 target.ArtifactCollectionStatus ?? string.Empty,
-                target.ArtifactCollectionFailureMessage ?? string.Empty,
+                DispatchRedactor.Redact(target.ArtifactCollectionFailureMessage) ?? string.Empty,
                 target.SecretHandoffStatus ?? string.Empty,
                 target.CleanupStatus ?? string.Empty);
         }
@@ -116,7 +120,7 @@ internal sealed class DispatchRunLogExporter
                 builder.Append(',');
             }
 
-            builder.Append(EscapeCsv(values[index]));
+            builder.Append(EscapeCsv(DispatchRedactor.Redact(values[index]) ?? string.Empty));
         }
 
         builder.AppendLine();

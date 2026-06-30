@@ -2,6 +2,7 @@ using System.Text.Json;
 using Dispatch.Core;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 
 namespace Dispatch.Cli;
 
@@ -137,7 +138,7 @@ internal sealed class DispatchNdjsonStreamWriter(TextWriter writer, bool verbose
     {
         lock (sync)
         {
-            writer.WriteLine(JsonSerializer.Serialize(value, Options));
+            writer.WriteLine(DispatchRedactor.RedactJson(JsonSerializer.Serialize(value, Options)));
         }
     }
 

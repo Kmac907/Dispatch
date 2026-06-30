@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 
 namespace Dispatch.Core.Execution;
 
@@ -112,7 +113,7 @@ internal sealed class DispatchEventStreamWriter : IDispatchExecutionObserver, IA
 
     private void Write<T>(T value)
     {
-        var line = JsonSerializer.Serialize(value, Options);
+        var line = DispatchRedactor.RedactJson(JsonSerializer.Serialize(value, Options));
         lock (sync)
         {
             writer.WriteLine(line);

@@ -1,6 +1,7 @@
 using Dispatch.Core;
 using Dispatch.Core.Credentials;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -298,7 +299,7 @@ internal static class SpectreConsoleRenderer
                 Markup.Escape(run.RunId),
                 Markup.Escape(run.StartedAt.ToString("u")),
                 Markup.Escape(run.Transport.ToString()),
-                Markup.Escape(run.PayloadName),
+                Markup.Escape(DispatchRedactor.Redact(run.PayloadName) ?? string.Empty),
                 Markup.Escape(run.TargetCount.ToString()),
                 Markup.Escape(run.SuccessCount.ToString()),
                 Markup.Escape(run.FailedCount.ToString()),
@@ -337,7 +338,7 @@ internal static class SpectreConsoleRenderer
                 Markup.Escape(entry.Type),
                 Markup.Escape(entry.Target ?? "-"),
                 Markup.Escape(entry.State ?? "-"),
-                Markup.Escape(entry.Message ?? "-"));
+                Markup.Escape(DispatchRedactor.Redact(entry.Message) ?? "-"));
         }
 
         console.Write(table);
@@ -366,15 +367,15 @@ internal static class SpectreConsoleRenderer
         console.MarkupLine("[bold]Dispatch retry plan[/]");
         console.WriteLine($"Run ID: {retryPlan.RunId}");
         console.WriteLine($"Transport: {retryPlan.Transport}");
-        console.WriteLine($"Payload: {retryPlan.PayloadType} {retryPlan.PayloadName}");
+        console.WriteLine($"Payload: {retryPlan.PayloadType} {DispatchRedactor.Redact(retryPlan.PayloadName)}");
         console.WriteLine($"Retry targets: {retryPlan.RetryTargetCount}");
         console.WriteLine($"Automatic re-execution: {(retryPlan.ReexecutionSupported ? "manual command available" : "not available")}");
-        console.WriteLine(Markup.Escape(retryPlan.Message));
+        console.WriteLine(Markup.Escape(DispatchRedactor.Redact(retryPlan.Message) ?? string.Empty));
         if (!string.IsNullOrWhiteSpace(retryPlan.SuggestedCommand))
         {
             console.WriteLine();
             console.WriteLine("Suggested command:");
-            console.WriteLine(retryPlan.SuggestedCommand);
+            console.WriteLine(DispatchRedactor.Redact(retryPlan.SuggestedCommand) ?? string.Empty);
         }
 
         if (retryPlan.Targets.Count == 0)
@@ -396,7 +397,7 @@ internal static class SpectreConsoleRenderer
                 Markup.Escape(target.State.ToString()),
                 Markup.Escape(target.FailureCategory.ToString()),
                 Markup.Escape(target.ExitCode?.ToString() ?? "-"),
-                Markup.Escape(target.FailureMessage ?? "-"));
+                Markup.Escape(DispatchRedactor.Redact(target.FailureMessage) ?? "-"));
         }
 
         console.Write(table);
@@ -489,7 +490,7 @@ internal static class SpectreConsoleRenderer
         {
             var failure = target.FailureCategory == FailureCategory.None
                 ? "-"
-                : $"{target.FailureCategory}: {target.FailureMessage}";
+                : $"{target.FailureCategory}: {DispatchRedactor.Redact(target.FailureMessage)}";
             table.AddRow(
                 Markup.Escape(target.Target),
                 Markup.Escape(target.State.ToString()),

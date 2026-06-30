@@ -113,7 +113,7 @@ public sealed class PsExecExecutionTests
     [Fact]
     public async Task ExecutorSkipsScriptTransferWhenDnsProbeFails()
     {
-        using var script = TemporaryScript.Create("Fix.ps1");
+        using var script = TemporaryScript.Create("Fix-token=payload-secret.ps1");
         using var outputRoot = TemporaryDirectory.Create();
         var runner = new RecordingPsExecProcessRunner(0);
         var endpointFileSystem = new RecordingEndpointFileSystem();
@@ -391,6 +391,62 @@ public sealed class PsExecExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorRedactsSecretLookingValuesFromDispatchOwnedDurableOutputs()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(
+            exitCode: null,
+            stdout: "raw stdout token=raw-stdout-token",
+            stderr: "raw stderr password=raw-stderr-password",
+            failureCategory: FailureCategory.AuthenticationFailed,
+            failureMessage: "Transport failed with password=message-secret sig=message-signature SharedAccessSignature=message-shared");
+        using var provider = BuildProvider(outputRoot.Path, runner);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var planWithOptionalFiles = plan with
+        {
+            Job = plan.Job with
+            {
+                ResultPolicy = new ResultPolicy(
+                    outputRoot.Path,
+                    WriteJson: true,
+                    WriteCsv: true,
+                    WritePerTargetJson: true,
+                    WriteTextLog: true,
+                    WriteEventStream: true)
+            }
+        };
+
+        var result = await executor.ExecuteAsync(planWithOptionalFiles, CancellationToken.None);
+        var target = Assert.Single(result.Targets);
+
+        var dispatchOwnedOutputs = string.Join(
+            Environment.NewLine,
+            await File.ReadAllTextAsync(planWithOptionalFiles.LocalResultsJsonPath),
+            await File.ReadAllTextAsync(planWithOptionalFiles.LocalResultsCsvPath),
+            await File.ReadAllTextAsync(Path.Combine(planWithOptionalFiles.LocalAdminRoot, "dispatch.log")),
+            await File.ReadAllTextAsync(planWithOptionalFiles.LocalEventsNdjsonPath),
+            await File.ReadAllTextAsync(target.ResultPath));
+
+        Assert.DoesNotContain("message-secret", dispatchOwnedOutputs);
+        Assert.DoesNotContain("message-signature", dispatchOwnedOutputs);
+        Assert.DoesNotContain("message-shared", dispatchOwnedOutputs);
+        Assert.DoesNotContain("payload-secret", dispatchOwnedOutputs);
+        Assert.Contains("password=[redacted]", dispatchOwnedOutputs);
+        Assert.Contains("sig=[redacted]", dispatchOwnedOutputs);
+        Assert.Contains("SharedAccessSignature=[redacted]", dispatchOwnedOutputs);
+    }
+
+    [Fact]
     public async Task ExecutorCopiesDeclaredArtifactFoldersWhenPresent()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -603,9 +659,11 @@ public sealed class PsExecExecutionTests
     }
 
     private sealed class RecordingPsExecProcessRunner(
-        int exitCode,
+        int? exitCode,
         string stdout = "",
-        string stderr = "") : IPsExecProcessRunner
+        string stderr = "",
+        FailureCategory failureCategory = FailureCategory.None,
+        string? failureMessage = null) : IPsExecProcessRunner
     {
         public List<PsExecCommand> Commands { get; } = [];
 
@@ -617,7 +675,9 @@ public sealed class PsExecExecutionTests
                 stdout,
                 stderr,
                 new DateTimeOffset(2026, 06, 13, 12, 0, 1, TimeSpan.Zero),
-                new DateTimeOffset(2026, 06, 13, 12, 0, 2, TimeSpan.Zero)));
+                new DateTimeOffset(2026, 06, 13, 12, 0, 2, TimeSpan.Zero),
+                failureCategory,
+                failureMessage));
         }
     }
 

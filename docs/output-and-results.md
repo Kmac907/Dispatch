@@ -40,6 +40,12 @@ These are supported by result policy but are not written by default:
 
 If those optional files are disabled, the final run summary still exists in `Admin\results.json`, and per-target `resultPath` values in that summary are empty.
 
+## Redaction boundary
+
+Dispatch-owned outputs redact secret-looking values before they are written or rendered. This includes rich/table console summaries, structured JSON/NDJSON/YAML output, durable `Admin\events.ndjson`, durable `Admin\results.json`, optional per-target `result.json`, optional `Admin\results.csv`, optional `Admin\dispatch.log`, and `dispatch logs export` copies of those Dispatch-owned files.
+
+Raw `Targets\<Target>\stdout.txt`, raw `Targets\<Target>\stderr.txt`, and copied artifact content are script-authored output. Dispatch captures or copies those files, but it does not rewrite their contents. Scripts must avoid printing or writing secrets there.
+
 ## Canonical event stream
 
 `Admin\events.ndjson` is the source of truth for the run.
@@ -182,7 +188,7 @@ Artifact collection status values:
 
 Preferred order:
 
-1. `Admin\results.json` for final outcome
-2. `Admin\events.ndjson` for durable event history
-3. `Targets\<Target>\stdout.txt` and `stderr.txt` for raw target output
-4. copied-back artifacts for script-owned files
+1. Redacted `Admin\results.json` for final outcome
+2. Redacted `Admin\events.ndjson` for durable event history
+3. Raw `Targets\<Target>\stdout.txt` and `stderr.txt` for target output
+4. Raw copied-back artifacts for script-owned files

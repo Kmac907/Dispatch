@@ -1,6 +1,7 @@
 using System.Threading.Channels;
 using Dispatch.Core.Execution;
 using Dispatch.Core.Models;
+using Dispatch.Core.Redaction;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 
@@ -364,7 +365,7 @@ internal sealed class SpectreRunDashboard
                 progress.Timestamp.ToLocalTime().ToString("HH:mm:ss"),
                 Markup.Escape(progress.Target),
                 Markup.Escape(FormatPhase(progress.State)),
-                Markup.Escape(progress.Message ?? "-"));
+                Markup.Escape(DispatchRedactor.Redact(progress.Message) ?? "-"));
         }
 
         if (recentEvents.Count == 0)
@@ -433,14 +434,16 @@ internal sealed class SpectreRunDashboard
             var percent = (int)Math.Round((double)target.Details.CompletedUnits.Value / target.Details.TotalUnits.Value * 100, MidpointRounding.AwayFromZero);
             var filled = Math.Clamp((int)Math.Round(percent / 10d, MidpointRounding.AwayFromZero), 0, 10);
             var unitLabel = string.IsNullOrWhiteSpace(target.Details.UnitLabel) ? "items" : target.Details.UnitLabel;
-            return $"{target.Details.Operation ?? "Progress"} [{new string('#', filled).PadRight(10, '-')}] {target.Details.CompletedUnits}/{target.Details.TotalUnits} {unitLabel}";
+            var operation = DispatchRedactor.Redact(target.Details.Operation) ?? "Progress";
+            return $"{operation} [{new string('#', filled).PadRight(10, '-')}] {target.Details.CompletedUnits}/{target.Details.TotalUnits} {unitLabel}";
         }
 
         if (target.Details.TotalBytes is > 0 && target.Details.CompletedBytes is not null)
         {
             var percent = (int)Math.Round((double)target.Details.CompletedBytes.Value / target.Details.TotalBytes.Value * 100, MidpointRounding.AwayFromZero);
             var filled = Math.Clamp((int)Math.Round(percent / 10d, MidpointRounding.AwayFromZero), 0, 10);
-            return $"{target.Details.Operation ?? "Progress"} [{new string('#', filled).PadRight(10, '-')}] {FormatBytes(target.Details.CompletedBytes.Value)} / {FormatBytes(target.Details.TotalBytes.Value)}";
+            var operation = DispatchRedactor.Redact(target.Details.Operation) ?? "Progress";
+            return $"{operation} [{new string('#', filled).PadRight(10, '-')}] {FormatBytes(target.Details.CompletedBytes.Value)} / {FormatBytes(target.Details.TotalBytes.Value)}";
         }
 
         return "-";
@@ -451,9 +454,10 @@ internal sealed class SpectreRunDashboard
         var detailParts = new List<string>();
         if (!string.IsNullOrWhiteSpace(target.Message))
         {
+            var message = DispatchRedactor.Redact(target.Message) ?? string.Empty;
             detailParts.Add(target.FailureCategory == FailureCategory.None
-                ? target.Message
-                : $"{target.FailureCategory}: {target.Message}");
+                ? message
+                : $"{target.FailureCategory}: {message}");
         }
 
         if (target.StateStartedAt is not null && !IsTerminal(target.State))
@@ -463,7 +467,7 @@ internal sealed class SpectreRunDashboard
 
         if (!string.IsNullOrWhiteSpace(target.Details?.Location))
         {
-            detailParts.Add(target.Details.Location);
+            detailParts.Add(DispatchRedactor.Redact(target.Details.Location)!);
         }
 
         if (target.TargetStartedAt is not null)

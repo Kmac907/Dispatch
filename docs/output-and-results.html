@@ -89,6 +89,9 @@ C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\
 <li><code>Targets\&lt;Target&gt;\result.json</code></li>
 </ul>
 <p>If those optional files are disabled, the final run summary still exists in <code>Admin\results.json</code>, and per-target <code>resultPath</code> values in that summary are empty.</p>
+<h2>Redaction boundary</h2>
+<p>Dispatch-owned outputs redact secret-looking values before they are written or rendered. This includes rich/table console summaries, structured JSON/NDJSON/YAML output, durable <code>Admin\events.ndjson</code>, durable <code>Admin\results.json</code>, optional per-target <code>result.json</code>, optional <code>Admin\results.csv</code>, optional <code>Admin\dispatch.log</code>, and <code>dispatch logs export</code> copies of those Dispatch-owned files.</p>
+<p>Raw <code>Targets\&lt;Target&gt;\stdout.txt</code>, raw <code>Targets\&lt;Target&gt;\stderr.txt</code>, and copied artifact content are script-authored output. Dispatch captures or copies those files, but it does not rewrite their contents. Scripts must avoid printing or writing secrets there.</p>
 <h2>Canonical event stream</h2>
 <p><code>Admin\events.ndjson</code> is the source of truth for the run.</p>
 <p>It records:</p>
@@ -230,10 +233,10 @@ C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\
 <h2>What automation should read</h2>
 <p>Preferred order:</p>
 <ol>
-<li><code>Admin\results.json</code> for final outcome</li>
-<li><code>Admin\events.ndjson</code> for durable event history</li>
-<li><code>Targets\&lt;Target&gt;\stdout.txt</code> and <code>stderr.txt</code> for raw target output</li>
-<li>copied-back artifacts for script-owned files</li>
+<li>Redacted <code>Admin\results.json</code> for final outcome</li>
+<li>Redacted <code>Admin\events.ndjson</code> for durable event history</li>
+<li>Raw <code>Targets\&lt;Target&gt;\stdout.txt</code> and <code>stderr.txt</code> for target output</li>
+<li>Raw copied-back artifacts for script-owned files</li>
 </ol>
   </article>
 </main>
