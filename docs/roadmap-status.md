@@ -24,7 +24,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `dispatch hosts test` transport endpoint probing for selected inventory targets.
 - `dispatch hosts graph` local inventory group/child relationship inspection.
 - `dispatch hosts vars` local effective host metadata inspection.
-- `dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml` local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, run-history layout checks, and PsExec local policy/EULA diagnostics.
+- `dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml` local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, run-history layout checks, and PsExec local policy/EULA diagnostics.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -35,7 +35,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 
 ## Partial
 
-- `doctor` supports local transport-scoped prerequisite checks, stable output modes, run-history layout checks, and PsExec local policy/EULA diagnostics, but credential-provider/config/host-schema diagnostics and some broader checks remain planned.
+- `doctor` supports local transport-scoped prerequisite checks, stable output modes, global Dispatch config parseability, run-history layout checks, and PsExec local policy/EULA diagnostics, but credential-provider/host-schema diagnostics and some broader checks remain planned.
 - `push` supports file and recursive directory transfer over raw WinRM or PSRP, including `--transport auto` selection through inventory/config/default transport policy, `--backup` pre-replacement backup, `--checksum` push-result SHA-256 enforcement/reporting, single-file `.ps1` execute-after-copy through `--execute`, and post-execute script removal through `--cleanup`. Directory cleanup and PsExec push remain deferred unless their boundaries are explicitly reopened.
 - `hosts` command group has current `list`, `validate`, `graph`, `vars`, and transport-probe `test` over the supported v1 inventory subset.
 - Inventory support covers the v1 subset needed by current run paths.
@@ -46,7 +46,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 
 ## Planned Next
 
-- Implement `6.8` diagnostics migration.
+- Complete remaining `6.8` diagnostics migration.
 - Implement PowerShell module wrapper.
 - Implement source install and local packaging.
 - Implement script secret handoff in staged slices: plan/dry-run validation first, then safe transport-specific parameter binding.

@@ -8,7 +8,9 @@ using Dispatch.Core.Transports;
 using Dispatch.Transports.Psrp;
 using Dispatch.Transports.WinRm;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Runtime.Versioning;
 using System.Security;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -234,19 +236,169 @@ public sealed class DispatchCliApplicationTests
     }
 
     [Fact]
+    public void DoctorReportsMissingGlobalConfigAsWarning()
+    {
+        var configPath = Path.Combine(Path.GetTempPath(), $"dispatch-missing-global-config-{Guid.NewGuid():N}", "config.yml");
+        var doctor = CreateDoctor(new DispatchOptions(), configPath);
+
+        var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+        var check = Assert.Single(report.Checks, static item => item.Name == "Dispatch config");
+        Assert.Equal(DispatchDoctorStatus.Warning, check.Status);
+        Assert.Contains("not found", check.Message);
+        Assert.True(report.Succeeded);
+    }
+
+    [Fact]
+    public void DoctorReportsParseableGlobalConfig()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-config-{Guid.NewGuid():N}");
+        var configPath = Path.Combine(root, "config.yml");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(configPath, """
+            dispatch:
+              default_transport: psrp
+            """);
+        var doctor = CreateDoctor(new DispatchOptions(), configPath);
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Dispatch config");
+            Assert.Equal(DispatchDoctorStatus.Pass, check.Status);
+            Assert.Contains("parseable", check.Message);
+            Assert.True(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsInvalidGlobalConfigAsFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-config-{Guid.NewGuid():N}");
+        var configPath = Path.Combine(root, "config.yml");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(configPath, """
+            dispatch:
+              password: plain-text
+            """);
+        var doctor = CreateDoctor(new DispatchOptions(), configPath);
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Dispatch config");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("invalid", check.Message);
+            Assert.Contains("plaintext secret field", check.Detail);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsMalformedJsonGlobalConfigAsFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-config-{Guid.NewGuid():N}");
+        var configPath = Path.Combine(root, "config.json");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(configPath, """
+            { "Dispatch": { "DefaultTransport": "psrp", }
+            """);
+        var doctor = CreateDoctor(new DispatchOptions(), configPath);
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Dispatch config");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("invalid", check.Message);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void DoctorReportsDirectoryGlobalConfigPathAsInaccessibleFailure()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-config-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        var doctor = CreateDoctor(new DispatchOptions(), root);
+
+        try
+        {
+            var report = doctor.Run(DispatchDoctorRequest.Auto);
+
+            var check = Assert.Single(report.Checks, static item => item.Name == "Dispatch config");
+            Assert.Equal(DispatchDoctorStatus.Fail, check.Status);
+            Assert.Contains("inaccessible", check.Message);
+            Assert.False(report.Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    [SupportedOSPlatform("windows")]
+    public async Task DoctorRouteReportsInvalidGlobalConfigInsteadOfCrashing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-config-{Guid.NewGuid():N}");
+        var configPath = Path.Combine(root, "config.yml");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(configPath, """
+            dispatch:
+              local_run_root
+            """);
+
+        try
+        {
+            using var host = DispatchCliHost.Build(["doctor"], configPath);
+            var application = host.Services.GetRequiredService<DispatchCliApplication>();
+
+            var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+                ["doctor", "--output", "json"],
+                CancellationToken.None));
+
+            Assert.True(exitCode == 1, $"Stdout: {output}. Stderr: {error}");
+            using var document = JsonDocument.Parse(output);
+            var checks = document.RootElement.GetProperty("checks").EnumerateArray().ToArray();
+            var check = Assert.Single(checks, static item => item.GetProperty("name").GetString() == "Dispatch config");
+            Assert.Equal("fail", check.GetProperty("status").GetString());
+            Assert.Contains("invalid", check.GetProperty("message").GetString());
+            Assert.Empty(error);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public void DoctorChecksConfiguredPsExecAndWritableOutputPath()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
         var psexecPath = Path.Combine(root, "PsExec.exe");
         Directory.CreateDirectory(root);
         File.WriteAllText(psexecPath, "fake psexec");
-        var doctor = new DispatchDoctor(
-            Options.Create(new DispatchOptions
-            {
-                LocalRunRoot = root,
-                PsExecPath = psexecPath
-            }),
-            new StaticPsExecEulaStateReader(new PsExecEulaState(PsExecEulaStateStatus.Accepted, @"HKCU\Software\Sysinternals\PsExec\EulaAccepted=1")));
+        var doctor = CreateDoctor(new DispatchOptions
+        {
+            LocalRunRoot = root,
+            PsExecPath = psexecPath
+        });
 
         try
         {
@@ -272,11 +424,11 @@ public sealed class DispatchCliApplicationTests
     public void DoctorReportsMissingPsExecAsFailure()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
-        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        var doctor = CreateDoctor(new DispatchOptions
         {
             LocalRunRoot = root,
             PsExecPath = Path.Combine(root, "missing-psexec.exe")
-        }));
+        });
 
         try
         {
@@ -301,11 +453,11 @@ public sealed class DispatchCliApplicationTests
     public void DoctorWinRmScopeDoesNotRequirePsExec()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
-        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        var doctor = CreateDoctor(new DispatchOptions
         {
             LocalRunRoot = root,
             PsExecPath = Path.Combine(root, "missing-psexec.exe")
-        }));
+        });
 
         try
         {
@@ -328,11 +480,11 @@ public sealed class DispatchCliApplicationTests
     public void DoctorPsExecScopeChecksPsExec()
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
-        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        var doctor = CreateDoctor(new DispatchOptions
         {
             LocalRunRoot = root,
             PsExecPath = Path.Combine(root, "missing-psexec.exe")
-        }));
+        });
 
         try
         {
@@ -355,10 +507,10 @@ public sealed class DispatchCliApplicationTests
     {
         var root = Path.Combine(Path.GetTempPath(), $"dispatch-doctor-{Guid.NewGuid():N}");
         File.WriteAllText(root, "not a directory");
-        var doctor = new DispatchDoctor(Options.Create(new DispatchOptions
+        var doctor = CreateDoctor(new DispatchOptions
         {
             LocalRunRoot = root
-        }));
+        });
 
         try
         {
@@ -382,12 +534,13 @@ public sealed class DispatchCliApplicationTests
         var psexecPath = Path.Combine(root, "PsExec.exe");
         Directory.CreateDirectory(root);
         File.WriteAllText(psexecPath, "fake psexec");
-        var doctor = new DispatchDoctor(
-            Options.Create(new DispatchOptions
+        var doctor = CreateDoctor(
+            new DispatchOptions
             {
                 LocalRunRoot = root,
                 PsExecPath = psexecPath
-            }),
+            },
+            eulaStateReader:
             new StaticPsExecEulaStateReader(new PsExecEulaState(PsExecEulaStateStatus.NotAccepted, @"HKCU\Software\Sysinternals\PsExec\EulaAccepted is not set.")));
 
         try
@@ -9500,6 +9653,15 @@ credentials:
             return report;
         }
     }
+
+    private static DispatchDoctor CreateDoctor(
+        DispatchOptions options,
+        string? configPath = null,
+        IPsExecEulaStateReader? eulaStateReader = null) =>
+        new(
+            Options.Create(options),
+            eulaStateReader ?? new StaticPsExecEulaStateReader(new PsExecEulaState(PsExecEulaStateStatus.Accepted, @"HKCU\Software\Sysinternals\PsExec\EulaAccepted=1")),
+            configPath ?? Path.Combine(Path.GetTempPath(), $"dispatch-missing-global-config-{Guid.NewGuid():N}", "config.yml"));
 
     private sealed class StaticPsExecEulaStateReader(PsExecEulaState state) : IPsExecEulaStateReader
     {

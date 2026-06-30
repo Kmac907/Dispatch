@@ -28,7 +28,14 @@ public static class DispatchCliHost
 
         if (File.Exists(globalConfigPath))
         {
-            builder.Configuration.AddInMemoryCollection(DispatchConfigFileReader.ReadYamlFile(globalConfigPath));
+            if (IsDoctorCommand(args))
+            {
+                TryAddGlobalConfigForDoctor(builder.Configuration, globalConfigPath);
+            }
+            else
+            {
+                builder.Configuration.AddInMemoryCollection(DispatchConfigFileReader.ReadYamlFile(globalConfigPath));
+            }
         }
 
         builder.Configuration.AddEnvironmentVariables(prefix: "DISPATCH_");
@@ -39,7 +46,10 @@ public static class DispatchCliHost
         builder.Services.AddDispatchPsExecTransport();
         builder.Services.AddDispatchPsrpTransport();
         builder.Services.AddDispatchWinRmTransport();
-        builder.Services.AddSingleton<IDispatchDoctor, DispatchDoctor>();
+        builder.Services.AddSingleton<IDispatchDoctor>(services => new DispatchDoctor(
+            services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Dispatch.Core.Configuration.DispatchOptions>>(),
+            RegistryPsExecEulaStateReader.Instance,
+            globalConfigPath));
         builder.Services.AddSingleton(static services => new DispatchCliApplication(
             services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Dispatch.Core.Configuration.DispatchOptions>>(),
             services.GetRequiredService<Dispatch.Core.Execution.IDispatchPlanner>(),
@@ -55,5 +65,26 @@ public static class DispatchCliHost
             endpointProbes: services.GetServices<ITransportEndpointProbe>()));
 
         return builder.Build();
+    }
+
+    private static bool IsDoctorCommand(string[] args) =>
+        args.FirstOrDefault(static arg => !arg.StartsWith("-", StringComparison.Ordinal)) is { } command
+        && command.Equals("doctor", StringComparison.OrdinalIgnoreCase);
+
+    private static void TryAddGlobalConfigForDoctor(IConfigurationBuilder configuration, string globalConfigPath)
+    {
+        try
+        {
+            configuration.AddInMemoryCollection(DispatchConfigFileReader.ReadYamlFile(globalConfigPath));
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or FormatException
+            or InvalidDataException
+            or IOException
+            or NotSupportedException
+            or UnauthorizedAccessException)
+        {
+            // The doctor command reports config parse failures through its normal diagnostics.
+        }
     }
 }

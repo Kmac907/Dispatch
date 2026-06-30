@@ -1,4 +1,6 @@
 using Dispatch.Core.Configuration;
+using Dispatch.Core.Defaults;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
@@ -16,16 +18,26 @@ public sealed class DispatchDoctor : IDispatchDoctor
 {
     private readonly IOptions<DispatchOptions> options;
     private readonly IPsExecEulaStateReader psexecEulaStateReader;
+    private readonly string globalConfigPath;
 
     public DispatchDoctor(IOptions<DispatchOptions> options)
-        : this(options, RegistryPsExecEulaStateReader.Instance)
+        : this(options, RegistryPsExecEulaStateReader.Instance, DispatchDefaults.GlobalConfigPath)
     {
     }
 
     internal DispatchDoctor(IOptions<DispatchOptions> options, IPsExecEulaStateReader psexecEulaStateReader)
+        : this(options, psexecEulaStateReader, DispatchDefaults.GlobalConfigPath)
+    {
+    }
+
+    internal DispatchDoctor(
+        IOptions<DispatchOptions> options,
+        IPsExecEulaStateReader psexecEulaStateReader,
+        string globalConfigPath)
     {
         this.options = options;
         this.psexecEulaStateReader = psexecEulaStateReader;
+        this.globalConfigPath = globalConfigPath;
     }
 
     public DispatchDoctorReport Run() => Run(DispatchDoctorRequest.Auto);
@@ -37,6 +49,7 @@ public sealed class DispatchDoctor : IDispatchDoctor
             CheckOperatingSystem(),
             CheckDotNetRuntime(),
             CheckPowerShell(),
+            CheckGlobalConfigFile(),
             CheckLocalRunRoot(),
             CheckRunHistoryLayout(),
             CheckTransportScope(request.Transport),
@@ -89,6 +102,64 @@ public sealed class DispatchDoctor : IDispatchDoctor
         return powershell is null
             ? DispatchDoctorCheck.Fail("PowerShell", "powershell.exe was not found in PATH.", "Required for v1 direct script execution.")
             : DispatchDoctorCheck.Pass("PowerShell", "powershell.exe is available.", RedactPath(powershell));
+    }
+
+    private DispatchDoctorCheck CheckGlobalConfigFile()
+    {
+        if (string.IsNullOrWhiteSpace(globalConfigPath))
+        {
+            return DispatchDoctorCheck.Warning(
+                "Dispatch config",
+                "Global Dispatch config path is not configured.",
+                "Defaults and environment variables are still available.");
+        }
+
+        try
+        {
+            var fullPath = Path.GetFullPath(globalConfigPath);
+            if (Directory.Exists(fullPath))
+            {
+                return DispatchDoctorCheck.Fail(
+                    "Dispatch config",
+                    "Global Dispatch config file is inaccessible.",
+                    $"{RedactPath(fullPath)} points to a directory.");
+            }
+
+            if (!File.Exists(fullPath))
+            {
+                return DispatchDoctorCheck.Warning(
+                    "Dispatch config",
+                    "Global Dispatch config file was not found.",
+                    $"{RedactPath(fullPath)}; defaults and environment variables are still available.");
+            }
+
+            var configuration = DispatchConfigFileReader.Load(fullPath);
+            _ = configuration.AsEnumerable().Count();
+            return DispatchDoctorCheck.Pass(
+                "Dispatch config",
+                "Global Dispatch config file is parseable.",
+                RedactPath(fullPath));
+        }
+        catch (Exception exception) when (exception is ArgumentException
+            or FormatException
+            or InvalidDataException
+            or NotSupportedException
+            or System.Text.Json.JsonException)
+        {
+            return DispatchDoctorCheck.Fail(
+                "Dispatch config",
+                "Global Dispatch config file is invalid.",
+                $"{RedactPath(globalConfigPath)}: {exception.Message}");
+        }
+        catch (Exception exception) when (exception is IOException
+            or SecurityException
+            or UnauthorizedAccessException)
+        {
+            return DispatchDoctorCheck.Fail(
+                "Dispatch config",
+                "Global Dispatch config file is inaccessible.",
+                $"{RedactPath(globalConfigPath)}: {exception.Message}");
+        }
     }
 
     private DispatchDoctorCheck CheckPsExec()
