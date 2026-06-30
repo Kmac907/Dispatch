@@ -270,4 +270,4 @@ Automation should prefer result files or structured output modes instead of pars
 
 ## Exit Behavior
 
-Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. Transport, authentication, authorization, probe, timeout, and script failures are mapped to stable result fields and failure categories; automation should read `Admin\results.json` for per-target detail.
+Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed `dispatch run` execution results, process exit codes now follow the stable result mapping: `0` success, `2` host execution failure or unexpected exit code, `3` probe failure or timed-out target, `4` authentication or authorization failure, `5` transport unavailable, `6` cancelled, and `10` internal error. Usage, configuration, inventory, YAML, and planning validation errors return `1`. Explicit plan/check policy exit code `7` and broader command-family alignment remain Roadmap `6.7` work. Automation should read `Admin\results.json` for per-target detail.

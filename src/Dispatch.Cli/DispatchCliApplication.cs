@@ -241,8 +241,51 @@ public sealed class DispatchCliApplication(
         }
     }
 
-    private static int GetRunResultExitCode(DispatchRunResult result) =>
-        result.FailedCount == 0 && result.TimedOutCount == 0 && result.CancelledCount == 0 ? 0 : 1;
+    private static int GetRunResultExitCode(DispatchRunResult result)
+    {
+        var failureCategories = result.Targets
+            .Where(static target => target.State != TargetExecutionState.Succeeded || target.FailureCategory != FailureCategory.None)
+            .Select(static target => target.FailureCategory)
+            .ToArray();
+
+        if (result.FailedCount == 0
+            && result.TimedOutCount == 0
+            && result.CancelledCount == 0
+            && failureCategories.Length == 0)
+        {
+            return 0;
+        }
+
+        if (failureCategories.Contains(FailureCategory.InternalError))
+        {
+            return 10;
+        }
+
+        if (result.CancelledCount > 0 || failureCategories.Contains(FailureCategory.Cancelled))
+        {
+            return 6;
+        }
+
+        if (failureCategories.Contains(FailureCategory.AuthenticationFailed)
+            || failureCategories.Contains(FailureCategory.AuthorizationFailed))
+        {
+            return 4;
+        }
+
+        if (failureCategories.Contains(FailureCategory.TransportUnavailable))
+        {
+            return 5;
+        }
+
+        if (result.TimedOutCount > 0
+            || failureCategories.Contains(FailureCategory.TimedOut)
+            || failureCategories.Contains(FailureCategory.ProbeFailed))
+        {
+            return 3;
+        }
+
+        return 2;
+    }
 
     private static bool HasScriptSecrets(ExecutionPlan plan) => plan.Job.ScriptSecrets.Count > 0;
 
@@ -587,7 +630,8 @@ public sealed class DispatchCliApplication(
 
         if (apply!.Mode == "execute" && apply.Tasks.Count == 1)
         {
-            return await RunParsedCommandAsync(apply.Tasks[0].Command!, cancellationToken).ConfigureAwait(false);
+            var outcome = await RunParsedCommandAsync(apply.Tasks[0].Command!, renderOutput: true, cancellationToken).ConfigureAwait(false);
+            return GetApplyTaskExitCode(outcome.ExitCode);
         }
 
         if (apply.Mode == "execute")
@@ -625,7 +669,7 @@ public sealed class DispatchCliApplication(
                 outcome.Result));
             if (outcome.ExitCode != 0)
             {
-                exitCode = outcome.ExitCode;
+                exitCode = GetApplyTaskExitCode(outcome.ExitCode);
                 break;
             }
         }
@@ -640,6 +684,8 @@ public sealed class DispatchCliApplication(
 
         return exitCode;
     }
+
+    private static int GetApplyTaskExitCode(int runExitCode) => runExitCode == 0 ? 0 : 1;
 
     private async Task<int> RunApplyPlanAsync(
         DispatchApplyJobParser.ApplyParseResult apply,

@@ -254,7 +254,7 @@ dispatch init all
 </ul>
 <p>Automation should prefer result files or structured output modes instead of parsing rich terminal output.</p>
 <h2>Exit Behavior</h2>
-<p>Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. Transport, authentication, authorization, probe, timeout, and script failures are mapped to stable result fields and failure categories; automation should read <code>Admin\results.json</code> for per-target detail.</p>
+<p>Dispatch returns success only when command validation succeeds and the selected targets complete according to the expected exit-code policy. For completed <code>dispatch run</code> execution results, process exit codes now follow the stable result mapping: <code>0</code> success, <code>2</code> host execution failure or unexpected exit code, <code>3</code> probe failure or timed-out target, <code>4</code> authentication or authorization failure, <code>5</code> transport unavailable, <code>6</code> cancelled, and <code>10</code> internal error. Usage, configuration, inventory, YAML, and planning validation errors return <code>1</code>. Explicit plan/check policy exit code <code>7</code> and broader command-family alignment remain Roadmap <code>6.7</code> work. Automation should read <code>Admin\results.json</code> for per-target detail.</p>
   </article>
 </main>
 <footer class="footer"><div class="footer-inner"><span>Dispatch Docs</span><div class="footer-links"><a href="docs.html">All Docs</a><a href="security.html">Security</a><a href="https://github.com/Kmac907/Dispatch">GitHub</a></div></div></footer>

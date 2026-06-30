@@ -244,6 +244,43 @@ public sealed class DispatchCliApplicationTests
         }
     }
 
+    [Theory]
+    [InlineData(TargetExecutionState.Succeeded, FailureCategory.None, 0)]
+    [InlineData(TargetExecutionState.Succeeded, FailureCategory.ExecutionFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.TargetResolutionFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.PayloadPreparationFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.ScriptTransferFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.SecretHandoffFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.UnexpectedExitCode, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.ExecutionFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.ArtifactCollectionFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.CleanupFailed, 2)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.ProbeFailed, 3)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.TimedOut, 3)]
+    [InlineData(TargetExecutionState.TimedOut, FailureCategory.TimedOut, 3)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.AuthenticationFailed, 4)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.AuthorizationFailed, 4)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.TransportUnavailable, 5)]
+    [InlineData(TargetExecutionState.Cancelled, FailureCategory.Cancelled, 6)]
+    [InlineData(TargetExecutionState.Failed, FailureCategory.InternalError, 10)]
+    public async Task RunExecutionUsesStableResultExitCodes(
+        TargetExecutionState state,
+        FailureCategory failureCategory,
+        int expectedExitCode)
+    {
+        var planner = new CapturingPlanner();
+        var application = CreateApplication(
+            planner,
+            executor: new StaticRunResultExecutor(CreateRunResult(state, failureCategory)));
+
+        var (exitCode, output, error) = await CaptureConsoleAsync(() => application.RunAsync(
+            ["run", "cmd", "whoami", "--target", "PC001", "--transport", "winrm", "--no-progress"],
+            CancellationToken.None));
+
+        Assert.True(planner.LastRequest is not null, $"Stdout: {output}. Stderr: {error}");
+        Assert.Equal(expectedExitCode, exitCode);
+    }
+
     [Fact]
     public async Task RunDryRunCreatesSharedDispatchRequest()
     {
@@ -8002,6 +8039,45 @@ credentials:
         return new DispatchResolvedCredential(referenceName, @"SCF\prod.admin", "prompt", password);
     }
 
+    private static DispatchRunResult CreateRunResult(
+        TargetExecutionState state,
+        FailureCategory failureCategory)
+    {
+        var succeeded = state == TargetExecutionState.Succeeded && failureCategory == FailureCategory.None;
+        int? exitCode = succeeded
+            ? 0
+            : failureCategory == FailureCategory.UnexpectedExitCode
+                ? 1603
+                : null;
+
+        return new DispatchRunResult(
+            RunId: "run-test",
+            StartedAt: DateTimeOffset.UnixEpoch,
+            EndedAt: DateTimeOffset.UnixEpoch.AddSeconds(1),
+            RequestedBy: "test",
+            Transport: TransportKind.WinRm,
+            PayloadType: PayloadKind.Command,
+            PayloadName: "whoami",
+            Targets:
+            [
+                new TargetExecutionResult(
+                    RunId: "run-test",
+                    Target: "PC001",
+                    Transport: TransportKind.WinRm,
+                    PayloadType: PayloadKind.Command,
+                    PayloadName: "whoami",
+                    State: state,
+                    ExitCode: exitCode,
+                    ExpectedExitCodes: [0],
+                    StartedAt: DateTimeOffset.UnixEpoch,
+                    EndedAt: DateTimeOffset.UnixEpoch.AddSeconds(1),
+                    FailureCategory: failureCategory,
+                    FailureMessage: failureCategory == FailureCategory.None ? null : failureCategory.ToString(),
+                    ResultPath: @"C:\Dispatch\Tests\run-test\Targets\PC001\result.json")
+            ],
+            ResultPath: @"C:\Dispatch\Tests\run-test\Admin\results.json");
+    }
+
     private static async Task<(int ExitCode, string Output, string Error)> CaptureConsoleAsync(Func<Task<int>> action)
     {
         var originalOut = Console.Out;
@@ -8198,6 +8274,18 @@ credentials:
             IDispatchExecutionObserver observer,
             CancellationToken cancellationToken) =>
             throw new InvalidOperationException("The CLI surface test must not execute endpoint work.");
+    }
+
+    private sealed class StaticRunResultExecutor(DispatchRunResult result) : IDispatchExecutor
+    {
+        public Task<DispatchRunResult> ExecuteAsync(ExecutionPlan plan, CancellationToken cancellationToken) =>
+            Task.FromResult(result);
+
+        public Task<DispatchRunResult> ExecuteAsync(
+            ExecutionPlan plan,
+            IDispatchExecutionObserver observer,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(result);
     }
 
     private sealed class SucceedingExecutor : IDispatchExecutor

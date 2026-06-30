@@ -7,7 +7,7 @@ Dispatch has two related error surfaces:
 
 ## CLI Exit Codes
 
-Planned v1 stable exit codes:
+Stable v1 exit-code contract:
 
 | Code | Meaning |
 | --- | --- |
@@ -21,7 +21,7 @@ Planned v1 stable exit codes:
 | `7` | Plan/check policy failure. |
 | `10` | Internal error. |
 
-Current commands may not yet return the full planned v1 mapping everywhere. Automation should prefer `Admin\results.json` for detailed per-target outcomes.
+Current `dispatch run` execution results use this stable mapping after endpoint execution completes. Usage, configuration, inventory, YAML, and planning validation errors still return `1`. Broader command-family alignment and explicit plan/check policy exit code `7` remain Roadmap `6.7` work. Automation should prefer `Admin\results.json` for detailed per-target outcomes.
 
 ## Target Failure Categories
 
