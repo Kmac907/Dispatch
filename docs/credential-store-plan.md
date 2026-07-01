@@ -392,7 +392,7 @@ credentials:
     username: CONTOSO\prod.admin
 ```
 
-PowerShell:
+Planned Roadmap `7` PowerShell wrapper contract:
 
 ```powershell
 Invoke-DispatchPowerShell `
@@ -402,7 +402,7 @@ Invoke-DispatchPowerShell `
   -Credential $cred
 ```
 
-The `-Credential` parameter is optional. If it is omitted and `prod-admin` resolves to `provider: pscredential`, the module prompts with `Get-Credential`, using the configured username when present:
+When the protected handoff slice is implemented, the `-Credential` parameter will be optional. If it is omitted and `prod-admin` resolves to `provider: pscredential`, the module will prompt with `Get-Credential`, using the configured username when present:
 
 ```powershell
 Invoke-DispatchPowerShell `
@@ -411,7 +411,13 @@ Invoke-DispatchPowerShell `
   -CredentialName prod-admin
 ```
 
-Rules:
+Current implementation:
+
+- Direct `dispatch.exe` validates `provider: pscredential` metadata but rejects runtime use unless a compatible protected wrapper handoff is present.
+- Current PowerShell module execution wrappers accept `-CredentialName <name>` and pass it through to Dispatch as `--credential <name>`.
+- Current PowerShell module execution wrappers do not yet accept `-Credential <PSCredential>`, do not call `Get-Credential`, and do not perform protected PSCredential handoff.
+
+Planned Roadmap `7` rules:
 
 - Only valid through the PowerShell wrapper.
 - Direct `dispatch.exe` must reject `provider: pscredential` unless a compatible protected wrapper handoff is present.
