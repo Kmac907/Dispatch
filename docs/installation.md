@@ -1,6 +1,6 @@
 # Installation
 
-Dispatch can currently be built and run from the repository source. Roadmap item `8` now includes source installation and local package installation for an already assembled module package.
+Dispatch can be installed from source, installed from an assembled module package, installed from the optional ZIP package, or run directly from the repository source during development.
 
 Current local module assembly and install:
 
