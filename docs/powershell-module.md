@@ -26,7 +26,7 @@ Get-DispatchVersion
 Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp -Plan
 ```
 
-When the module is installed by the future packaging slice, it resolves the bundled `bin\win-x64\dispatch.exe`. In developer or test checkouts, use `-DispatchPath <path>` or set `DISPATCH_EXE` to point at the CLI executable.
+When the module is assembled with `packaging/build-module.ps1`, it resolves the bundled `bin\win-x64\dispatch.exe`. In developer or test checkouts without an assembled module package, use `-DispatchPath <path>` or set `DISPATCH_EXE` to point at the CLI executable.
 
 Current PowerShell execution wrapper:
 

@@ -47,6 +47,13 @@
   <article class="doc-content">
 <h1>Installation</h1>
 <p>Dispatch can currently be built and run from the repository source. The v1 source installer and package installer are planned under roadmap item <code>8</code> and are not implemented yet.</p>
+<p>Roadmap <code>7</code> includes current local module assembly:</p>
+<pre><code>
+.\packaging\build-module.ps1
+Import-Module .\artifacts\module\Dispatch\Dispatch.psd1 -Force
+Get-DispatchVersion
+</code></pre>
+<p>This produces an assembled module under <code>artifacts\module\Dispatch</code> with the bundled executable at <code>bin\win-x64\dispatch.exe</code>. It does not install the module into a PowerShell module path; Roadmap <code>8</code> owns installation.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Windows 10/11 or Windows Server.</li>

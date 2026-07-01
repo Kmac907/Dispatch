@@ -1473,6 +1473,11 @@ Non-goals:
 Dependencies:
 - 6.8.
 
+Current implementation notes:
+- `Dispatch.psd1` and `Dispatch.psm1` exist with `Test-Dispatch`, `Get-DispatchVersion`, `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` wrappers over the canonical CLI.
+- `packaging/build-module.ps1` publishes `Dispatch.Cli` as a self-contained single-file `win-x64` executable, assembles the PowerShell module folder, places the executable at `bin\win-x64\dispatch.exe`, validates the manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable.
+- Protected `PSCredential` wrapper handoff is not implemented yet.
+
 Definition of done:
 - Importing the module exposes the documented commands.
 - `dispatch.exe` remains the canonical CLI entrypoint after module installation.

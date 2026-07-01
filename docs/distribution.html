@@ -47,8 +47,21 @@
   <article class="doc-content">
 <h1>Distribution</h1>
 <p>Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.</p>
-<p>Status: planned v1.</p>
-<p>The current <code>packaging/</code> directory is a placeholder. <code>install-from-source.ps1</code>, <code>install.ps1</code>, and ZIP packaging are not implemented yet.</p>
+<p>Status: partial Roadmap <code>7</code>.</p>
+<p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, validates the module manifest, imports the assembled module, and verifies <code>Get-DispatchVersion</code> through the bundled executable. <code>install-from-source.ps1</code>, <code>install.ps1</code>, and ZIP packaging are not implemented yet.</p>
+<h2>Module Assembly</h2>
+<p>Build the current module package from an existing checkout:</p>
+<pre><code>
+.\packaging\build-module.ps1
+</code></pre>
+<p>The default output is:</p>
+<pre><code>
+artifacts\module\Dispatch\
+  Dispatch.psd1
+  Dispatch.psm1
+  bin\win-x64\dispatch.exe
+</code></pre>
+<p>Use <code>-Configuration Debug|Release</code>, <code>-Runtime win-x64</code>, <code>-OutputPath &lt;path&gt;</code>, and <code>-NoRestore</code> when needed for local validation or CI.</p>
 <h2>Source Install</h2>
 <p>Planned primary v1 flow:</p>
 <pre><code>
