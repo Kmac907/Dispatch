@@ -57,6 +57,8 @@ It is also designed for the GitHub `irm` flow, which clones the repository befor
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
+`packaging/bootstrap-install.ps1` remains available as a compatibility wrapper for older bootstrap links. It delegates to `install-from-source.ps1`.
+
 To only assemble and install an already built module package from a checkout:
 
 ```powershell

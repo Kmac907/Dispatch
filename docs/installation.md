@@ -54,6 +54,14 @@ The v1 operator path downloads and runs the source installer from GitHub:
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
+Older bootstrap links can use the compatibility wrapper:
+
+```powershell
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/bootstrap-install.ps1 | iex
+```
+
+The bootstrap wrapper is not a separate installer. It delegates to `install-from-source.ps1` from a checkout when the files are side by side, or downloads the canonical source installer from the selected GitHub repository and branch/ref before invoking it.
+
 The installer is responsible for:
 
 1. Creating a temporary source checkout when it is not run from an existing source tree.
@@ -63,7 +71,7 @@ The installer is responsible for:
 5. Validating `dispatch --help`, `dispatch version`, module import, and exported wrapper commands.
 6. Scheduling cleanup of the temporary source checkout after validation unless `-NoCleanup` is supplied.
 
-Use script parameters instead of editing the command inline. Current parameters include `-Scope CurrentUser|AllUsers`, `-RepositoryUrl`, `-Ref`, `-SourceRoot`, `-WorkRoot`, `-Configuration`, `-Runtime`, `-DestinationRoot`, `-Force`, `-NoCleanup`, and `-NoRestore`.
+Use script parameters instead of editing the command inline. Current parameters include `-Scope CurrentUser|AllUsers`, `-RepositoryUrl`, `-Ref`, `-SourceRoot`, `-WorkRoot`, `-Configuration`, `-Runtime`, `-DestinationRoot`, `-Force`, `-NoCleanup`, and `-NoRestore`. The compatibility bootstrap wrapper accepts the same parameters and forwards them to `install-from-source.ps1`.
 
 ## Current Package Install
 

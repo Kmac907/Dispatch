@@ -29,6 +29,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `packaging/build-module.ps1` assembles a local module folder with bundled self-contained `bin\win-x64\dispatch.exe`, validates module import/version resolution through that bundled executable, and can create a validated `artifacts\packages\Dispatch-<version>-win-x64.zip` release convenience package with `-CreateZip`.
 - `packaging/install.ps1` installs an already assembled module package into `CurrentUser` or `AllUsers` PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and version resolution.
 - `packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` source-install flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`.
+- `packaging/bootstrap-install.ps1` keeps older bootstrap links working by delegating to `install-from-source.ps1`.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
 - Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.
@@ -46,11 +47,11 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Credential handoff is not complete for every entry point; PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 - Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is current `dispatch run ps ... --secret name=reference` plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.
 - Raw `stdout.txt`, raw `stderr.txt`, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.
-- Roadmap `8` packaging is partial: source install, local assembled-package install, and optional ZIP artifact creation exist, while bootstrap compatibility refinements and cleanup-helper hardening remain planned.
+- Roadmap `8` packaging is partial: source install, bootstrap compatibility, local assembled-package install, and optional ZIP artifact creation exist, while cleanup-helper hardening remains planned.
 
 ## Planned Next
 
-- Finish Roadmap `8` packaging with bootstrap compatibility and cleanup-helper hardening.
+- Finish Roadmap `8` packaging with cleanup-helper hardening.
 - Implement script secret handoff in staged slices: plan/dry-run validation first, then safe transport-specific parameter binding.
 
 ## Deferred Or Out Of Scope For V1

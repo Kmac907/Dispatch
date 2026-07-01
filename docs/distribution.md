@@ -10,7 +10,9 @@ Current support: `packaging/build-module.ps1` assembles a local PowerShell modul
 
 `packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`.
 
-Bootstrap compatibility and cleanup-helper hardening remain planned Roadmap `8` work.
+`packaging/bootstrap-install.ps1` is a compatibility wrapper for older bootstrap links. It delegates to `install-from-source.ps1` from a checkout when available, or downloads the canonical source installer from the configured GitHub repository and branch/ref before delegating.
+
+Cleanup-helper hardening remains planned Roadmap `8` work.
 
 ## Module Assembly
 
@@ -40,6 +42,12 @@ Primary v1 flow:
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
+Compatibility bootstrap flow:
+
+```powershell
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/bootstrap-install.ps1 | iex
+```
+
 The installer:
 
 1. Creates a temporary checkout when it is not run from an existing source tree.
@@ -58,6 +66,8 @@ Developer/troubleshooting mode:
 ```
 
 Use `-SourceRoot <path>` to build from a specific checkout, `-DestinationRoot <path>` for CI/local validation without touching real module paths, `-Force` to replace the same installed module version, and `-NoRestore` when dependencies are already restored.
+
+When run from a checkout, `bootstrap-install.ps1` uses the sibling `install-from-source.ps1`. When run through `irm`, it downloads `install-from-source.ps1` from the same `-RepositoryUrl` and `-Ref`, invokes it with the same parameters, and removes the temporary installer copy afterward.
 
 ## Packaged Install
 

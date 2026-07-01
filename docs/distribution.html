@@ -51,7 +51,8 @@
 <p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, copies the package installer into the module root, validates the module manifest, imports the assembled module, verifies <code>Get-DispatchVersion</code> through the bundled executable, and can create a validated release ZIP with <code>-CreateZip</code>.</p>
 <p><code>packaging/install.ps1</code> installs an already assembled package into a <code>CurrentUser</code> or <code>AllUsers</code> PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and <code>Get-DispatchVersion</code>.</p>
 <p><code>packaging/install-from-source.ps1</code> builds and installs from an existing checkout or clones the GitHub repository for the <code>irm | iex</code> flow, then validates the installed module, bundled executable, exported commands, and <code>dispatch --help</code>.</p>
-<p>Bootstrap compatibility and cleanup-helper hardening remain planned Roadmap <code>8</code> work.</p>
+<p><code>packaging/bootstrap-install.ps1</code> is a compatibility wrapper for older bootstrap links. It delegates to <code>install-from-source.ps1</code> from a checkout when available, or downloads the canonical source installer from the configured GitHub repository and branch/ref before delegating.</p>
+<p>Cleanup-helper hardening remains planned Roadmap <code>8</code> work.</p>
 <h2>Module Assembly</h2>
 <p>Build the current module package from an existing checkout:</p>
 <pre><code>
@@ -71,6 +72,10 @@ artifacts\module\Dispatch\
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
+<p>Compatibility bootstrap flow:</p>
+<pre><code>
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/bootstrap-install.ps1 | iex
+</code></pre>
 <p>The installer:</p>
 <ol>
 <li>Creates a temporary checkout when it is not run from an existing source tree.</li>
@@ -86,6 +91,7 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 .\packaging\install-from-source.ps1 -NoCleanup
 </code></pre>
 <p>Use <code>-SourceRoot &lt;path&gt;</code> to build from a specific checkout, <code>-DestinationRoot &lt;path&gt;</code> for CI/local validation without touching real module paths, <code>-Force</code> to replace the same installed module version, and <code>-NoRestore</code> when dependencies are already restored.</p>
+<p>When run from a checkout, <code>bootstrap-install.ps1</code> uses the sibling <code>install-from-source.ps1</code>. When run through <code>irm</code>, it downloads <code>install-from-source.ps1</code> from the same <code>-RepositoryUrl</code> and <code>-Ref</code>, invokes it with the same parameters, and removes the temporary installer copy afterward.</p>
 <h2>Packaged Install</h2>
 <p>Install an already assembled package:</p>
 <pre><code>
