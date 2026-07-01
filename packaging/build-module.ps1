@@ -97,7 +97,7 @@ function New-DispatchZipPackage {
         }
 
         $validationInstallRoot = Join-Path -Path $validationRoot -ChildPath 'InstalledModules'
-        $installed = & $extractedInstaller -ModulePath $extractedModuleRoot -DestinationRoot $validationInstallRoot -Force
+        $installed = & $extractedInstaller -ModulePath $extractedModuleRoot -DestinationRoot $validationInstallRoot -Force -NoPathUpdate
         if ($LASTEXITCODE -ne 0) {
             throw "ZIP validation install failed with exit code $LASTEXITCODE."
         }

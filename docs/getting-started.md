@@ -1,19 +1,35 @@
 # Getting Started
 
-This guide is the shortest path from a clean checkout or install to a verified Dispatch run.
+This guide is the shortest path from install to a verified Dispatch run.
 
 ## Prerequisites
 
 - Windows 10/11 or Windows Server.
 - PowerShell 7 or Windows PowerShell 5.1.
-- .NET SDK matching `global.json` when building from source.
-- Git on `PATH` for source checkout workflows.
+- .NET SDK matching `global.json`.
+- Git on `PATH`.
 - At least one approved Windows endpoint for live validation when running remote commands.
 - PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.
 
+## Install
+
+The primary v1 install path downloads the source installer from GitHub, clones the repository to a temporary folder, builds the current `win-x64` executable, installs the PowerShell module, and adds the bundled executable folder to PATH:
+
+```powershell
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+```
+
+After install, both entry points are available:
+
+```powershell
+dispatch --help
+Import-Module Dispatch
+Test-Dispatch
+```
+
 ## Build And Run From Source
 
-The current repository build path is direct source execution:
+Use source execution when developing Dispatch or validating a checkout:
 
 ```powershell
 git clone https://github.com/Kmac907/Dispatch.git
@@ -23,24 +39,10 @@ dotnet test .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 ```
 
-The current source installer can build, install, and validate from a checkout:
+The source installer can also build and install from an existing checkout:
 
 ```powershell
 .\packaging\install-from-source.ps1 -Scope CurrentUser -Force
-```
-
-The GitHub `irm` flow is also available and clones the repository before building and installing:
-
-```powershell
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-```
-
-Current module assembly from a checkout is available:
-
-```powershell
-.\packaging\build-module.ps1
-Import-Module .\artifacts\module\Dispatch\Dispatch.psd1 -Force
-Get-DispatchVersion
 ```
 
 ## Validate Locally From Source

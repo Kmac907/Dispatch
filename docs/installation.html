@@ -46,19 +46,21 @@
 </aside>
   <article class="doc-content">
 <h1>Installation</h1>
-<p>Dispatch can be installed from source, installed from an assembled module package, installed from the optional ZIP package, or run directly from the repository source during development.</p>
-<p>Current local module assembly and install:</p>
+<p>Dispatch installs as both a direct <code>dispatch</code> command and a PowerShell module. The primary operator path is the GitHub <code>irm</code> installer, which builds the current <code>win-x64</code> executable, installs the module, adds the bundled executable folder to PATH, validates both entry points, and removes the temporary source checkout after a successful install.</p>
+<p>Primary install:</p>
 <pre><code>
-.\packaging\install-from-source.ps1 -Scope CurrentUser -Force
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
-<p>To run the lower-level package assembly and install steps separately:</p>
+<p>Verify both entry points:</p>
 <pre><code>
-.\packaging\build-module.ps1
-.\packaging\install.ps1 -Scope CurrentUser -Force
+dispatch --help
+dispatch doctor
+
 Import-Module Dispatch -Force
+Test-Dispatch
 Get-DispatchVersion
 </code></pre>
-<p>The source installer builds the self-contained executable, assembles the module under <code>artifacts\module\Dispatch</code>, copies it into a versioned <code>Dispatch\&lt;version&gt;</code> folder under the selected PowerShell module root, validates the installed manifest, bundled executable, module import, exported commands, <code>Get-DispatchVersion</code>, and <code>dispatch --help</code>, and reports cleanup status for temporary source checkouts.</p>
+<p>Lower-level package installation and direct source execution remain available for development, troubleshooting, and CI validation.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
@@ -68,8 +70,25 @@ Get-DispatchVersion
 <li>Network access to <code>https://github.com/Kmac907/Dispatch</code>.</li>
 <li>Administrator shell for <code>-Scope AllUsers</code> installation.</li>
 </ul>
-<h2>Current Source Workflow</h2>
-<p>Use this flow today:</p>
+<h2>Source Install</h2>
+<p>The v1 operator path downloads and runs the source installer from GitHub:</p>
+<pre><code>
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+</code></pre>
+<p>The installer is responsible for:</p>
+<ol>
+<li>Creating a temporary source checkout when it is not run from an existing source tree.</li>
+<li>Building the self-contained <code>win-x64</code> <code>dispatch.exe</code>.</li>
+<li>Assembling the PowerShell module folder.</li>
+<li>Installing the module and bundled executable.</li>
+<li>Adding the bundled executable folder to PATH unless <code>-NoPathUpdate</code> is supplied or <code>-DestinationRoot</code> is used for validation.</li>
+<li>Validating direct <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported wrapper commands.</li>
+<li>Scheduling an external cleanup helper from the temp folder after validation unless <code>-NoCleanup</code> is supplied.</li>
+</ol>
+<p>The source installer reports <code>DispatchPathEntry</code>, <code>PathUpdate</code>, <code>PathTarget</code>, <code>Cleanup</code>, <code>CleanupHelperPath</code>, <code>CleanupStatusPath</code>, and <code>CleanupError</code> in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.</p>
+<p>Use script parameters instead of editing the command inline. Current parameters include <code>-Scope CurrentUser|AllUsers</code>, <code>-RepositoryUrl</code>, <code>-Ref</code>, <code>-SourceRoot</code>, <code>-WorkRoot</code>, <code>-Configuration</code>, <code>-Runtime</code>, <code>-DestinationRoot</code>, <code>-Force</code>, <code>-NoCleanup</code>, <code>-NoRestore</code>, and <code>-NoPathUpdate</code>.</p>
+<h2>Developer Source Workflow</h2>
+<p>Use this flow when developing Dispatch or validating a checkout without installing:</p>
 <pre><code>
 git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
@@ -81,27 +100,6 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 <pre><code>
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\Fix.ps1 --target PC001 --transport psrp --plan
 </code></pre>
-<h2>Source Install</h2>
-<p>The v1 operator path downloads and runs the source installer from GitHub:</p>
-<pre><code>
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-</code></pre>
-<p>Older bootstrap links can use the compatibility wrapper:</p>
-<pre><code>
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/bootstrap-install.ps1 | iex
-</code></pre>
-<p>The bootstrap wrapper is not a separate installer. It delegates to <code>install-from-source.ps1</code> from a checkout when the files are side by side, or downloads the canonical source installer from the selected GitHub repository and branch/ref before invoking it.</p>
-<p>The installer is responsible for:</p>
-<ol>
-<li>Creating a temporary source checkout when it is not run from an existing source tree.</li>
-<li>Building the self-contained <code>win-x64</code> <code>dispatch.exe</code>.</li>
-<li>Assembling the PowerShell module folder.</li>
-<li>Installing the module and bundled executable.</li>
-<li>Validating <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported wrapper commands.</li>
-<li>Scheduling an external cleanup helper from the temp folder after validation unless <code>-NoCleanup</code> is supplied.</li>
-</ol>
-<p>The source installer reports <code>Cleanup</code>, <code>CleanupHelperPath</code>, <code>CleanupStatusPath</code>, and <code>CleanupError</code> in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.</p>
-<p>Use script parameters instead of editing the command inline. Current parameters include <code>-Scope CurrentUser|AllUsers</code>, <code>-RepositoryUrl</code>, <code>-Ref</code>, <code>-SourceRoot</code>, <code>-WorkRoot</code>, <code>-Configuration</code>, <code>-Runtime</code>, <code>-DestinationRoot</code>, <code>-Force</code>, <code>-NoCleanup</code>, and <code>-NoRestore</code>. The compatibility bootstrap wrapper accepts the same parameters and forwards them to <code>install-from-source.ps1</code>.</p>
 <h2>Current Package Install</h2>
 <p>After <code>.\packaging\build-module.ps1</code> assembles the package, install it locally:</p>
 <pre><code>
@@ -111,7 +109,7 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/bootstrap-
 <pre><code>
 .\packaging\install.ps1 -Scope AllUsers
 </code></pre>
-<p>Use <code>-Force</code> to replace the same installed module version. Use <code>-ModulePath &lt;path&gt;</code> when installing an assembled package outside the default <code>artifacts\module\Dispatch</code> folder. <code>-DestinationRoot &lt;path&gt;</code> is available for CI or local validation when the real PowerShell module paths should not be touched.</p>
+<p>Use <code>-Force</code> to replace the same installed module version. Use <code>-ModulePath &lt;path&gt;</code> when installing an assembled package outside the default <code>artifacts\module\Dispatch</code> folder. <code>-NoPathUpdate</code> skips PATH changes. <code>-DestinationRoot &lt;path&gt;</code> is available for CI or local validation when the real PowerShell module paths and PATH should not be touched.</p>
 <h2>ZIP Package Install</h2>
 <p>Create the optional ZIP from a checkout:</p>
 <pre><code>
@@ -136,7 +134,7 @@ git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
 .\packaging\install-from-source.ps1 -NoCleanup
 </code></pre>
-<h2>Verify Installation</h2>
+<h2>Verify Source Execution</h2>
 <pre><code>
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- version
@@ -145,7 +143,7 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 <p>Expected result:</p>
 <ul>
 <li>The source-run commands print the canonical CLI command tree, version, and local prerequisite status.</li>
-<li>After the module wrapper and installer are implemented, <code>Import-Module Dispatch</code> and <code>Get-Command -Module Dispatch</code> should validate the installed wrapper commands.</li>
+<li>Installed systems should use <code>dispatch --help</code>, <code>dispatch version</code>, <code>dispatch doctor</code>, <code>Import-Module Dispatch</code>, and <code>Get-Command -Module Dispatch</code>.</li>
 </ul>
 <h2>Upgrade</h2>
 <p>Run the same source-install command again with <code>-Force</code>. It rebuilds from the selected source, replaces the installed module files for the same version, validates the new executable, and fails before reporting success if validation does not pass.</p>

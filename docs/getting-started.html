@@ -46,18 +46,29 @@
 </aside>
   <article class="doc-content">
 <h1>Getting Started</h1>
-<p>This guide is the shortest path from a clean checkout or install to a verified Dispatch run.</p>
+<p>This guide is the shortest path from install to a verified Dispatch run.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
 <li>PowerShell 7 or Windows PowerShell 5.1.</li>
-<li>.NET SDK matching <code>global.json</code> when building from source.</li>
-<li>Git on <code>PATH</code> for source checkout workflows.</li>
+<li>.NET SDK matching <code>global.json</code>.</li>
+<li>Git on <code>PATH</code>.</li>
 <li>At least one approved Windows endpoint for live validation when running remote commands.</li>
 <li>PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.</li>
 </ul>
+<h2>Install</h2>
+<p>The primary v1 install path downloads the source installer from GitHub, clones the repository to a temporary folder, builds the current <code>win-x64</code> executable, installs the PowerShell module, and adds the bundled executable folder to PATH:</p>
+<pre><code>
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+</code></pre>
+<p>After install, both entry points are available:</p>
+<pre><code>
+dispatch --help
+Import-Module Dispatch
+Test-Dispatch
+</code></pre>
 <h2>Build And Run From Source</h2>
-<p>The current repository build path is direct source execution:</p>
+<p>Use source execution when developing Dispatch or validating a checkout:</p>
 <pre><code>
 git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
@@ -65,19 +76,9 @@ dotnet build .\Dispatch.sln
 dotnet test .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 </code></pre>
-<p>The current source installer can build, install, and validate from a checkout:</p>
+<p>The source installer can also build and install from an existing checkout:</p>
 <pre><code>
 .\packaging\install-from-source.ps1 -Scope CurrentUser -Force
-</code></pre>
-<p>The GitHub <code>irm</code> flow is also available and clones the repository before building and installing:</p>
-<pre><code>
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-</code></pre>
-<p>Current module assembly from a checkout is available:</p>
-<pre><code>
-.\packaging\build-module.ps1
-Import-Module .\artifacts\module\Dispatch\Dispatch.psd1 -Force
-Get-DispatchVersion
 </code></pre>
 <h2>Validate Locally From Source</h2>
 <pre><code>

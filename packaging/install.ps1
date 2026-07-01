@@ -9,7 +9,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $DestinationRoot,
 
-    [switch] $Force
+    [switch] $Force,
+
+    [switch] $NoPathUpdate
 )
 
 Set-StrictMode -Version Latest
@@ -128,6 +130,115 @@ function Test-DispatchModulePackage {
     }
 }
 
+function Get-PathTarget {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('CurrentUser', 'AllUsers')]
+        [string] $InstallScope
+    )
+
+    if ($InstallScope -eq 'AllUsers') {
+        return [EnvironmentVariableTarget]::Machine
+    }
+
+    [EnvironmentVariableTarget]::User
+}
+
+function Split-PathEntries {
+    param(
+        [string] $PathValue
+    )
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return @()
+    }
+
+    @(
+        $PathValue.Split([System.IO.Path]::PathSeparator, [StringSplitOptions]::RemoveEmptyEntries) |
+            ForEach-Object { $_.Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+}
+
+function Test-PathEntryPresent {
+    param(
+        [Parameter(Mandatory)]
+        [string[]] $Entries,
+
+        [Parameter(Mandatory)]
+        [string] $Entry
+    )
+
+    $resolvedEntry = Resolve-FullPath -Path $Entry
+    foreach ($existing in $Entries) {
+        try {
+            if ((Resolve-FullPath -Path $existing).Equals($resolvedEntry, [StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+        catch {
+            if ($existing.Equals($Entry, [StringComparison]::OrdinalIgnoreCase)) {
+                return $true
+            }
+        }
+    }
+
+    $false
+}
+
+function Add-DispatchToPath {
+    param(
+        [Parameter(Mandatory)]
+        [string] $BinPath,
+
+        [Parameter(Mandatory)]
+        [ValidateSet('CurrentUser', 'AllUsers')]
+        [string] $InstallScope
+    )
+
+    $resolvedBinPath = Resolve-FullPath -Path $BinPath
+    if (-not (Test-Path -LiteralPath $resolvedBinPath -PathType Container)) {
+        throw "Dispatch executable folder was not found at '$resolvedBinPath'."
+    }
+
+    $target = Get-PathTarget -InstallScope $InstallScope
+    $persistedPath = [Environment]::GetEnvironmentVariable('Path', $target)
+    $persistedEntries = Split-PathEntries -PathValue $persistedPath
+    $wasPresent = Test-PathEntryPresent -Entries $persistedEntries -Entry $resolvedBinPath
+
+    if (-not $wasPresent) {
+        $newPersistedEntries = @($resolvedBinPath) + $persistedEntries
+        [Environment]::SetEnvironmentVariable('Path', ($newPersistedEntries -join [System.IO.Path]::PathSeparator), $target)
+    }
+
+    $processEntries = Split-PathEntries -PathValue $env:Path
+    if (-not (Test-PathEntryPresent -Entries $processEntries -Entry $resolvedBinPath)) {
+        $env:Path = (@($resolvedBinPath) + $processEntries) -join [System.IO.Path]::PathSeparator
+    }
+
+    $command = Get-Command -Name dispatch.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $command) {
+        throw "dispatch.exe was not found on PATH after adding '$resolvedBinPath'."
+    }
+
+    $resolvedCommand = Resolve-FullPath -Path $command.Source
+    $expectedCommand = Resolve-FullPath -Path (Join-Path -Path $resolvedBinPath -ChildPath 'dispatch.exe')
+    if (-not $resolvedCommand.Equals($expectedCommand, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "dispatch.exe resolved to '$resolvedCommand' instead of the installed executable '$expectedCommand'."
+    }
+
+    & dispatch.exe --help > $null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installed dispatch.exe --help failed through PATH with exit code $LASTEXITCODE."
+    }
+
+    [pscustomobject]@{
+        Status = if ($wasPresent) { 'alreadyPresent' } else { 'updated' }
+        Target = $target.ToString()
+        Path = $resolvedBinPath
+    }
+}
+
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path -Path $PSScriptRoot -ChildPath '..'))
 if ([string]::IsNullOrWhiteSpace($ModulePath)) {
     $ModulePath = Join-Path -Path $repoRoot -ChildPath 'artifacts\module\Dispatch'
@@ -164,6 +275,17 @@ try {
 
     Move-Item -LiteralPath $stagingPath -Destination $installPath
     $installedValidation = Test-DispatchModulePackage -Path $installPath
+    $dispatchBinPath = Split-Path -Parent -Path $installedValidation.DispatchPath
+    $pathUpdate = if ($NoPathUpdate) {
+        [pscustomobject]@{
+            Status = 'skipped'
+            Target = $null
+            Path = $dispatchBinPath
+        }
+    }
+    else {
+        Add-DispatchToPath -BinPath $dispatchBinPath -InstallScope $Scope
+    }
 
     [pscustomobject]@{
         ModuleName = $moduleName
@@ -172,6 +294,9 @@ try {
         InstallPath = $installPath
         ManifestPath = $installedValidation.ManifestPath
         DispatchPath = $installedValidation.DispatchPath
+        DispatchPathEntry = $pathUpdate.Path
+        PathUpdate = $pathUpdate.Status
+        PathTarget = $pathUpdate.Target
         ModuleVersion = $installedValidation.ModuleVersion
         DispatchVersion = $installedValidation.DispatchVersion
         ExportedCommands = $installedValidation.ExportedCommands

@@ -119,7 +119,6 @@ Dispatch/
   packaging/
     install-from-source.ps1
     install.ps1
-    bootstrap-install.ps1
   tests/
     Dispatch.Core.Tests/
     Dispatch.Cli.Tests/
@@ -685,10 +684,10 @@ The v1 source installer is designed for the GitHub repository `https://github.co
 6. Report the installed module path and the installed `dispatch.exe` version.
 7. Copy or generate a cleanup helper under `$env:TEMP`.
 8. Change the current location outside the temporary source directory.
-9. Invoke the cleanup helper to remove the temporary source checkout. When `bootstrap-install.ps1` downloads a temporary installer copy, the bootstrap wrapper removes that downloaded copy after delegation; direct `irm install-from-source.ps1 | iex` execution has no local installer file to remove.
+9. Invoke the cleanup helper to remove the temporary source checkout. Direct `irm install-from-source.ps1 | iex` execution has no local installer file to remove.
 10. Report cleanup scheduling status without uninstalling the already validated module, and write the async helper's final cleanup success or failure to the returned cleanup status file when cleanup runs.
 
-Bootstrap cleanup semantics:
+Source cleanup semantics:
 
 - The installer must not depend on deleting its own currently executing file from inside the source tree.
 - Cleanup must run from outside the temporary checkout, normally from `$env:TEMP`.
@@ -1498,10 +1497,10 @@ Scope:
 - Assemble module package layout.
 - Add `install-from-source.ps1` as the primary operator flow for `irm`-launched build/install/validate/cleanup from the GitHub repository.
 - Support running `install-from-source.ps1` from an existing developer checkout.
-- Keep `bootstrap-install.ps1` only if it remains useful as a thin compatibility wrapper over `install-from-source.ps1`.
 - Add `install.ps1` for installing an already assembled module package into `CurrentUser` or `AllUsers` module scopes.
+- Installation must make both supported local entry points available: direct `dispatch` invocation through PATH and PowerShell wrapper invocation through `Import-Module Dispatch`.
 - Validate the built executable, module manifest, module import, and exported commands before reporting success.
-- Use a cleanup helper outside the source tree to remove the temporary source checkout after successful source installation. When the compatibility bootstrap wrapper downloads a temporary installer copy, it removes that copy after delegation.
+- Use a cleanup helper outside the source tree to remove the temporary source checkout after successful source installation.
 - Support `-NoCleanup` for developers and troubleshooting.
 - Create `Dispatch-<version>-win-x64.zip` as an optional release convenience artifact.
 - Add ZIP creation as explicit release packaging behavior, preferably through an optional `packaging\build-module.ps1 -CreateZip` switch so normal local builds still only assemble the module folder.
@@ -1521,14 +1520,13 @@ Dependencies:
 
 Current implementation:
 - `packaging/build-module.ps1` builds the self-contained `win-x64` executable, assembles the module package layout, copies `install.ps1` into the package root, validates the module manifest, imports the assembled module, verifies `Get-DispatchVersion` through the bundled executable, and can create a validated `artifacts\packages\Dispatch-<version>-win-x64.zip` release convenience package with `-CreateZip`.
-- `packaging/install.ps1` installs an already assembled module package into a `CurrentUser` or `AllUsers` PowerShell module scope, supports `-ModulePath`, `-Force`, and CI/local-validation `-DestinationRoot`, and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
-- `packaging/install-from-source.ps1` builds and installs from an existing checkout, clones the GitHub repository when launched without an existing source tree, invokes the current build/install scripts, validates the installed module, bundled executable, exported commands, `Get-DispatchVersion`, and `dispatch --help`, supports `-NoCleanup` for developer/troubleshooting flows, schedules an external temp-folder cleanup helper for temporary cloned source trees, returns cleanup status details, and reports cleanup scheduling failures without uninstalling or failing an already validated module installation.
-- `packaging/bootstrap-install.ps1` is a thin compatibility wrapper over `install-from-source.ps1`, using the sibling installer from a checkout or downloading the canonical source installer from the configured GitHub repository/ref before delegating.
+- `packaging/install.ps1` installs an already assembled module package into a `CurrentUser` or `AllUsers` PowerShell module scope, supports `-ModulePath`, `-Force`, CI/local-validation `-DestinationRoot`, and `-NoPathUpdate`, adds the installed `bin\win-x64` folder to the appropriate PATH target for normal installs, and validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help` through PATH.
+- `packaging/install-from-source.ps1` builds and installs from an existing checkout, clones the GitHub repository when launched without an existing source tree, invokes the current build/install scripts, validates the installed module, bundled executable, exported commands, `Get-DispatchVersion`, and direct `dispatch --help`, supports `-NoCleanup` for developer/troubleshooting flows and `-NoPathUpdate` for controlled installs, schedules an external temp-folder cleanup helper for temporary cloned source trees, returns PATH and cleanup status details, and reports cleanup scheduling failures without uninstalling or failing an already validated module installation.
 - Implemented ZIP packaging uses the optional build switch, creates `artifacts\packages\Dispatch-<version>-win-x64.zip`, includes only the installable `Dispatch\` package root plus `install.ps1`, and validates install/import/version/help behavior after extraction.
 
 Definition of done:
-- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, import the module, and run `dispatch --help` plus `Test-Dispatch`.
-- Source installation builds the project and module, validates the installation, changes out of the temporary source directory, invokes an external cleanup helper, and cleans up the temporary source tree. Bootstrap compatibility removes its downloaded temporary installer copy after delegation when that wrapper path is used.
+- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, run direct `dispatch --help`, import the module, and run `Test-Dispatch`.
+- Source installation builds the project and module, validates the installation, changes out of the temporary source directory, invokes an external cleanup helper, and cleans up the temporary source tree.
 - Cleanup failure is reported without uninstalling an already validated module.
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.
 - Pipeline or build script can create the optional ZIP without manual assembly.

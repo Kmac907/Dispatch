@@ -22,7 +22,7 @@ Project site: https://kmac907.github.io/Dispatch/
 - Current credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers on implemented PSRP and raw WinRM paths.
 - Script secret handoff is separate from endpoint credentials: `--credential <name>` selects the remoting credential, while `dispatch run ps ... --secret name=reference` describes a script input secret. Current support validates the option shape and renders only the redacted script parameter binding in plan/dry-run output. Runtime provider resolution and safe transport parameter binding are planned Roadmap 10 work.
 - Machine-wide YAML config at `C:\ProgramData\Dispatch\config.yml`.
-- Current PowerShell module diagnostic/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` over the same `dispatch.exe` command surface; `packaging/build-module.ps1` assembles a module folder with bundled `bin\win-x64\dispatch.exe` and can create a validated release ZIP with `-CreateZip`; `packaging/install.ps1` installs an assembled or extracted package into a PowerShell module scope. Module wrappers support protected PSCredential handoff for configured `provider: pscredential` references.
+- Current PowerShell module diagnostic/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` over the same `dispatch.exe` command surface; `packaging/build-module.ps1` assembles a module folder with bundled `bin\win-x64\dispatch.exe` and can create a validated release ZIP with `-CreateZip`; `packaging/install.ps1` installs an assembled or extracted package into a PowerShell module scope and adds the bundled executable folder to PATH for direct `dispatch` invocation. Module wrappers support protected PSCredential handoff for configured `provider: pscredential` references.
 
 ## Choosing Commands
 
@@ -33,9 +33,26 @@ Project site: https://kmac907.github.io/Dispatch/
 
 ## Get Started
 
-### Run From Source
+### Install
 
-The current repository can be built and run directly from source:
+The primary install path downloads the source installer from GitHub, builds the current `win-x64` executable, installs the PowerShell module, and puts the bundled executable folder on PATH so `dispatch` works directly:
+
+```powershell
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+```
+
+After install, use either the direct CLI or the PowerShell module wrappers:
+
+```powershell
+dispatch --help
+dispatch doctor
+
+Import-Module Dispatch
+Test-Dispatch
+Get-DispatchVersion
+```
+
+Developer checkout workflow:
 
 ```powershell
 git clone https://github.com/Kmac907/Dispatch.git
@@ -44,20 +61,6 @@ dotnet build .\Dispatch.sln
 dotnet test .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 ```
-
-The current source-install flow can build and install from a checkout:
-
-```powershell
-.\packaging\install-from-source.ps1 -Scope CurrentUser -Force
-```
-
-It is also designed for the GitHub `irm` flow, which clones the repository before building and installing:
-
-```powershell
-irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-```
-
-`packaging/bootstrap-install.ps1` remains available as a compatibility wrapper for older bootstrap links. It delegates to `install-from-source.ps1`.
 
 To only assemble and install an already built module package from a checkout:
 

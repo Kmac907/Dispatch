@@ -28,7 +28,9 @@ param(
 
     [switch] $NoCleanup,
 
-    [switch] $NoRestore
+    [switch] $NoRestore,
+
+    [switch] $NoPathUpdate
 )
 
 Set-StrictMode -Version Latest
@@ -314,6 +316,9 @@ if (-not [string]::IsNullOrWhiteSpace($DestinationRoot)) {
 if ($Force) {
     $installArguments.Force = $true
 }
+if ($NoPathUpdate -or -not [string]::IsNullOrWhiteSpace($DestinationRoot)) {
+    $installArguments.NoPathUpdate = $true
+}
 
 $installResult = & $installScriptPath @installArguments
 
@@ -367,6 +372,9 @@ if ($source.IsTemporary -and -not $NoCleanup) {
     InstallPath = $installResult.InstallPath
     ManifestPath = $manifestPath
     DispatchPath = $dispatchPath
+    DispatchPathEntry = $installResult.DispatchPathEntry
+    PathUpdate = $installResult.PathUpdate
+    PathTarget = $installResult.PathTarget
     ModuleVersion = $installResult.ModuleVersion
     DispatchVersion = $version.Version
     ExportedCommands = $actualCommands

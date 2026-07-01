@@ -20,13 +20,16 @@ Invoke-DispatchJob
 ## Examples
 
 ```powershell
+dispatch --help
+dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
+
 Import-Module Dispatch
 Test-Dispatch
 Get-DispatchVersion
 Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp -Plan
 ```
 
-When the module is assembled with `packaging/build-module.ps1`, it resolves the bundled `bin\win-x64\dispatch.exe`. In developer or test checkouts without an assembled module package, use `-DispatchPath <path>` or set `DISPATCH_EXE` to point at the CLI executable.
+Normal installation adds the bundled executable folder to PATH, so operators can call `dispatch` directly for the full CLI and import `Dispatch` for PowerShell-friendly automation wrappers. When the module is assembled with `packaging/build-module.ps1`, it resolves the bundled `bin\win-x64\dispatch.exe`. In developer or test checkouts without an assembled module package, use `-DispatchPath <path>` or set `DISPATCH_EXE` to point at the CLI executable.
 
 Current PowerShell execution wrapper:
 

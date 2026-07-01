@@ -60,12 +60,15 @@ Invoke-DispatchJob
 </code></pre>
 <h2>Examples</h2>
 <pre><code>
+dispatch --help
+dispatch run ps .\Fix.ps1 --target PC001 --transport psrp
+
 Import-Module Dispatch
 Test-Dispatch
 Get-DispatchVersion
 Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp -Plan
 </code></pre>
-<p>When the module is assembled with <code>packaging/build-module.ps1</code>, it resolves the bundled <code>bin\win-x64\dispatch.exe</code>. In developer or test checkouts without an assembled module package, use <code>-DispatchPath &lt;path&gt;</code> or set <code>DISPATCH_EXE</code> to point at the CLI executable.</p>
+<p>Normal installation adds the bundled executable folder to PATH, so operators can call <code>dispatch</code> directly for the full CLI and import <code>Dispatch</code> for PowerShell-friendly automation wrappers. When the module is assembled with <code>packaging/build-module.ps1</code>, it resolves the bundled <code>bin\win-x64\dispatch.exe</code>. In developer or test checkouts without an assembled module package, use <code>-DispatchPath &lt;path&gt;</code> or set <code>DISPATCH_EXE</code> to point at the CLI executable.</p>
 <p>Current PowerShell execution wrapper:</p>
 <pre><code>
 Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
