@@ -400,7 +400,7 @@ Purpose:
 ### 31. `docs/powershell-module.md`
 
 Purpose:
-- PowerShell module usage and automation guidance, including the implemented command-aligned wrappers over `dispatch.exe` (`Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Test-Dispatch`, and `Get-DispatchVersion`), the planned remaining `Invoke-DispatchJob` wrapper, and the rule that the module does not introduce a separate interactive shell launcher.
+- PowerShell module usage and automation guidance, including the implemented command-aligned wrappers over `dispatch.exe` (`Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, `Invoke-DispatchJob`, `Test-Dispatch`, and `Get-DispatchVersion`) and the rule that the module does not introduce a separate interactive shell launcher.
 
 ### 32. `docs/distribution.md`
 

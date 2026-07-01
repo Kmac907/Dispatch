@@ -372,6 +372,58 @@ function Invoke-DispatchExecutable {
     Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
 }
 
+function Invoke-DispatchJob {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [Alias('Job')]
+        [string] $JobPath,
+
+        [string] $Target,
+
+        [string] $Inventory,
+
+        [string] $Config,
+
+        [string] $Exclude,
+
+        [string] $CredentialName,
+
+        [ValidateSet('auto', 'psexec', 'psrp', 'winrm')]
+        [string] $Transport,
+
+        [string] $Tags,
+
+        [string] $SkipTags,
+
+        [int] $Serial,
+
+        [switch] $Plan,
+
+        [switch] $Check,
+
+        [switch] $Diff,
+
+        [switch] $NoColor,
+
+        [switch] $Quiet,
+
+        [switch] $Trace,
+
+        [string] $DispatchPath,
+
+        [switch] $Raw
+    )
+
+    $arguments = [System.Collections.Generic.List[string]]::new()
+    $arguments.Add('apply')
+    $arguments.Add($JobPath)
+    Add-DispatchApplyCommonArguments -Arguments $arguments -Target $Target -Inventory $Inventory -Config $Config -Exclude $Exclude -CredentialName $CredentialName -Transport $Transport -Tags $Tags -SkipTags $SkipTags -Serial $Serial -Plan:$Plan -Check:$Check -Diff:$Diff -NoColor:$NoColor -Quiet:$Quiet -VerboseEnabled:($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']) -Trace:$Trace
+    Add-DispatchStructuredOutputArguments -Arguments $arguments
+
+    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+}
+
 function Invoke-DispatchStructuredRun {
     [CmdletBinding()]
     param(
@@ -393,7 +445,7 @@ function Invoke-DispatchStructuredRun {
     }
     catch {
         $message = if ([string]::IsNullOrWhiteSpace($result.StdErr)) { $result.StdOut } else { $result.StdErr }
-        throw "dispatch.exe run did not return valid JSON. Exit code: $($result.ExitCode). $message"
+        throw "dispatch.exe did not return valid JSON. Exit code: $($result.ExitCode). $message"
     }
 
     $runResult | Add-Member -NotePropertyName ExitCode -NotePropertyValue $result.ExitCode -Force
@@ -411,6 +463,87 @@ function Add-DispatchStructuredOutputArguments {
     $Arguments.Add('--output')
     $Arguments.Add('json')
     $Arguments.Add('--no-progress')
+}
+
+function Add-DispatchApplyCommonArguments {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.Collections.Generic.List[string]] $Arguments,
+
+        [string] $Target,
+
+        [string] $Inventory,
+
+        [string] $Config,
+
+        [string] $Exclude,
+
+        [string] $CredentialName,
+
+        [string] $Transport,
+
+        [string] $Tags,
+
+        [string] $SkipTags,
+
+        [int] $Serial,
+
+        [switch] $Plan,
+
+        [switch] $Check,
+
+        [switch] $Diff,
+
+        [switch] $NoColor,
+
+        [switch] $Quiet,
+
+        [bool] $VerboseEnabled,
+
+        [switch] $Trace
+    )
+
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--target' -Value $Target
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--inventory' -Value $Inventory
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--config' -Value $Config
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--exclude' -Value $Exclude
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--credential' -Value $CredentialName
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--transport' -Value $Transport
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--tags' -Value $Tags
+    Add-DispatchArgumentValue -Arguments $Arguments -Name '--skip-tags' -Value $SkipTags
+
+    if ($Serial -gt 0) {
+        Add-DispatchArgumentValue -Arguments $Arguments -Name '--serial' -Value ([string] $Serial)
+    }
+
+    if ($Plan) {
+        $Arguments.Add('--plan')
+    }
+
+    if ($Check) {
+        $Arguments.Add('--check')
+    }
+
+    if ($Diff) {
+        $Arguments.Add('--diff')
+    }
+
+    if ($NoColor) {
+        $Arguments.Add('--no-color')
+    }
+
+    if ($Quiet) {
+        $Arguments.Add('--quiet')
+    }
+
+    if ($VerboseEnabled) {
+        $Arguments.Add('--verbose')
+    }
+
+    if ($Trace) {
+        $Arguments.Add('--trace')
+    }
 }
 
 function Add-DispatchRunCommonArguments {
@@ -572,4 +705,4 @@ function ConvertFrom-DispatchJson {
     $Json | ConvertFrom-Json
 }
 
-Export-ModuleMember -Function Get-DispatchVersion, Invoke-DispatchCommand, Invoke-DispatchExecutable, Invoke-DispatchPowerShell, Test-Dispatch
+Export-ModuleMember -Function Get-DispatchVersion, Invoke-DispatchCommand, Invoke-DispatchExecutable, Invoke-DispatchJob, Invoke-DispatchPowerShell, Test-Dispatch

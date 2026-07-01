@@ -12,6 +12,7 @@
         'Get-DispatchVersion',
         'Invoke-DispatchCommand',
         'Invoke-DispatchExecutable',
+        'Invoke-DispatchJob',
         'Invoke-DispatchPowerShell',
         'Test-Dispatch'
     )

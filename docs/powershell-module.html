@@ -56,9 +56,6 @@ Get-DispatchVersion
 Invoke-DispatchPowerShell
 Invoke-DispatchCommand
 Invoke-DispatchExecutable
-</code></pre>
-<p>Planned remaining execution wrapper commands:</p>
-<pre><code>
 Invoke-DispatchJob
 </code></pre>
 <h2>Examples</h2>
@@ -75,16 +72,13 @@ Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp
 Invoke-DispatchPowerShell -Script .\Fix.ps1 -Target PC001 -Transport psrp -CredentialName admin-session
 Invoke-DispatchCommand -Command &quot;whoami&quot; -Target PC001 -Transport winrm
 Invoke-DispatchExecutable -Path C:\Windows\System32\hostname.exe -Target PC001 -Transport psrp
-</code></pre>
-<p>Planned remaining execution wrapper example:</p>
-<pre><code>
-Invoke-DispatchJob -Job .\job.yml
+Invoke-DispatchJob -JobPath .\job.yml -Target PC001 -Plan
 </code></pre>
 <h2>Automation Rule</h2>
-<p>Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. <code>Test-Dispatch</code> calls <code>dispatch.exe doctor --output json</code> and returns the parsed diagnostics object with <code>ExitCode</code> and <code>DispatchPath</code> attached. <code>Get-DispatchVersion</code> calls <code>dispatch.exe version</code> and returns a small object with the product, version, command service, resolved dispatch path, and raw output. <code>Invoke-DispatchPowerShell</code>, <code>Invoke-DispatchCommand</code>, and <code>Invoke-DispatchExecutable</code> call <code>dispatch.exe run ps|cmd|exe ... --output json --no-progress</code>, return the parsed run result with <code>ExitCode</code> and <code>DispatchPath</code> attached, and pass <code>-CredentialName &lt;name&gt;</code> through to the existing CLI <code>--credential &lt;name&gt;</code> endpoint credential reference.</p>
+<p>Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. <code>Test-Dispatch</code> calls <code>dispatch.exe doctor --output json</code> and returns the parsed diagnostics object with <code>ExitCode</code> and <code>DispatchPath</code> attached. <code>Get-DispatchVersion</code> calls <code>dispatch.exe version</code> and returns a small object with the product, version, command service, resolved dispatch path, and raw output. <code>Invoke-DispatchPowerShell</code>, <code>Invoke-DispatchCommand</code>, and <code>Invoke-DispatchExecutable</code> call <code>dispatch.exe run ps|cmd|exe ... --output json --no-progress</code>, return the parsed run result with <code>ExitCode</code> and <code>DispatchPath</code> attached, and pass <code>-CredentialName &lt;name&gt;</code> through to the existing CLI <code>--credential &lt;name&gt;</code> endpoint credential reference. <code>Invoke-DispatchJob</code> calls <code>dispatch.exe apply &lt;job.yml&gt; --output json --no-progress</code>, returns the parsed apply result with <code>ExitCode</code> and <code>DispatchPath</code> attached, and maps job options such as <code>-Target</code>, <code>-Inventory</code>, <code>-CredentialName</code>, <code>-Transport</code>, <code>-Tags</code>, <code>-SkipTags</code>, <code>-Serial</code>, <code>-Plan</code>, <code>-Check</code>, and <code>-Diff</code> onto the matching CLI options.</p>
 <h2>PSCredential Handoff</h2>
 <p><code>provider: pscredential</code> is only valid through the PowerShell module wrapper.</p>
-<p>The current execution wrappers accept <code>-CredentialName &lt;name&gt;</code> and pass it through to Dispatch as <code>--credential &lt;name&gt;</code>. Planned remaining execution wrappers will do the same. For the later <code>provider: pscredential</code> handoff slice, <code>-Credential &lt;PSCredential&gt;</code> is optional.</p>
+<p>The current execution wrappers accept <code>-CredentialName &lt;name&gt;</code> and pass it through to Dispatch as <code>--credential &lt;name&gt;</code>. For the later <code>provider: pscredential</code> handoff slice, <code>-Credential &lt;PSCredential&gt;</code> is optional.</p>
 <p>Current execution wrappers do not yet accept <code>-Credential &lt;PSCredential&gt;</code>. When the later protected handoff slice lands, supplied credentials will look like this:</p>
 <pre><code>
 $cred = Get-Credential CONTOSO\AdminUser

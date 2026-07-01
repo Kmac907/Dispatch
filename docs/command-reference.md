@@ -1,6 +1,6 @@
 # Command Reference
 
-`dispatch.exe` is the canonical command surface. The PowerShell module wraps this executable and does not provide a separate execution engine. Current module support exposes diagnostic/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, and `Invoke-DispatchExecutable` over `dispatch run ps|cmd|exe`; the job wrapper remains planned under Roadmap `7`.
+`dispatch.exe` is the canonical command surface. The PowerShell module wraps this executable and does not provide a separate execution engine. Current module support exposes diagnostic/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` over `dispatch run ps|cmd|exe` and `dispatch apply`.
 
 Status legend:
 

@@ -32,6 +32,10 @@ public sealed class PowerShellModuleTests
               echo {"succeeded":true,"targets":[{"name":"PC001","state":"succeeded"}]}
               exit /b 0
             )
+            if "%1"=="apply" (
+              echo {"succeeded":true,"tasks":[{"name":"Patch","state":"succeeded"}]}
+              exit /b 0
+            )
             echo unexpected arguments: %*
             exit /b 9
             """);
@@ -47,6 +51,7 @@ public sealed class PowerShellModuleTests
                 'Get-DispatchVersion',
                 'Invoke-DispatchCommand',
                 'Invoke-DispatchExecutable',
+                'Invoke-DispatchJob',
                 'Invoke-DispatchPowerShell',
                 'Test-Dispatch'
             )
@@ -123,6 +128,23 @@ public sealed class PowerShellModuleTests
                 throw "Unexpected executable wrapper exit code: $($exeResult.ExitCode)"
             }
 
+            $jobResult = Invoke-DispatchJob `
+                -JobPath 'C:\Jobs\Patch.yml' `
+                -Target PC001 `
+                -Inventory 'C:\Hosts\prod.yml' `
+                -Transport psrp `
+                -CredentialName admin-session `
+                -Plan `
+                -Tags prod `
+                -SkipTags never `
+                -Serial 2
+            if (-not $jobResult.succeeded -or $jobResult.tasks[0].name -ne 'Patch') {
+                throw 'Job wrapper did not parse structured apply output.'
+            }
+            if ($jobResult.ExitCode -ne 0) {
+                throw "Unexpected job wrapper exit code: $($jobResult.ExitCode)"
+            }
+
             $argumentLines = Get-Content -LiteralPath '{{EscapePowerShellSingleQuotedString(argumentLog)}}'
             if (-not ($argumentLines | Where-Object { $_ -like '*run ps*--target PC001*--credential admin-session*--transport psrp*--expected-exit-code 0,3010*--plan*--secret packageSas=prod-package-sas*--output json*--no-progress*-- -Mode Audit*' })) {
                 throw "PowerShell wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
@@ -132,6 +154,9 @@ public sealed class PowerShellModuleTests
             }
             if (-not ($argumentLines | Where-Object { $_ -like '*run exe C:\Tools\tool.exe*--target PC001*--credential admin-session*--transport psrp*--plan*--output json*--no-progress*-- -Mode Audit*' })) {
                 throw "Executable wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*apply C:\Jobs\Patch.yml*--target PC001*--inventory C:\Hosts\prod.yml*--credential admin-session*--transport psrp*--tags prod*--skip-tags never*--serial 2*--plan*--output json*--no-progress*' })) {
+                throw "Job wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
             }
             """);
 
