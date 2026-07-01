@@ -8,7 +8,7 @@ Current support: `packaging/build-module.ps1` assembles a local PowerShell modul
 
 `packaging/install.ps1` installs an already assembled package into a `CurrentUser` or `AllUsers` PowerShell module scope, adds the installed `bin\win-x64` folder to PATH for direct `dispatch` invocation, and validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help` through PATH.
 
-`packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.
+`packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, replaces the same installed module version when rerun, then validates the installed module, bundled executable, exported commands, and `dispatch --help`. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.
 
 ## Module Assembly
 
@@ -43,12 +43,14 @@ The installer:
 1. Creates a temporary checkout when it is not run from an existing source tree.
 2. Build the self-contained `win-x64` executable.
 3. Assemble the PowerShell module.
-4. Install the module and bundled executable.
+4. Install or replace the module and bundled executable for the selected version.
 5. Add the bundled executable folder to PATH unless `-NoPathUpdate` is supplied or `-DestinationRoot` is used for validation.
 6. Validate direct `dispatch --help`, `dispatch version`, module import, and exported commands.
 7. Schedules an external cleanup helper from the temp folder after successful validation unless `-NoCleanup` is supplied.
 
 The installer returns `Cleanup`, `CleanupHelperPath`, `CleanupStatusPath`, and `CleanupError` fields. A cleanup scheduling failure is reported in those fields, but it does not remove the already validated module or turn the successful install into a failed install.
+
+The primary `irm` command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.
 
 ## Existing Checkout
 
@@ -58,7 +60,7 @@ Developer/troubleshooting mode:
 .\packaging\install-from-source.ps1 -NoCleanup
 ```
 
-Use `-SourceRoot <path>` to build from a specific checkout, `-DestinationRoot <path>` for CI/local validation without touching real module paths or PATH, `-Force` to replace the same installed module version, `-NoPathUpdate` to skip PATH changes on a real install, and `-NoRestore` when dependencies are already restored.
+Use `-SourceRoot <path>` to build from a specific checkout, `-DestinationRoot <path>` for CI/local validation without touching real module paths or PATH, `-NoPathUpdate` to skip PATH changes on a real install, and `-NoRestore` when dependencies are already restored. Source installs replace the same installed module version by default so the documented `irm` command can be used for install, repair, and update.
 
 ## Packaged Install
 

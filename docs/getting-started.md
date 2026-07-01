@@ -42,7 +42,7 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 The source installer can also build and install from an existing checkout:
 
 ```powershell
-.\packaging\install-from-source.ps1 -Scope CurrentUser -Force
+.\packaging\install-from-source.ps1 -Scope CurrentUser
 ```
 
 ## Validate Locally From Source

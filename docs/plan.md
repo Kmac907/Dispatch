@@ -679,13 +679,14 @@ The v1 source installer is designed for the GitHub repository `https://github.co
 1. Validate Windows, PowerShell, Git, .NET SDK, and build prerequisites.
 2. Create a temporary source checkout from `https://github.com/Kmac907/Dispatch.git` when it is launched through `irm`.
 3. Build and publish `dispatch.exe` as a single-file self-contained `win-x64` executable.
-4. Assemble and install the PowerShell module folder with the bundled EXE.
+4. Assemble and install or replace the PowerShell module folder with the bundled EXE for the selected version.
 5. Validate the module manifest, bundled EXE, import behavior, and exported commands.
 6. Report the installed module path and the installed `dispatch.exe` version.
 7. Copy or generate a cleanup helper under `$env:TEMP`.
 8. Change the current location outside the temporary source directory.
 9. Invoke the cleanup helper to remove the temporary source checkout. Direct `irm install-from-source.ps1 | iex` execution has no local installer file to remove.
 10. Report cleanup scheduling status without uninstalling the already validated module, and write the async helper's final cleanup success or failure to the returned cleanup status file when cleanup runs.
+11. Be rerunnable from the documented `irm` command by replacing the same installed module version before validating the replacement.
 
 Source cleanup semantics:
 
@@ -704,7 +705,7 @@ Import-Module Dispatch
 Test-Dispatch
 ```
 
-When launched from an existing checkout, `install-from-source.ps1` builds and installs from that checkout and may preserve it with `-NoCleanup`. After a successful `irm` install, only the installed PowerShell module and bundled executable should remain.
+When launched from an existing checkout, `install-from-source.ps1` builds and installs from that checkout, replaces the same installed module version by default, and may preserve it with `-NoCleanup`. After a successful `irm` install, only the installed PowerShell module and bundled executable should remain.
 
 Release convenience packaging:
 
@@ -1521,11 +1522,11 @@ Dependencies:
 Current implementation:
 - `packaging/build-module.ps1` builds the self-contained `win-x64` executable, assembles the module package layout, copies `install.ps1` into the package root, validates the module manifest, imports the assembled module, verifies `Get-DispatchVersion` through the bundled executable, and can create a validated `artifacts\packages\Dispatch-<version>-win-x64.zip` release convenience package with `-CreateZip`.
 - `packaging/install.ps1` installs an already assembled module package into a `CurrentUser` or `AllUsers` PowerShell module scope, supports `-ModulePath`, `-Force`, CI/local-validation `-DestinationRoot`, and `-NoPathUpdate`, adds the installed `bin\win-x64` folder to the appropriate PATH target for normal installs, and validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help` through PATH.
-- `packaging/install-from-source.ps1` builds and installs from an existing checkout, clones the GitHub repository when launched without an existing source tree, invokes the current build/install scripts, validates the installed module, bundled executable, exported commands, `Get-DispatchVersion`, and direct `dispatch --help`, supports `-NoCleanup` for developer/troubleshooting flows and `-NoPathUpdate` for controlled installs, schedules an external temp-folder cleanup helper for temporary cloned source trees, returns PATH and cleanup status details, and reports cleanup scheduling failures without uninstalling or failing an already validated module installation.
+- `packaging/install-from-source.ps1` builds and installs from an existing checkout, clones the GitHub repository when launched without an existing source tree, invokes the current build/install scripts, replaces the same installed module version by default so the documented `irm` command is rerunnable, validates the installed module, bundled executable, exported commands, `Get-DispatchVersion`, and direct `dispatch --help`, supports `-NoCleanup` for developer/troubleshooting flows and `-NoPathUpdate` for controlled installs, schedules an external temp-folder cleanup helper for temporary cloned source trees, returns PATH and cleanup status details, and reports cleanup scheduling failures without uninstalling or failing an already validated module installation.
 - Implemented ZIP packaging uses the optional build switch, creates `artifacts\packages\Dispatch-<version>-win-x64.zip`, includes only the installable `Dispatch\` package root plus `install.ps1`, and validates install/import/version/help behavior after extraction.
 
 Definition of done:
-- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, run direct `dispatch --help`, import the module, and run `Test-Dispatch`.
+- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, rerun the same command over the same installed version, run direct `dispatch --help`, import the module, and run `Test-Dispatch`.
 - Source installation builds the project and module, validates the installation, changes out of the temporary source directory, invokes an external cleanup helper, and cleans up the temporary source tree.
 - Cleanup failure is reported without uninstalling an already validated module.
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.

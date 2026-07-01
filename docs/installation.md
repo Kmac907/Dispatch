@@ -43,12 +43,14 @@ The installer is responsible for:
 1. Creating a temporary source checkout when it is not run from an existing source tree.
 2. Building the self-contained `win-x64` `dispatch.exe`.
 3. Assembling the PowerShell module folder.
-4. Installing the module and bundled executable.
+4. Installing or replacing the module and bundled executable for the selected version.
 5. Adding the bundled executable folder to PATH unless `-NoPathUpdate` is supplied or `-DestinationRoot` is used for validation.
 6. Validating direct `dispatch --help`, `dispatch version`, module import, and exported wrapper commands.
 7. Scheduling an external cleanup helper from the temp folder after validation unless `-NoCleanup` is supplied.
 
 The source installer reports `DispatchPathEntry`, `PathUpdate`, `PathTarget`, `Cleanup`, `CleanupHelperPath`, `CleanupStatusPath`, and `CleanupError` in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.
+
+The primary `irm` command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.
 
 Use script parameters instead of editing the command inline. Current parameters include `-Scope CurrentUser|AllUsers`, `-RepositoryUrl`, `-Ref`, `-SourceRoot`, `-WorkRoot`, `-Configuration`, `-Runtime`, `-DestinationRoot`, `-Force`, `-NoCleanup`, `-NoRestore`, and `-NoPathUpdate`.
 
@@ -134,7 +136,7 @@ Expected result:
 
 ## Upgrade
 
-Run the same source-install command again with `-Force`. It rebuilds from the selected source, replaces the installed module files for the same version, validates the new executable, and fails before reporting success if validation does not pass.
+Run the same source-install command again. It rebuilds from the selected source, replaces the installed module files for the same version, validates the new executable, and fails before reporting success if validation does not pass.
 
 ## Uninstall
 

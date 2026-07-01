@@ -310,9 +310,7 @@ $installArguments = @{
 if (-not [string]::IsNullOrWhiteSpace($DestinationRoot)) {
     $installArguments.DestinationRoot = $DestinationRoot
 }
-if ($Force) {
-    $installArguments.Force = $true
-}
+$installArguments.Force = $true
 if ($NoPathUpdate -or -not [string]::IsNullOrWhiteSpace($DestinationRoot)) {
     $installArguments.NoPathUpdate = $true
 }

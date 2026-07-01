@@ -50,7 +50,7 @@
 <p>Status: Roadmap <code>8</code> local/source/ZIP packaging implemented. Enterprise distribution remains Roadmap <code>13</code>.</p>
 <p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, copies the package installer into the module root, validates the module manifest, imports the assembled module, verifies <code>Get-DispatchVersion</code> through the bundled executable, and can create a validated release ZIP with <code>-CreateZip</code>.</p>
 <p><code>packaging/install.ps1</code> installs an already assembled package into a <code>CurrentUser</code> or <code>AllUsers</code> PowerShell module scope, adds the installed <code>bin\win-x64</code> folder to PATH for direct <code>dispatch</code> invocation, and validates the installed manifest, bundled executable, module import, exported commands, <code>Get-DispatchVersion</code>, and <code>dispatch --help</code> through PATH.</p>
-<p><code>packaging/install-from-source.ps1</code> builds and installs from an existing checkout or clones the GitHub repository for the <code>irm | iex</code> flow, then validates the installed module, bundled executable, exported commands, and <code>dispatch --help</code>. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.</p>
+<p><code>packaging/install-from-source.ps1</code> builds and installs from an existing checkout or clones the GitHub repository for the <code>irm | iex</code> flow, replaces the same installed module version when rerun, then validates the installed module, bundled executable, exported commands, and <code>dispatch --help</code>. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.</p>
 <h2>Module Assembly</h2>
 <p>Build the current module package from an existing checkout:</p>
 <pre><code>
@@ -75,18 +75,19 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <li>Creates a temporary checkout when it is not run from an existing source tree.</li>
 <li>Build the self-contained <code>win-x64</code> executable.</li>
 <li>Assemble the PowerShell module.</li>
-<li>Install the module and bundled executable.</li>
+<li>Install or replace the module and bundled executable for the selected version.</li>
 <li>Add the bundled executable folder to PATH unless <code>-NoPathUpdate</code> is supplied or <code>-DestinationRoot</code> is used for validation.</li>
 <li>Validate direct <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported commands.</li>
 <li>Schedules an external cleanup helper from the temp folder after successful validation unless <code>-NoCleanup</code> is supplied.</li>
 </ol>
 <p>The installer returns <code>Cleanup</code>, <code>CleanupHelperPath</code>, <code>CleanupStatusPath</code>, and <code>CleanupError</code> fields. A cleanup scheduling failure is reported in those fields, but it does not remove the already validated module or turn the successful install into a failed install.</p>
+<p>The primary <code>irm</code> command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.</p>
 <h2>Existing Checkout</h2>
 <p>Developer/troubleshooting mode:</p>
 <pre><code>
 .\packaging\install-from-source.ps1 -NoCleanup
 </code></pre>
-<p>Use <code>-SourceRoot &lt;path&gt;</code> to build from a specific checkout, <code>-DestinationRoot &lt;path&gt;</code> for CI/local validation without touching real module paths or PATH, <code>-Force</code> to replace the same installed module version, <code>-NoPathUpdate</code> to skip PATH changes on a real install, and <code>-NoRestore</code> when dependencies are already restored.</p>
+<p>Use <code>-SourceRoot &lt;path&gt;</code> to build from a specific checkout, <code>-DestinationRoot &lt;path&gt;</code> for CI/local validation without touching real module paths or PATH, <code>-NoPathUpdate</code> to skip PATH changes on a real install, and <code>-NoRestore</code> when dependencies are already restored. Source installs replace the same installed module version by default so the documented <code>irm</code> command can be used for install, repair, and update.</p>
 <h2>Packaged Install</h2>
 <p>Install an already assembled package:</p>
 <pre><code>
