@@ -9,11 +9,9 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $Ref = 'main',
 
-    [ValidateNotNullOrEmpty()]
-    [string] $SourceRoot,
+    [string] $SourceRoot = $null,
 
-    [ValidateNotNullOrEmpty()]
-    [string] $WorkRoot,
+    [string] $WorkRoot = $null,
 
     [ValidateSet('Debug', 'Release')]
     [string] $Configuration = 'Release',
@@ -21,8 +19,7 @@ param(
     [ValidateNotNullOrEmpty()]
     [string] $Runtime = 'win-x64',
 
-    [ValidateNotNullOrEmpty()]
-    [string] $DestinationRoot,
+    [string] $DestinationRoot = $null,
 
     [switch] $Force,
 
