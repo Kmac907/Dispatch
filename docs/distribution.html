@@ -48,10 +48,10 @@
 <h1>Distribution</h1>
 <p>Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.</p>
 <p>Status: partial Roadmap <code>8</code>.</p>
-<p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, validates the module manifest, imports the assembled module, and verifies <code>Get-DispatchVersion</code> through the bundled executable.</p>
+<p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, copies the package installer into the module root, validates the module manifest, imports the assembled module, verifies <code>Get-DispatchVersion</code> through the bundled executable, and can create a validated release ZIP with <code>-CreateZip</code>.</p>
 <p><code>packaging/install.ps1</code> installs an already assembled package into a <code>CurrentUser</code> or <code>AllUsers</code> PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and <code>Get-DispatchVersion</code>.</p>
 <p><code>packaging/install-from-source.ps1</code> builds and installs from an existing checkout or clones the GitHub repository for the <code>irm | iex</code> flow, then validates the installed module, bundled executable, exported commands, and <code>dispatch --help</code>.</p>
-<p>Bootstrap compatibility and ZIP packaging are not implemented yet.</p>
+<p>Bootstrap compatibility and cleanup-helper hardening remain planned Roadmap <code>8</code> work.</p>
 <h2>Module Assembly</h2>
 <p>Build the current module package from an existing checkout:</p>
 <pre><code>
@@ -62,6 +62,7 @@
 artifacts\module\Dispatch\
   Dispatch.psd1
   Dispatch.psm1
+  install.ps1
   bin\win-x64\dispatch.exe
 </code></pre>
 <p>Use <code>-Configuration Debug|Release</code>, <code>-Runtime win-x64</code>, <code>-OutputPath &lt;path&gt;</code>, and <code>-NoRestore</code> when needed for local validation or CI.</p>
@@ -93,10 +94,25 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 </code></pre>
 <p><code>CurrentUser</code> installs into the current shell family's per-user module path. <code>AllUsers</code> installs into the current shell family's machine module path and requires an elevated shell. Use <code>-ModulePath &lt;path&gt;</code> to install a package outside the default <code>artifacts\module\Dispatch</code> location, <code>-Force</code> to replace the same installed module version, and <code>-DestinationRoot &lt;path&gt;</code> only for CI or local validation where the real PowerShell module paths should not be touched.</p>
 <h2>Optional ZIP</h2>
-<p>An optional release convenience artifact may be produced:</p>
+<p>Create the optional release convenience artifact from the same build script:</p>
 <pre><code>
-Dispatch-&lt;version&gt;-win-x64.zip
+.\packaging\build-module.ps1 -CreateZip
 </code></pre>
+<p>The ZIP is written under <code>artifacts\packages\</code> with the module manifest version and runtime in the file name, for example:</p>
+<pre><code>
+artifacts\packages\Dispatch-0.1.0-win-x64.zip
+</code></pre>
+<p>The ZIP has one installable root:</p>
+<pre><code>
+Dispatch\
+  Dispatch.psd1
+  Dispatch.psm1
+  install.ps1
+  bin\win-x64\dispatch.exe
+</code></pre>
+<p>The build script creates this package from a clean staging folder. Source files, tests, <code>.git</code>, <code>.codex</code>, workflow files, intermediate <code>bin</code> / <code>obj</code>, and publish-only output are not included.</p>
+<p>When <code>-CreateZip</code> is used, the script extracts the ZIP to a temporary folder, runs the extracted <code>Dispatch\install.ps1</code> into a temporary module root, imports the installed module, verifies exported commands and <code>Get-DispatchVersion</code>, and checks the bundled <code>dispatch.exe --help</code> before returning success.</p>
+<p>Use <code>-PackageOutputPath &lt;path&gt;</code> to place the ZIP somewhere other than <code>artifacts\packages</code>. CI/CD can upload the generated ZIP to GitHub Releases, but release upload remains outside the local build script.</p>
 <h2>Not V1</h2>
 <ul>
 <li>MSI installer.</li>

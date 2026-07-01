@@ -81,6 +81,23 @@ Use an elevated shell for machine-wide install:
 
 Use `-Force` to replace the same installed module version. Use `-ModulePath <path>` when installing an assembled package outside the default `artifacts\module\Dispatch` folder. `-DestinationRoot <path>` is available for CI or local validation when the real PowerShell module paths should not be touched.
 
+## ZIP Package Install
+
+Create the optional ZIP from a checkout:
+
+```powershell
+.\packaging\build-module.ps1 -CreateZip
+```
+
+The generated file is written under `artifacts\packages\` as `Dispatch-<version>-win-x64.zip`. Extract it and run the included installer from the extracted `Dispatch\` package root:
+
+```powershell
+Expand-Archive .\artifacts\packages\Dispatch-0.1.0-win-x64.zip -DestinationPath .\artifacts\zip-install -Force
+.\artifacts\zip-install\Dispatch\install.ps1 -Scope CurrentUser -Force
+```
+
+The ZIP contains only the installable package root: `Dispatch.psd1`, `Dispatch.psm1`, `install.ps1`, and `bin\win-x64\dispatch.exe`. It does not contain source files, tests, workflow files, `.git`, `.codex`, or publish intermediates.
+
 Security notes:
 
 - Review the installer source before running an `irm | iex` command in controlled environments.

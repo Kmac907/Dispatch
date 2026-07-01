@@ -26,7 +26,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `dispatch hosts vars` local effective host metadata inspection.
 - `dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml` local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, host inventory schema availability, credential provider availability, run-history layout checks, and PsExec local policy/EULA diagnostics.
 - PowerShell module import with `Test-Dispatch`, `Get-DispatchVersion`, `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` wrappers over the canonical CLI, including `-CredentialName` reference selection and protected `PSCredential` handoff for `provider: pscredential`.
-- `packaging/build-module.ps1` assembles a local module folder with bundled self-contained `bin\win-x64\dispatch.exe` and validates module import/version resolution through that bundled executable.
+- `packaging/build-module.ps1` assembles a local module folder with bundled self-contained `bin\win-x64\dispatch.exe`, validates module import/version resolution through that bundled executable, and can create a validated `artifacts\packages\Dispatch-<version>-win-x64.zip` release convenience package with `-CreateZip`.
 - `packaging/install.ps1` installs an already assembled module package into `CurrentUser` or `AllUsers` PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and version resolution.
 - `packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` source-install flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
@@ -46,11 +46,11 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - Credential handoff is not complete for every entry point; PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 - Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is current `dispatch run ps ... --secret name=reference` plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.
 - Raw `stdout.txt`, raw `stderr.txt`, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.
-- Roadmap `8` packaging is partial: source install and local assembled-package install exist, while bootstrap compatibility refinements, cleanup-helper hardening, and optional ZIP artifact creation remain planned.
+- Roadmap `8` packaging is partial: source install, local assembled-package install, and optional ZIP artifact creation exist, while bootstrap compatibility refinements and cleanup-helper hardening remain planned.
 
 ## Planned Next
 
-- Finish Roadmap `8` packaging with bootstrap compatibility and optional ZIP artifact creation.
+- Finish Roadmap `8` packaging with bootstrap compatibility and cleanup-helper hardening.
 - Implement script secret handoff in staged slices: plan/dry-run validation first, then safe transport-specific parameter binding.
 
 ## Deferred Or Out Of Scope For V1

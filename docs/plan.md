@@ -1520,11 +1520,11 @@ Dependencies:
 - 7.
 
 Current implementation:
-- `packaging/build-module.ps1` builds the self-contained `win-x64` executable, assembles the module package layout, validates the module manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable.
+- `packaging/build-module.ps1` builds the self-contained `win-x64` executable, assembles the module package layout, copies `install.ps1` into the package root, validates the module manifest, imports the assembled module, verifies `Get-DispatchVersion` through the bundled executable, and can create a validated `artifacts\packages\Dispatch-<version>-win-x64.zip` release convenience package with `-CreateZip`.
 - `packaging/install.ps1` installs an already assembled module package into a `CurrentUser` or `AllUsers` PowerShell module scope, supports `-ModulePath`, `-Force`, and CI/local-validation `-DestinationRoot`, and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
 - `packaging/install-from-source.ps1` builds and installs from an existing checkout, clones the GitHub repository when launched without an existing source tree, invokes the current build/install scripts, validates the installed module, bundled executable, exported commands, `Get-DispatchVersion`, and `dispatch --help`, supports `-NoCleanup` for developer/troubleshooting flows, and schedules cleanup of temporary cloned source trees.
-- Bootstrap compatibility, cleanup-helper hardening, and optional ZIP artifact creation remain planned Roadmap `8` work.
-- Planned ZIP packaging should use an optional build switch, create `artifacts\packages\Dispatch-<version>-win-x64.zip`, include only the installable `Dispatch\` package root plus `install.ps1`, and validate install/import/version/help behavior after extraction.
+- Bootstrap compatibility and cleanup-helper hardening remain planned Roadmap `8` work.
+- Implemented ZIP packaging uses the optional build switch, creates `artifacts\packages\Dispatch-<version>-win-x64.zip`, includes only the installable `Dispatch\` package root plus `install.ps1`, and validates install/import/version/help behavior after extraction.
 
 Definition of done:
 - A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, import the module, and run `dispatch --help` plus `Test-Dispatch`.

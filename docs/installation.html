@@ -106,6 +106,17 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 .\packaging\install.ps1 -Scope AllUsers
 </code></pre>
 <p>Use <code>-Force</code> to replace the same installed module version. Use <code>-ModulePath &lt;path&gt;</code> when installing an assembled package outside the default <code>artifacts\module\Dispatch</code> folder. <code>-DestinationRoot &lt;path&gt;</code> is available for CI or local validation when the real PowerShell module paths should not be touched.</p>
+<h2>ZIP Package Install</h2>
+<p>Create the optional ZIP from a checkout:</p>
+<pre><code>
+.\packaging\build-module.ps1 -CreateZip
+</code></pre>
+<p>The generated file is written under <code>artifacts\packages\</code> as <code>Dispatch-&lt;version&gt;-win-x64.zip</code>. Extract it and run the included installer from the extracted <code>Dispatch\</code> package root:</p>
+<pre><code>
+Expand-Archive .\artifacts\packages\Dispatch-0.1.0-win-x64.zip -DestinationPath .\artifacts\zip-install -Force
+.\artifacts\zip-install\Dispatch\install.ps1 -Scope CurrentUser -Force
+</code></pre>
+<p>The ZIP contains only the installable package root: <code>Dispatch.psd1</code>, <code>Dispatch.psm1</code>, <code>install.ps1</code>, and <code>bin\win-x64\dispatch.exe</code>. It does not contain source files, tests, workflow files, <code>.git</code>, <code>.codex</code>, or publish intermediates.</p>
 <p>Security notes:</p>
 <ul>
 <li>Review the installer source before running an <code>irm | iex</code> command in controlled environments.</li>

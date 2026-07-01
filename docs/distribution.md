@@ -4,13 +4,13 @@ Distribution describes how operators will install Dispatch once the v1 package s
 
 Status: partial Roadmap `8`.
 
-Current support: `packaging/build-module.ps1` assembles a local PowerShell module folder with a bundled self-contained `win-x64` `dispatch.exe` at `bin\win-x64\dispatch.exe`, validates the module manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable.
+Current support: `packaging/build-module.ps1` assembles a local PowerShell module folder with a bundled self-contained `win-x64` `dispatch.exe` at `bin\win-x64\dispatch.exe`, copies the package installer into the module root, validates the module manifest, imports the assembled module, verifies `Get-DispatchVersion` through the bundled executable, and can create a validated release ZIP with `-CreateZip`.
 
 `packaging/install.ps1` installs an already assembled package into a `CurrentUser` or `AllUsers` PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
 
 `packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`.
 
-Bootstrap compatibility and ZIP packaging are not implemented yet.
+Bootstrap compatibility and cleanup-helper hardening remain planned Roadmap `8` work.
 
 ## Module Assembly
 
@@ -26,6 +26,7 @@ The default output is:
 artifacts\module\Dispatch\
   Dispatch.psd1
   Dispatch.psm1
+  install.ps1
   bin\win-x64\dispatch.exe
 ```
 
@@ -71,11 +72,33 @@ Install an already assembled package:
 
 ## Optional ZIP
 
-An optional release convenience artifact may be produced:
+Create the optional release convenience artifact from the same build script:
+
+```powershell
+.\packaging\build-module.ps1 -CreateZip
+```
+
+The ZIP is written under `artifacts\packages\` with the module manifest version and runtime in the file name, for example:
 
 ```text
-Dispatch-<version>-win-x64.zip
+artifacts\packages\Dispatch-0.1.0-win-x64.zip
 ```
+
+The ZIP has one installable root:
+
+```text
+Dispatch\
+  Dispatch.psd1
+  Dispatch.psm1
+  install.ps1
+  bin\win-x64\dispatch.exe
+```
+
+The build script creates this package from a clean staging folder. Source files, tests, `.git`, `.codex`, workflow files, intermediate `bin` / `obj`, and publish-only output are not included.
+
+When `-CreateZip` is used, the script extracts the ZIP to a temporary folder, runs the extracted `Dispatch\install.ps1` into a temporary module root, imports the installed module, verifies exported commands and `Get-DispatchVersion`, and checks the bundled `dispatch.exe --help` before returning success.
+
+Use `-PackageOutputPath <path>` to place the ZIP somewhere other than `artifacts\packages`. CI/CD can upload the generated ZIP to GitHub Releases, but release upload remains outside the local build script.
 
 ## Not V1
 
