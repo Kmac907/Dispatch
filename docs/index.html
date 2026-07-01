@@ -95,11 +95,11 @@
       <div class="split">
         <div>
           <h2>Run From Source Today</h2>
-          <p class="section-intro">The current repo builds and runs directly with the .NET SDK. <code>packaging/build-module.ps1</code> can assemble the local module with bundled <code>bin\win-x64\dispatch.exe</code>. The GitHub <code>irm</code> source installer is planned under the v1 packaging roadmap and is not implemented yet.</p>
+          <p class="section-intro">The current repo builds and runs directly with the .NET SDK. <code>packaging/install-from-source.ps1</code> can build, install, and validate from a checkout or clone through the GitHub <code>irm</code> source-install flow.</p>
           <ul class="status-list">
             <li>Use <code>dotnet run</code> for current source execution.</li>
             <li>Use <code>doctor</code> to check local prerequisites.</li>
-            <li>Use direct <code>dispatch</code> after the planned installer places it on the path.</li>
+            <li>Use <code>Import-Module Dispatch</code> after installation to load the wrapper module and bundled executable.</li>
           </ul>
           <div class="hero-actions">
             <a class="button" href="installation.html">Installation Guide</a>

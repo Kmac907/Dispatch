@@ -8,7 +8,9 @@ Current support: `packaging/build-module.ps1` assembles a local PowerShell modul
 
 `packaging/install.ps1` installs an already assembled package into a `CurrentUser` or `AllUsers` PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
 
-The source installer and ZIP packaging are not implemented yet.
+`packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`.
+
+Bootstrap compatibility and ZIP packaging are not implemented yet.
 
 ## Module Assembly
 
@@ -31,28 +33,30 @@ Use `-Configuration Debug|Release`, `-Runtime win-x64`, `-OutputPath <path>`, an
 
 ## Source Install
 
-Planned primary v1 flow:
+Primary v1 flow:
 
 ```powershell
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
-The installer should:
+The installer:
 
-1. Create a temporary checkout.
+1. Creates a temporary checkout when it is not run from an existing source tree.
 2. Build the self-contained `win-x64` executable.
 3. Assemble the PowerShell module.
 4. Install the module and bundled executable.
 5. Validate `dispatch --help`, `dispatch version`, module import, and exported commands.
-6. Clean up temporary source files after successful validation.
+6. Schedules cleanup of the temporary source checkout after successful validation unless `-NoCleanup` is supplied.
 
 ## Existing Checkout
 
-Planned developer/troubleshooting mode:
+Developer/troubleshooting mode:
 
 ```powershell
 .\packaging\install-from-source.ps1 -NoCleanup
 ```
+
+Use `-SourceRoot <path>` to build from a specific checkout, `-DestinationRoot <path>` for CI/local validation without touching real module paths, `-Force` to replace the same installed module version, and `-NoRestore` when dependencies are already restored.
 
 ## Packaged Install
 

@@ -46,15 +46,19 @@
 </aside>
   <article class="doc-content">
 <h1>Installation</h1>
-<p>Dispatch can currently be built and run from the repository source. Roadmap item <code>8</code> now includes local package installation for an already assembled module package; the GitHub <code>irm</code> source installer is still planned.</p>
+<p>Dispatch can currently be built and run from the repository source. Roadmap item <code>8</code> now includes source installation and local package installation for an already assembled module package.</p>
 <p>Current local module assembly and install:</p>
+<pre><code>
+.\packaging\install-from-source.ps1 -Scope CurrentUser -Force
+</code></pre>
+<p>To run the lower-level package assembly and install steps separately:</p>
 <pre><code>
 .\packaging\build-module.ps1
 .\packaging\install.ps1 -Scope CurrentUser -Force
 Import-Module Dispatch -Force
 Get-DispatchVersion
 </code></pre>
-<p>This produces an assembled module under <code>artifacts\module\Dispatch</code> with the bundled executable at <code>bin\win-x64\dispatch.exe</code>, copies it into a versioned <code>Dispatch\&lt;version&gt;</code> folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, and <code>Get-DispatchVersion</code>.</p>
+<p>The source installer builds the self-contained executable, assembles the module under <code>artifacts\module\Dispatch</code>, copies it into a versioned <code>Dispatch\&lt;version&gt;</code> folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, <code>Get-DispatchVersion</code>, and <code>dispatch --help</code>.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
@@ -77,22 +81,21 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 <pre><code>
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\Fix.ps1 --target PC001 --transport psrp --plan
 </code></pre>
-<h2>Planned Source Install</h2>
-<p>The planned v1 operator path will download and run the source installer from GitHub:</p>
+<h2>Source Install</h2>
+<p>The v1 operator path downloads and runs the source installer from GitHub:</p>
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
-<p>This command is not available until <code>packaging/install-from-source.ps1</code> is implemented.</p>
 <p>The installer is responsible for:</p>
 <ol>
-<li>Creating a temporary source checkout.</li>
+<li>Creating a temporary source checkout when it is not run from an existing source tree.</li>
 <li>Building the self-contained <code>win-x64</code> <code>dispatch.exe</code>.</li>
 <li>Assembling the PowerShell module folder.</li>
 <li>Installing the module and bundled executable.</li>
 <li>Validating <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported wrapper commands.</li>
-<li>Cleaning up the temporary source checkout after validation.</li>
+<li>Scheduling cleanup of the temporary source checkout after validation unless <code>-NoCleanup</code> is supplied.</li>
 </ol>
-<p>Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.</p>
+<p>Use script parameters instead of editing the command inline. Current parameters include <code>-Scope CurrentUser|AllUsers</code>, <code>-RepositoryUrl</code>, <code>-Ref</code>, <code>-SourceRoot</code>, <code>-WorkRoot</code>, <code>-Configuration</code>, <code>-Runtime</code>, <code>-DestinationRoot</code>, <code>-Force</code>, <code>-NoCleanup</code>, and <code>-NoRestore</code>.</p>
 <h2>Current Package Install</h2>
 <p>After <code>.\packaging\build-module.ps1</code> assembles the package, install it locally:</p>
 <pre><code>
@@ -109,8 +112,8 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <li>Use an elevated shell only when installing for all users.</li>
 <li>The installer should not write endpoint passwords or credential secrets to the command line, logs, or repository checkout.</li>
 </ul>
-<h2>Planned Developer Install From Existing Checkout</h2>
-<p>After <code>packaging/install-from-source.ps1</code> exists, this mode will build and install from an existing checkout while preserving the source tree:</p>
+<h2>Developer Install From Existing Checkout</h2>
+<p>This mode builds and installs from an existing checkout while preserving the source tree:</p>
 <pre><code>
 git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
@@ -128,7 +131,7 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 <li>After the module wrapper and installer are implemented, <code>Import-Module Dispatch</code> and <code>Get-Command -Module Dispatch</code> should validate the installed wrapper commands.</li>
 </ul>
 <h2>Upgrade</h2>
-<p>For the current local package installer, run <code>.\packaging\build-module.ps1</code> and then <code>.\packaging\install.ps1 -Scope CurrentUser -Force</code> again. After the source installer is implemented, run the same source-install command again; it should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.</p>
+<p>Run the same source-install command again with <code>-Force</code>. It rebuilds from the selected source, replaces the installed module files for the same version, validates the new executable, and fails before reporting success if validation does not pass.</p>
 <h2>Uninstall</h2>
 <p>Remove the installed Dispatch module folder from the selected PowerShell module path and remove any machine-wide config or run history only when that data is no longer needed:</p>
 <pre><code>

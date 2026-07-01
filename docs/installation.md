@@ -1,8 +1,14 @@
 # Installation
 
-Dispatch can currently be built and run from the repository source. Roadmap item `8` now includes local package installation for an already assembled module package; the GitHub `irm` source installer is still planned.
+Dispatch can currently be built and run from the repository source. Roadmap item `8` now includes source installation and local package installation for an already assembled module package.
 
 Current local module assembly and install:
+
+```powershell
+.\packaging\install-from-source.ps1 -Scope CurrentUser -Force
+```
+
+To run the lower-level package assembly and install steps separately:
 
 ```powershell
 .\packaging\build-module.ps1
@@ -11,7 +17,7 @@ Import-Module Dispatch -Force
 Get-DispatchVersion
 ```
 
-This produces an assembled module under `artifacts\module\Dispatch` with the bundled executable at `bin\win-x64\dispatch.exe`, copies it into a versioned `Dispatch\<version>` folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
+The source installer builds the self-contained executable, assembles the module under `artifacts\module\Dispatch`, copies it into a versioned `Dispatch\<version>` folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help`.
 
 ## Prerequisites
 
@@ -40,26 +46,24 @@ Run a plan from source:
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- run ps .\Fix.ps1 --target PC001 --transport psrp --plan
 ```
 
-## Planned Source Install
+## Source Install
 
-The planned v1 operator path will download and run the source installer from GitHub:
+The v1 operator path downloads and runs the source installer from GitHub:
 
 ```powershell
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
-This command is not available until `packaging/install-from-source.ps1` is implemented.
-
 The installer is responsible for:
 
-1. Creating a temporary source checkout.
+1. Creating a temporary source checkout when it is not run from an existing source tree.
 2. Building the self-contained `win-x64` `dispatch.exe`.
 3. Assembling the PowerShell module folder.
 4. Installing the module and bundled executable.
 5. Validating `dispatch --help`, `dispatch version`, module import, and exported wrapper commands.
-6. Cleaning up the temporary source checkout after validation.
+6. Scheduling cleanup of the temporary source checkout after validation unless `-NoCleanup` is supplied.
 
-Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.
+Use script parameters instead of editing the command inline. Current parameters include `-Scope CurrentUser|AllUsers`, `-RepositoryUrl`, `-Ref`, `-SourceRoot`, `-WorkRoot`, `-Configuration`, `-Runtime`, `-DestinationRoot`, `-Force`, `-NoCleanup`, and `-NoRestore`.
 
 ## Current Package Install
 
@@ -83,9 +87,9 @@ Security notes:
 - Use an elevated shell only when installing for all users.
 - The installer should not write endpoint passwords or credential secrets to the command line, logs, or repository checkout.
 
-## Planned Developer Install From Existing Checkout
+## Developer Install From Existing Checkout
 
-After `packaging/install-from-source.ps1` exists, this mode will build and install from an existing checkout while preserving the source tree:
+This mode builds and installs from an existing checkout while preserving the source tree:
 
 ```powershell
 git clone https://github.com/Kmac907/Dispatch.git
@@ -108,7 +112,7 @@ Expected result:
 
 ## Upgrade
 
-For the current local package installer, run `.\packaging\build-module.ps1` and then `.\packaging\install.ps1 -Scope CurrentUser -Force` again. After the source installer is implemented, run the same source-install command again; it should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.
+Run the same source-install command again with `-Force`. It rebuilds from the selected source, replaces the installed module files for the same version, validates the new executable, and fails before reporting success if validation does not pass.
 
 ## Uninstall
 

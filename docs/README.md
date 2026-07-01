@@ -9,7 +9,7 @@ Endpoint credentials and script secret handoff are separate models. `--credentia
 ## Start Here
 
 - [Getting Started](getting-started.html) - first install, validation, and run.
-- [Installation](installation.html) - current source execution and local package install plus planned source-install behavior.
+- [Installation](installation.html) - current source execution, source install, and local package install behavior.
 - [Concepts](concepts.html) - jobs, targets, inventories, transports, plans, runs, results, logs, and artifacts.
 - [Command Reference](command-reference.html) - command tree, options, examples, and implementation status.
 - [Running Scripts](running-scripts.html) - day-to-day `dispatch run ps` workflows.

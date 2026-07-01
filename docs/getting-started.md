@@ -23,7 +23,17 @@ dotnet test .\Dispatch.sln
 dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help
 ```
 
-The planned v1 source installer will add `packaging/install-from-source.ps1` for GitHub `irm` installation, module installation, validation, and cleanup. That script is not implemented in the current repository yet.
+The current source installer can build, install, and validate from a checkout:
+
+```powershell
+.\packaging\install-from-source.ps1 -Scope CurrentUser -Force
+```
+
+The GitHub `irm` flow is also available and clones the repository before building and installing:
+
+```powershell
+irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+```
 
 Current module assembly from a checkout is available:
 
