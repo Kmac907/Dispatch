@@ -1282,7 +1282,7 @@ Current implementation boundary:
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
 - The target model is the global YAML `C:\ProgramData\Dispatch\config.yml` credential catalog described in `docs/credential-store-plan.md`; the current `references.json` catalog is not the long-term canonical credential catalog.
-- PSCredential PowerShell-wrapper handoff remains tied to Roadmap `7` because Dispatch does not yet have the wrapper entry point.
+- PSCredential PowerShell-wrapper handoff remains tied to Roadmap `7` because the protected module handoff, supplied `-Credential <PSCredential>` path, and module-side `Get-Credential` prompt path are not implemented yet.
 - PsExec explicit credential handoff remains intentionally blocked by the current no-plaintext `psexec -u/-p` boundary and is not the next valid `6.4` slice.
 - Job-file credential validation depends on Roadmap `6.5` introducing the YAML job parser.
 
