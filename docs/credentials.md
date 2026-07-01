@@ -74,7 +74,7 @@ Credential metadata lookup always comes from the loaded Dispatch config.
 | Provider | Purpose | Enrollment behavior |
 | --- | --- | --- |
 | `prompt` | Prompt securely at runtime. | No secret enrollment; `creds add` reports that runtime prompting will be used. |
-| `pscredential` | PowerShell module wrapper handoff only. | Invalid from direct `dispatch.exe`; the wrapper uses supplied `-Credential` or prompts with `Get-Credential` when `-Credential` is omitted. |
+| `pscredential` | PowerShell module wrapper handoff only. | Invalid from direct `dispatch.exe`; planned wrapper handoff uses supplied `-Credential` or prompts with `Get-Credential` when `-Credential` is omitted. |
 | `dpapi_file` | Local Windows DPAPI-protected file. | Prompts, confirms, protects with DPAPI, writes the configured file, and restricts file ACLs to the current Windows user, local Administrators, and LocalSystem. |
 | `windows_credential_manager` | Windows Credential Manager generic credential. | Prompts, confirms, and writes the configured target. |
 | `azure_keyvault` | Azure Key Vault secret retrieval for the endpoint password. | Validates Key Vault access and secret readability; no local password storage. |

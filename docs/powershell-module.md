@@ -57,7 +57,7 @@ Wrapper commands rely on structured output or result files. They do not parse ri
 
 `Invoke-DispatchPowerShell` currently accepts `-CredentialName <name>` and passes it through to Dispatch as `--credential <name>`. Planned remaining execution wrappers will do the same. For the later `provider: pscredential` handoff slice, `-Credential <PSCredential>` is optional.
 
-If `-Credential` is supplied, the module uses that live object:
+Current `Invoke-DispatchPowerShell` does not yet accept `-Credential <PSCredential>`. When the later protected handoff slice lands, supplied credentials will look like this:
 
 ```powershell
 $cred = Get-Credential CONTOSO\AdminUser
@@ -69,7 +69,7 @@ Invoke-DispatchPowerShell `
   -Credential $cred
 ```
 
-If `-Credential` is omitted, the module prompts with `Get-Credential`, using the configured username when present:
+When that later handoff slice lands and `-Credential` is omitted for a `pscredential` reference, the module will prompt with `Get-Credential`, using the configured username when present:
 
 ```powershell
 Invoke-DispatchPowerShell `
@@ -78,7 +78,7 @@ Invoke-DispatchPowerShell `
   -CredentialName admin-session
 ```
 
-The wrapper must hand the credential to Dispatch without putting the password on a command line or writing it to config, job files, inventory files, logs, traces, results, or artifacts. Direct `dispatch.exe` must reject `pscredential` unless a compatible protected wrapper handoff is present.
+That future wrapper handoff must pass the credential to Dispatch without putting the password on a command line or writing it to config, job files, inventory files, logs, traces, results, or artifacts. Direct `dispatch.exe` must reject `pscredential` unless a compatible protected wrapper handoff is present.
 
 `provider: prompt` remains different: Dispatch owns that secure runtime prompt. When the module selects a `prompt` reference, the module should not call `Get-Credential`; it should let Dispatch prompt normally.
 
