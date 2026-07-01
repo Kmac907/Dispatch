@@ -47,12 +47,31 @@ function Invoke-DispatchNative {
     )
 
     $resolvedPath = Resolve-DispatchExecutable -DispatchPath $DispatchPath
+    $nativeArguments = ($ArgumentList | ForEach-Object { ConvertTo-DispatchNativeArgument -Argument $_ }) -join ' '
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $resolvedPath
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
-    $startInfo.Arguments = ($ArgumentList | ForEach-Object { ConvertTo-DispatchNativeArgument -Argument $_ }) -join ' '
+
+    if ($resolvedPath -match '\.(bat|cmd)$') {
+        $commandProcessor = $env:ComSpec
+        if ([string]::IsNullOrWhiteSpace($commandProcessor) -or -not (Test-Path -LiteralPath $commandProcessor -PathType Leaf)) {
+            $commandProcessor = Join-Path -Path $env:SystemRoot -ChildPath 'System32\cmd.exe'
+        }
+
+        $startInfo.FileName = $commandProcessor
+        $nativeCommand = ConvertTo-DispatchNativeArgument -Argument $resolvedPath
+        if ([string]::IsNullOrWhiteSpace($nativeArguments)) {
+            $startInfo.Arguments = "/d /s /c $nativeCommand"
+        }
+        else {
+            $startInfo.Arguments = "/d /s /c ""$nativeCommand $nativeArguments"""
+        }
+    }
+    else {
+        $startInfo.FileName = $resolvedPath
+        $startInfo.Arguments = $nativeArguments
+    }
 
     $process = [System.Diagnostics.Process]::new()
     $process.StartInfo = $startInfo
