@@ -1504,6 +1504,12 @@ Scope:
 - Use a cleanup helper outside the source tree to remove the temporary source checkout and downloaded installer copy after successful source installation.
 - Support `-NoCleanup` for developers and troubleshooting.
 - Create `Dispatch-<version>-win-x64.zip` as an optional release convenience artifact.
+- Add ZIP creation as explicit release packaging behavior, preferably through an optional `packaging\build-module.ps1 -CreateZip` switch so normal local builds still only assemble the module folder.
+- Write ZIP artifacts under `artifacts\packages\`, using the module manifest version and runtime in the file name, for example `artifacts\packages\Dispatch-0.1.0-win-x64.zip`.
+- Package the ZIP with a single installable `Dispatch\` root that contains `Dispatch.psd1`, `Dispatch.psm1`, `bin\win-x64\dispatch.exe`, and `install.ps1`.
+- Exclude source files, tests, `.git`, `.codex`, workflow files, intermediate `bin` / `obj`, and publish-only build output from the ZIP.
+- Validate ZIP creation by extracting it to a temporary folder, running `install.ps1` against the extracted `Dispatch\` package into a temporary module root, importing the installed module, verifying exported commands, running `Get-DispatchVersion`, and checking the bundled `dispatch.exe --help`.
+- Keep release upload separate from ZIP creation: CI/CD may upload the generated ZIP to GitHub Releases, but Roadmap `8` owns producing and validating the artifact, not requiring a release-publishing service.
 
 Non-goals:
 - No MSI installer.
@@ -1518,6 +1524,7 @@ Current implementation:
 - `packaging/install.ps1` installs an already assembled module package into a `CurrentUser` or `AllUsers` PowerShell module scope, supports `-ModulePath`, `-Force`, and CI/local-validation `-DestinationRoot`, and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
 - `packaging/install-from-source.ps1` builds and installs from an existing checkout, clones the GitHub repository when launched without an existing source tree, invokes the current build/install scripts, validates the installed module, bundled executable, exported commands, `Get-DispatchVersion`, and `dispatch --help`, supports `-NoCleanup` for developer/troubleshooting flows, and schedules cleanup of temporary cloned source trees.
 - Bootstrap compatibility, cleanup-helper hardening, and optional ZIP artifact creation remain planned Roadmap `8` work.
+- Planned ZIP packaging should use an optional build switch, create `artifacts\packages\Dispatch-<version>-win-x64.zip`, include only the installable `Dispatch\` package root plus `install.ps1`, and validate install/import/version/help behavior after extraction.
 
 Definition of done:
 - A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, import the module, and run `dispatch --help` plus `Test-Dispatch`.
@@ -1525,6 +1532,7 @@ Definition of done:
 - Cleanup failure is reported without uninstalling an already validated module.
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.
 - Pipeline or build script can create the optional ZIP without manual assembly.
+- ZIP validation proves the extracted package can install through `install.ps1` without source checkout files or the .NET SDK on the consuming workstation.
 
 ### Remaining Transport And Post-MVP Roadmap
 
