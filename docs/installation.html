@@ -58,7 +58,7 @@
 Import-Module Dispatch -Force
 Get-DispatchVersion
 </code></pre>
-<p>The source installer builds the self-contained executable, assembles the module under <code>artifacts\module\Dispatch</code>, copies it into a versioned <code>Dispatch\&lt;version&gt;</code> folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, <code>Get-DispatchVersion</code>, and <code>dispatch --help</code>.</p>
+<p>The source installer builds the self-contained executable, assembles the module under <code>artifacts\module\Dispatch</code>, copies it into a versioned <code>Dispatch\&lt;version&gt;</code> folder under the selected PowerShell module root, validates the installed manifest, bundled executable, module import, exported commands, <code>Get-DispatchVersion</code>, and <code>dispatch --help</code>, and reports cleanup status for temporary source checkouts.</p>
 <h2>Prerequisites</h2>
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
@@ -98,8 +98,9 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/bootstrap-
 <li>Assembling the PowerShell module folder.</li>
 <li>Installing the module and bundled executable.</li>
 <li>Validating <code>dispatch --help</code>, <code>dispatch version</code>, module import, and exported wrapper commands.</li>
-<li>Scheduling cleanup of the temporary source checkout after validation unless <code>-NoCleanup</code> is supplied.</li>
+<li>Scheduling an external cleanup helper from the temp folder after validation unless <code>-NoCleanup</code> is supplied.</li>
 </ol>
+<p>The source installer reports <code>Cleanup</code>, <code>CleanupHelperPath</code>, <code>CleanupStatusPath</code>, and <code>CleanupError</code> in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.</p>
 <p>Use script parameters instead of editing the command inline. Current parameters include <code>-Scope CurrentUser|AllUsers</code>, <code>-RepositoryUrl</code>, <code>-Ref</code>, <code>-SourceRoot</code>, <code>-WorkRoot</code>, <code>-Configuration</code>, <code>-Runtime</code>, <code>-DestinationRoot</code>, <code>-Force</code>, <code>-NoCleanup</code>, and <code>-NoRestore</code>. The compatibility bootstrap wrapper accepts the same parameters and forwards them to <code>install-from-source.ps1</code>.</p>
 <h2>Current Package Install</h2>
 <p>After <code>.\packaging\build-module.ps1</code> assembles the package, install it locally:</p>

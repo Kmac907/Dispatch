@@ -56,6 +56,49 @@ function Resolve-FullPath {
     [System.IO.Path]::GetFullPath((Join-Path -Path (Get-Location) -ChildPath $Path))
 }
 
+function New-SourceCleanupResult {
+    param(
+        [Parameter(Mandatory)]
+        [ValidateSet('skipped', 'scheduled', 'scheduleFailed')]
+        [string] $Status,
+
+        [string] $HelperPath = $null,
+
+        [string] $StatusPath = $null,
+
+        [string] $ErrorMessage = $null
+    )
+
+    [pscustomobject]@{
+        Status = $Status
+        HelperPath = $HelperPath
+        StatusPath = $StatusPath
+        ErrorMessage = $ErrorMessage
+    }
+}
+
+function Resolve-SafeCleanupTarget {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    $resolved = Resolve-FullPath -Path $Path
+    $root = [System.IO.Path]::GetPathRoot($resolved)
+    $trimChars = [char[]]@(
+        [System.IO.Path]::DirectorySeparatorChar,
+        [System.IO.Path]::AltDirectorySeparatorChar
+    )
+    $normalized = $resolved.TrimEnd($trimChars)
+    $normalizedRoot = $root.TrimEnd($trimChars)
+
+    if ([string]::IsNullOrWhiteSpace($normalized) -or $normalized.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to schedule cleanup for unsafe path '$resolved'."
+    }
+
+    $resolved
+}
+
 function Test-DispatchSourceRoot {
     param(
         [Parameter(Mandatory)]
@@ -130,36 +173,111 @@ function Start-SourceCleanup {
         [string] $Path
     )
 
-    if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
-        return $null
+    $helperPath = $null
+    $statusPath = $null
+
+    try {
+        if (-not (Test-Path -LiteralPath $Path -PathType Container)) {
+            return New-SourceCleanupResult -Status 'skipped' -ErrorMessage 'Temporary source path was already removed.'
+        }
+
+        $resolvedPath = Resolve-SafeCleanupTarget -Path $Path
+        $helperRoot = Resolve-FullPath -Path ([System.IO.Path]::GetTempPath())
+        $pathPrefix = $resolvedPath.TrimEnd([char[]]@(
+            [System.IO.Path]::DirectorySeparatorChar,
+            [System.IO.Path]::AltDirectorySeparatorChar
+        )) + [System.IO.Path]::DirectorySeparatorChar
+
+        if ($helperRoot.StartsWith($pathPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to create cleanup helper under cleanup target '$resolvedPath'."
+        }
+
+        New-Item -ItemType Directory -Path $helperRoot -Force | Out-Null
+        $cleanupId = [guid]::NewGuid().ToString('N')
+        $helperPath = Join-Path -Path $helperRoot -ChildPath "cleanup-dispatch-source-$PID-$cleanupId.ps1"
+        $statusPath = Join-Path -Path $helperRoot -ChildPath "cleanup-dispatch-source-$PID-$cleanupId.status.json"
+        $escapedPath = $resolvedPath.Replace("'", "''", [StringComparison]::Ordinal)
+        $escapedHelper = $helperPath.Replace("'", "''", [StringComparison]::Ordinal)
+        $escapedStatus = $statusPath.Replace("'", "''", [StringComparison]::Ordinal)
+
+        Set-Content -LiteralPath $helperPath -Encoding UTF8 -Value @"
+`$ErrorActionPreference = 'Continue'
+`$statusPath = '$escapedStatus'
+
+function Write-CleanupStatus {
+    param(
+        [Parameter(Mandatory)]
+        [string] `$Status,
+
+        [Parameter(Mandatory)]
+        [string] `$Message
+    )
+
+    `$payload = [pscustomobject]@{
+        status = `$Status
+        message = `$Message
+        path = '$escapedPath'
+        timestamp = [DateTimeOffset]::UtcNow.ToString('o')
     }
 
-    $parent = Split-Path -Path $Path -Parent
-    $helperPath = Join-Path -Path $parent -ChildPath ("cleanup-dispatch-source-$PID.ps1")
-    $escapedPath = $Path.Replace("'", "''", [StringComparison]::Ordinal)
-    $escapedHelper = $helperPath.Replace("'", "''", [StringComparison]::Ordinal)
+    `$payload | ConvertTo-Json -Compress | Set-Content -LiteralPath `$statusPath -Encoding UTF8 -ErrorAction SilentlyContinue
+}
 
-    Set-Content -LiteralPath $helperPath -Encoding UTF8 -Value @"
-`$ErrorActionPreference = 'Continue'
-Start-Sleep -Seconds 2
-Remove-Item -LiteralPath '$escapedPath' -Recurse -Force -ErrorAction Continue
-Remove-Item -LiteralPath '$escapedHelper' -Force -ErrorAction Continue
+try {
+    Write-CleanupStatus -Status 'running' -Message 'Cleanup helper started.'
+    Start-Sleep -Seconds 2
+    if (Test-Path -LiteralPath '$escapedPath' -PathType Container) {
+        Remove-Item -LiteralPath '$escapedPath' -Recurse -Force -ErrorAction Stop
+    }
+
+    Write-CleanupStatus -Status 'succeeded' -Message 'Temporary source checkout removed.'
+}
+catch {
+    Write-CleanupStatus -Status 'failed' -Message `$_.Exception.Message
+}
+finally {
+    Remove-Item -LiteralPath '$escapedHelper' -Force -ErrorAction SilentlyContinue
+}
 "@
 
-    $shell = (Get-Process -Id $PID).Path
-    if ([string]::IsNullOrWhiteSpace($shell) -or -not (Test-Path -LiteralPath $shell -PathType Leaf)) {
-        $shell = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell.exe' }
+        [pscustomobject]@{
+            status = 'scheduled'
+            message = 'Cleanup helper scheduled.'
+            path = $resolvedPath
+            timestamp = [DateTimeOffset]::UtcNow.ToString('o')
+        } | ConvertTo-Json -Compress | Set-Content -LiteralPath $statusPath -Encoding UTF8
+
+        $shell = (Get-Process -Id $PID).Path
+        if ([string]::IsNullOrWhiteSpace($shell) -or -not (Test-Path -LiteralPath $shell -PathType Leaf)) {
+            $shell = if ($PSVersionTable.PSEdition -eq 'Core') { 'pwsh' } else { 'powershell.exe' }
+        }
+
+        Start-Process -FilePath $shell -ArgumentList @(
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            $helperPath
+        ) -WindowStyle Hidden | Out-Null
+
+        New-SourceCleanupResult -Status 'scheduled' -HelperPath $helperPath -StatusPath $statusPath
     }
+    catch {
+        if (-not [string]::IsNullOrWhiteSpace($helperPath) -and (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
+            Remove-Item -LiteralPath $helperPath -Force -ErrorAction SilentlyContinue
+        }
 
-    Start-Process -FilePath $shell -ArgumentList @(
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        $helperPath
-    ) -WindowStyle Hidden | Out-Null
+        if (-not [string]::IsNullOrWhiteSpace($statusPath)) {
+            [pscustomobject]@{
+                status = 'scheduleFailed'
+                message = $_.Exception.Message
+                path = $Path
+                timestamp = [DateTimeOffset]::UtcNow.ToString('o')
+            } | ConvertTo-Json -Compress | Set-Content -LiteralPath $statusPath -Encoding UTF8 -ErrorAction SilentlyContinue
+        }
 
-    $helperPath
+        New-SourceCleanupResult -Status 'scheduleFailed' -HelperPath $helperPath -StatusPath $statusPath -ErrorMessage $_.Exception.Message
+    }
 }
 
 $source = Resolve-SourceRoot
@@ -226,10 +344,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Installed dispatch.exe --help failed with exit code $LASTEXITCODE."
 }
 
-$cleanupHelperPath = $null
+$cleanupResult = New-SourceCleanupResult -Status 'skipped'
 if ($source.IsTemporary -and -not $NoCleanup) {
-    Set-Location -Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile))
-    $cleanupHelperPath = Start-SourceCleanup -Path $source.Path
+    try {
+        $safeLocation = [Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)
+        if ([string]::IsNullOrWhiteSpace($safeLocation) -or -not (Test-Path -LiteralPath $safeLocation -PathType Container)) {
+            $safeLocation = [System.IO.Path]::GetTempPath()
+        }
+
+        Set-Location -Path $safeLocation
+        $cleanupResult = Start-SourceCleanup -Path $source.Path
+    }
+    catch {
+        $cleanupResult = New-SourceCleanupResult -Status 'scheduleFailed' -ErrorMessage $_.Exception.Message
+    }
 }
 
 [pscustomobject]@{
@@ -242,6 +370,8 @@ if ($source.IsTemporary -and -not $NoCleanup) {
     ModuleVersion = $installResult.ModuleVersion
     DispatchVersion = $version.Version
     ExportedCommands = $actualCommands
-    Cleanup = if ($source.IsTemporary -and -not $NoCleanup) { 'scheduled' } else { 'skipped' }
-    CleanupHelperPath = $cleanupHelperPath
+    Cleanup = $cleanupResult.Status
+    CleanupHelperPath = $cleanupResult.HelperPath
+    CleanupStatusPath = $cleanupResult.StatusPath
+    CleanupError = $cleanupResult.ErrorMessage
 }

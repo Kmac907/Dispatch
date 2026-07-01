@@ -17,7 +17,7 @@ Import-Module Dispatch -Force
 Get-DispatchVersion
 ```
 
-The source installer builds the self-contained executable, assembles the module under `artifacts\module\Dispatch`, copies it into a versioned `Dispatch\<version>` folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help`.
+The source installer builds the self-contained executable, assembles the module under `artifacts\module\Dispatch`, copies it into a versioned `Dispatch\<version>` folder under the selected PowerShell module root, validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help`, and reports cleanup status for temporary source checkouts.
 
 ## Prerequisites
 
@@ -69,7 +69,9 @@ The installer is responsible for:
 3. Assembling the PowerShell module folder.
 4. Installing the module and bundled executable.
 5. Validating `dispatch --help`, `dispatch version`, module import, and exported wrapper commands.
-6. Scheduling cleanup of the temporary source checkout after validation unless `-NoCleanup` is supplied.
+6. Scheduling an external cleanup helper from the temp folder after validation unless `-NoCleanup` is supplied.
+
+The source installer reports `Cleanup`, `CleanupHelperPath`, `CleanupStatusPath`, and `CleanupError` in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.
 
 Use script parameters instead of editing the command inline. Current parameters include `-Scope CurrentUser|AllUsers`, `-RepositoryUrl`, `-Ref`, `-SourceRoot`, `-WorkRoot`, `-Configuration`, `-Runtime`, `-DestinationRoot`, `-Force`, `-NoCleanup`, and `-NoRestore`. The compatibility bootstrap wrapper accepts the same parameters and forwards them to `install-from-source.ps1`.
 

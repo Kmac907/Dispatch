@@ -2,17 +2,15 @@
 
 Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.
 
-Status: partial Roadmap `8`.
+Status: Roadmap `8` local/source/ZIP packaging implemented. Enterprise distribution remains Roadmap `13`.
 
 Current support: `packaging/build-module.ps1` assembles a local PowerShell module folder with a bundled self-contained `win-x64` `dispatch.exe` at `bin\win-x64\dispatch.exe`, copies the package installer into the module root, validates the module manifest, imports the assembled module, verifies `Get-DispatchVersion` through the bundled executable, and can create a validated release ZIP with `-CreateZip`.
 
 `packaging/install.ps1` installs an already assembled package into a `CurrentUser` or `AllUsers` PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
 
-`packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`.
+`packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, then validates the installed module, bundled executable, exported commands, and `dispatch --help`. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.
 
 `packaging/bootstrap-install.ps1` is a compatibility wrapper for older bootstrap links. It delegates to `install-from-source.ps1` from a checkout when available, or downloads the canonical source installer from the configured GitHub repository and branch/ref before delegating.
-
-Cleanup-helper hardening remains planned Roadmap `8` work.
 
 ## Module Assembly
 
@@ -55,7 +53,9 @@ The installer:
 3. Assemble the PowerShell module.
 4. Install the module and bundled executable.
 5. Validate `dispatch --help`, `dispatch version`, module import, and exported commands.
-6. Schedules cleanup of the temporary source checkout after successful validation unless `-NoCleanup` is supplied.
+6. Schedules an external cleanup helper from the temp folder after successful validation unless `-NoCleanup` is supplied.
+
+The installer returns `Cleanup`, `CleanupHelperPath`, `CleanupStatusPath`, and `CleanupError` fields. A cleanup scheduling failure is reported in those fields, but it does not remove the already validated module or turn the successful install into a failed install.
 
 ## Existing Checkout
 
