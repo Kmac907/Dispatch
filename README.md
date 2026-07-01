@@ -49,10 +49,11 @@ After install, use either the direct CLI or the PowerShell module wrappers:
 dispatch --help
 dispatch doctor
 
-Import-Module Dispatch
 Test-Dispatch
 Get-DispatchVersion
 ```
+
+PowerShell normally auto-loads the installed module when you run `Test-Dispatch`, `Get-DispatchVersion`, or another wrapper command. Use `Import-Module Dispatch -Force` only when auto-loading is disabled or you need to reload the module in an existing shell.
 
 Developer checkout workflow:
 
@@ -69,7 +70,6 @@ To only assemble and install an already built module package from a checkout:
 ```powershell
 .\packaging\build-module.ps1
 .\packaging\install.ps1 -Scope CurrentUser -Force
-Import-Module Dispatch -Force
 Get-DispatchVersion
 ```
 

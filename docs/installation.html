@@ -51,15 +51,15 @@
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
-<p>Verify both entry points:</p>
+<p>Verify the direct CLI and module wrappers:</p>
 <pre><code>
 dispatch --help
 dispatch doctor
 
-Import-Module Dispatch -Force
 Test-Dispatch
 Get-DispatchVersion
 </code></pre>
+<p>PowerShell normally auto-loads the installed module when you run <code>Test-Dispatch</code>, <code>Get-DispatchVersion</code>, or another wrapper command. Use <code>Import-Module Dispatch -Force</code> only when auto-loading is disabled or you need to reload the module in an existing shell.</p>
 <p>Lower-level package installation and direct source execution remain available for development, troubleshooting, and CI validation.</p>
 <h2>Prerequisites</h2>
 <ul>
@@ -147,7 +147,7 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 <p>Expected result:</p>
 <ul>
 <li>The source-run commands print the canonical CLI command tree, version, and local prerequisite status.</li>
-<li>Installed systems should use <code>dispatch --help</code>, <code>dispatch version</code>, <code>dispatch doctor</code>, <code>Import-Module Dispatch</code>, and <code>Get-Command -Module Dispatch</code>.</li>
+<li>Installed systems should use <code>dispatch --help</code>, <code>dispatch version</code>, <code>dispatch doctor</code>, <code>Test-Dispatch</code>, <code>Get-DispatchVersion</code>, and <code>Get-Command -Module Dispatch</code>. Explicit <code>Import-Module Dispatch -Force</code> is only needed when auto-loading is disabled or a shell needs to reload the module.</li>
 </ul>
 <h2>Upgrade</h2>
 <p>Run the same source-install command again. It rebuilds from the selected source, replaces the installed module files for the same version, validates the new executable, and fails before reporting success if validation does not pass.</p>

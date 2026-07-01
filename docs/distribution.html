@@ -85,6 +85,7 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <p>The installer returns <code>Cleanup</code>, <code>CleanupHelperPath</code>, <code>CleanupStatusPath</code>, and <code>CleanupError</code> fields. A cleanup scheduling failure is reported in those fields, but it does not remove the already validated module or turn the successful install into a failed install.</p>
 <p>The primary <code>irm</code> command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.</p>
 <p>Source install requires the .NET 8 SDK because it builds Dispatch before installing it. If only the .NET runtime is installed, the installer fails early with a prerequisite message instead of failing later during <code>dotnet publish</code>.</p>
+<p>After install, operators can run <code>dispatch</code> directly from PATH and call wrapper commands such as <code>Test-Dispatch</code> or <code>Get-DispatchVersion</code> directly from PowerShell. PowerShell normally auto-loads the installed module for those wrapper commands; explicit <code>Import-Module Dispatch -Force</code> is only a reload or troubleshooting step.</p>
 <h2>Existing Checkout</h2>
 <p>Developer/troubleshooting mode:</p>
 <pre><code>

@@ -8,16 +8,17 @@ Primary install:
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
-Verify both entry points:
+Verify the direct CLI and module wrappers:
 
 ```powershell
 dispatch --help
 dispatch doctor
 
-Import-Module Dispatch -Force
 Test-Dispatch
 Get-DispatchVersion
 ```
+
+PowerShell normally auto-loads the installed module when you run `Test-Dispatch`, `Get-DispatchVersion`, or another wrapper command. Use `Import-Module Dispatch -Force` only when auto-loading is disabled or you need to reload the module in an existing shell.
 
 Lower-level package installation and direct source execution remain available for development, troubleshooting, and CI validation.
 
@@ -136,7 +137,7 @@ dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- doctor
 Expected result:
 
 - The source-run commands print the canonical CLI command tree, version, and local prerequisite status.
-- Installed systems should use `dispatch --help`, `dispatch version`, `dispatch doctor`, `Import-Module Dispatch`, and `Get-Command -Module Dispatch`.
+- Installed systems should use `dispatch --help`, `dispatch version`, `dispatch doctor`, `Test-Dispatch`, `Get-DispatchVersion`, and `Get-Command -Module Dispatch`. Explicit `Import-Module Dispatch -Force` is only needed when auto-loading is disabled or a shell needs to reload the module.
 
 ## Upgrade
 

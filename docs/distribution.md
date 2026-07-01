@@ -56,6 +56,8 @@ The primary `irm` command is rerunnable. If the same Dispatch module version is 
 
 Source install requires the .NET 8 SDK because it builds Dispatch before installing it. If only the .NET runtime is installed, the installer fails early with a prerequisite message instead of failing later during `dotnet publish`.
 
+After install, operators can run `dispatch` directly from PATH and call wrapper commands such as `Test-Dispatch` or `Get-DispatchVersion` directly from PowerShell. PowerShell normally auto-loads the installed module for those wrapper commands; explicit `Import-Module Dispatch -Force` is only a reload or troubleshooting step.
+
 ## Existing Checkout
 
 Developer/troubleshooting mode:

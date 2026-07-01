@@ -25,9 +25,10 @@ After install, both entry points are available:
 
 ```powershell
 dispatch --help
-Import-Module Dispatch
 Test-Dispatch
 ```
+
+PowerShell normally auto-loads the installed module when you run `Test-Dispatch` or another wrapper command. Use `Import-Module Dispatch -Force` only when auto-loading is disabled or you need to reload the module in an existing shell.
 
 ## Build And Run From Source
 

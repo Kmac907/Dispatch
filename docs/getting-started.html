@@ -65,9 +65,9 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 <p>After install, both entry points are available:</p>
 <pre><code>
 dispatch --help
-Import-Module Dispatch
 Test-Dispatch
 </code></pre>
+<p>PowerShell normally auto-loads the installed module when you run <code>Test-Dispatch</code> or another wrapper command. Use <code>Import-Module Dispatch -Force</code> only when auto-loading is disabled or you need to reload the module in an existing shell.</p>
 <h2>Build And Run From Source</h2>
 <p>Use source execution when developing Dispatch or validating a checkout:</p>
 <pre><code>

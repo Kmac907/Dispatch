@@ -668,8 +668,8 @@ Initial release primary distribution:
 
 ```powershell
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
-Import-Module Dispatch
 dispatch --help
+Test-Dispatch
 ```
 
 The v1 source installer is designed for the GitHub repository `https://github.com/Kmac907/Dispatch`. The normal operator path downloads the installer script with `Invoke-RestMethod` / `irm`; the script creates its own temporary source checkout, builds Dispatch, installs the module, validates the installation, and removes the temporary checkout after validation.
@@ -702,7 +702,6 @@ Developer source install flow:
 git clone https://github.com/Kmac907/Dispatch.git
 cd Dispatch
 .\packaging\install-from-source.ps1
-Import-Module Dispatch
 Test-Dispatch
 ```
 
@@ -1500,7 +1499,7 @@ Scope:
 - Add `install-from-source.ps1` as the primary operator flow for `irm`-launched build/install/validate/cleanup from the GitHub repository.
 - Support running `install-from-source.ps1` from an existing developer checkout.
 - Add `install.ps1` for installing an already assembled module package into `CurrentUser` or `AllUsers` module scopes.
-- Installation must make both supported local entry points available: direct `dispatch` invocation through PATH and PowerShell wrapper invocation through `Import-Module Dispatch`.
+- Installation must make both supported local entry points available: direct `dispatch` invocation through PATH and PowerShell wrapper invocation through normal module discovery/autoloading. Explicit `Import-Module Dispatch -Force` is a reload/troubleshooting option, not a required post-install step.
 - Validate the built executable, module manifest, module import, and exported commands before reporting success.
 - Use a cleanup helper outside the source tree to remove the temporary source checkout after successful source installation.
 - Support `-NoCleanup` for developers and troubleshooting.
@@ -1527,7 +1526,7 @@ Current implementation:
 - Implemented ZIP packaging uses the optional build switch, creates `artifacts\packages\Dispatch-<version>-win-x64.zip`, includes only the installable `Dispatch\` package root plus `install.ps1`, and validates install/import/version/help behavior after extraction.
 
 Definition of done:
-- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, rerun the same command over the same installed version, run direct `dispatch --help`, import the module, and run `Test-Dispatch`.
+- A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, rerun the same command over the same installed version, run direct `dispatch --help`, and run `Test-Dispatch` through PowerShell module autoloading.
 - Source installation builds the project and module, validates the installation, changes out of the temporary source directory, invokes an external cleanup helper, and cleans up the temporary source tree.
 - Cleanup failure is reported without uninstalling an already validated module.
 - Install scripts validate the module manifest, copied EXE, import behavior, and exported commands.
