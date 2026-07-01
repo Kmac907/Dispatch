@@ -97,19 +97,22 @@
           <h2>Install Dispatch</h2>
           <p class="section-intro">The primary GitHub <code>irm</code> installer builds the current executable, installs the PowerShell module, adds the bundled executable folder to PATH for direct <code>dispatch</code> use, validates both entry points, and reports cleanup status.</p>
           <ul class="status-list">
-            <li>Use <code>dotnet run</code> for current source execution.</li>
-            <li>Use <code>doctor</code> to check local prerequisites.</li>
-            <li>Use <code>Import-Module Dispatch</code> after installation to load the wrapper module and bundled executable.</li>
+            <li>Use the <code>irm</code> installer for normal workstation setup.</li>
+            <li>Use <code>dispatch doctor</code> to check local prerequisites after installation.</li>
+            <li>Use <code>Import-Module Dispatch</code> when you want the PowerShell wrapper module.</li>
           </ul>
           <div class="hero-actions">
             <a class="button" href="installation.html">Installation Guide</a>
             <a class="button-secondary" href="command-reference.html">Command Reference</a>
           </div>
         </div>
-        <pre class="code-panel"><code>git clone https://github.com/Kmac907/Dispatch.git
-cd Dispatch
-dotnet test .\Dispatch.sln
-dotnet run --project .\src\Dispatch.Cli\Dispatch.Cli.csproj -- --help</code></pre>
+        <pre class="code-panel"><code>irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
+
+dispatch --help
+dispatch doctor
+
+Import-Module Dispatch
+Test-Dispatch</code></pre>
       </div>
     </section>
 
