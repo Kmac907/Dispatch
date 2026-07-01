@@ -41,6 +41,8 @@ The primary install path downloads the source installer from GitHub, builds the 
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
 
+Source install requires Git and the .NET 8 SDK because it builds Dispatch before installing it. If the SDK is missing, the installer fails early with a prerequisite message.
+
 After install, use either the direct CLI or the PowerShell module wrappers:
 
 ```powershell

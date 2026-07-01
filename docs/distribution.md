@@ -8,7 +8,7 @@ Current support: `packaging/build-module.ps1` assembles a local PowerShell modul
 
 `packaging/install.ps1` installs an already assembled package into a `CurrentUser` or `AllUsers` PowerShell module scope, adds the installed `bin\win-x64` folder to PATH for direct `dispatch` invocation, and validates the installed manifest, bundled executable, module import, exported commands, `Get-DispatchVersion`, and `dispatch --help` through PATH.
 
-`packaging/install-from-source.ps1` builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, replaces the same installed module version when rerun, then validates the installed module, bundled executable, exported commands, and `dispatch --help`. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.
+`packaging/install-from-source.ps1` prints install phases to the terminal, checks Git and the .NET 8 SDK before building, builds and installs from an existing checkout or clones the GitHub repository for the `irm | iex` flow, replaces the same installed module version when rerun, then validates the installed module, bundled executable, exported commands, and `dispatch --help`. After successful validation from a temporary checkout, it schedules an external cleanup helper from the temp folder and reports cleanup status without treating cleanup scheduling failure as an installation failure.
 
 ## Module Assembly
 
@@ -40,17 +40,21 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 
 The installer:
 
-1. Creates a temporary checkout when it is not run from an existing source tree.
-2. Build the self-contained `win-x64` executable.
-3. Assemble the PowerShell module.
-4. Install or replace the module and bundled executable for the selected version.
-5. Add the bundled executable folder to PATH unless `-NoPathUpdate` is supplied or `-DestinationRoot` is used for validation.
-6. Validate direct `dispatch --help`, `dispatch version`, module import, and exported commands.
-7. Schedules an external cleanup helper from the temp folder after successful validation unless `-NoCleanup` is supplied.
+1. Prints each install phase to the terminal.
+2. Checks prerequisites, including Git when a temporary checkout is needed and the .NET 8 SDK for source builds.
+3. Creates a temporary checkout when it is not run from an existing source tree.
+4. Builds the self-contained `win-x64` executable.
+5. Assembles the PowerShell module.
+6. Installs or replaces the module and bundled executable for the selected version.
+7. Adds the bundled executable folder to PATH unless `-NoPathUpdate` is supplied or `-DestinationRoot` is used for validation.
+8. Validates direct `dispatch --help`, `dispatch version`, module import, and exported commands.
+9. Schedules an external cleanup helper from the temp folder after successful validation unless `-NoCleanup` is supplied.
 
 The installer returns `Cleanup`, `CleanupHelperPath`, `CleanupStatusPath`, and `CleanupError` fields. A cleanup scheduling failure is reported in those fields, but it does not remove the already validated module or turn the successful install into a failed install.
 
 The primary `irm` command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.
+
+Source install requires the .NET 8 SDK because it builds Dispatch before installing it. If only the .NET runtime is installed, the installer fails early with a prerequisite message instead of failing later during `dotnet publish`.
 
 ## Existing Checkout
 

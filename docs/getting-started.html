@@ -51,7 +51,7 @@
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
 <li>PowerShell 7 or Windows PowerShell 5.1.</li>
-<li>.NET SDK matching <code>global.json</code>.</li>
+<li>.NET 8 SDK matching <code>global.json</code>.</li>
 <li>Git on <code>PATH</code>.</li>
 <li>At least one approved Windows endpoint for live validation when running remote commands.</li>
 <li>PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.</li>
@@ -61,6 +61,7 @@
 <pre><code>
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 </code></pre>
+<p>Source install requires Git and the .NET 8 SDK because it builds Dispatch before installing it. If the SDK is missing, the installer fails early with a prerequisite message.</p>
 <p>After install, both entry points are available:</p>
 <pre><code>
 dispatch --help

@@ -65,7 +65,7 @@ Get-DispatchVersion
 <ul>
 <li>Windows 10/11 or Windows Server.</li>
 <li>PowerShell 7 or Windows PowerShell 5.1.</li>
-<li>.NET SDK matching <code>global.json</code>.</li>
+<li>.NET 8 SDK matching <code>global.json</code>. The GitHub <code>irm</code> source installer builds Dispatch from source; the .NET runtime alone is not enough.</li>
 <li>Git available on <code>PATH</code>.</li>
 <li>Network access to <code>https://github.com/Kmac907/Dispatch</code>.</li>
 <li>Administrator shell for <code>-Scope AllUsers</code> installation.</li>
@@ -77,6 +77,8 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 </code></pre>
 <p>The installer is responsible for:</p>
 <ol>
+<li>Printing each install phase to the terminal so the operator can see what is happening.</li>
+<li>Checking prerequisites, including Git when a temporary checkout is needed and the .NET 8 SDK for source builds.</li>
 <li>Creating a temporary source checkout when it is not run from an existing source tree.</li>
 <li>Building the self-contained <code>win-x64</code> <code>dispatch.exe</code>.</li>
 <li>Assembling the PowerShell module folder.</li>
@@ -87,6 +89,7 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 </ol>
 <p>The source installer reports <code>DispatchPathEntry</code>, <code>PathUpdate</code>, <code>PathTarget</code>, <code>Cleanup</code>, <code>CleanupHelperPath</code>, <code>CleanupStatusPath</code>, and <code>CleanupError</code> in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.</p>
 <p>The primary <code>irm</code> command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.</p>
+<p>If the .NET 8 SDK is missing, the source installer fails before cloning/building with a message that explains the SDK requirement. Install the .NET 8 SDK, open a new PowerShell session so PATH is refreshed, and rerun the same install command.</p>
 <p>Use script parameters instead of editing the command inline. Current parameters include <code>-Scope CurrentUser|AllUsers</code>, <code>-RepositoryUrl</code>, <code>-Ref</code>, <code>-SourceRoot</code>, <code>-WorkRoot</code>, <code>-Configuration</code>, <code>-Runtime</code>, <code>-DestinationRoot</code>, <code>-Force</code>, <code>-NoCleanup</code>, <code>-NoRestore</code>, and <code>-NoPathUpdate</code>.</p>
 <h2>Developer Source Workflow</h2>
 <p>Use this flow when developing Dispatch or validating a checkout without installing:</p>

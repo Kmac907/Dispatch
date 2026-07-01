@@ -41,6 +41,58 @@ $expectedCommands = @(
     'Invoke-DispatchPowerShell',
     'Test-Dispatch'
 )
+$requiredDotNetSdkMajor = 8
+
+function Write-InstallerStatus {
+    param(
+        [Parameter(Mandatory)]
+        [string] $Message
+    )
+
+    Write-Host "[Dispatch install] $Message"
+}
+
+function Assert-SourceInstallPrerequisites {
+    $dotnetCommand = Get-Command dotnet -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -eq $dotnetCommand) {
+        throw "The .NET SDK was not found on PATH. Dispatch source install builds the current executable from source and requires the .NET $requiredDotNetSdkMajor SDK. Install the .NET $requiredDotNetSdkMajor SDK, open a new PowerShell session, then rerun the install command."
+    }
+
+    $sdkOutput = & $dotnetCommand.Source --list-sdks 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to list installed .NET SDKs with '$($dotnetCommand.Source) --list-sdks'. Output: $($sdkOutput -join [Environment]::NewLine)"
+    }
+
+    $sdkVersions = @(
+        $sdkOutput |
+            ForEach-Object { $_.ToString().Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+    if ($sdkVersions.Count -eq 0) {
+        throw "No .NET SDKs were found. Dispatch source install requires the .NET $requiredDotNetSdkMajor SDK, not only the .NET runtime."
+    }
+
+    $hasRequiredSdk = $false
+    foreach ($sdkVersion in $sdkVersions) {
+        if ($sdkVersion -match "^\s*$requiredDotNetSdkMajor\.") {
+            $hasRequiredSdk = $true
+            break
+        }
+    }
+
+    if (-not $hasRequiredSdk) {
+        throw "The .NET $requiredDotNetSdkMajor SDK was not found. Installed SDKs: $($sdkVersions -join ', '). Install the .NET $requiredDotNetSdkMajor SDK, open a new PowerShell session, then rerun the install command."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($SourceRoot) -and [string]::IsNullOrWhiteSpace($PSScriptRoot)) {
+        $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
+        if ($null -eq $gitCommand) {
+            throw 'git was not found on PATH. The GitHub irm installer needs Git to create the temporary source checkout. Install Git, open a new PowerShell session, then rerun the install command.'
+        }
+    }
+
+    Write-InstallerStatus "Prerequisites found: .NET $requiredDotNetSdkMajor SDK, Git when needed, PowerShell $($PSVersionTable.PSVersion)."
+}
 
 function Resolve-FullPath {
     param(
@@ -151,6 +203,7 @@ function Resolve-SourceRoot {
         throw 'git was not found on PATH. Install Git or run this script from an existing checkout with -SourceRoot.'
     }
 
+    Write-InstallerStatus "Creating temporary source checkout at '$cloneRoot'."
     & git clone --depth 1 --branch $Ref $RepositoryUrl $cloneRoot
     if ($LASTEXITCODE -ne 0) {
         throw "git clone failed with exit code $LASTEXITCODE."
@@ -279,7 +332,10 @@ finally {
     }
 }
 
+Write-InstallerStatus 'Starting Dispatch source install.'
+Assert-SourceInstallPrerequisites
 $source = Resolve-SourceRoot
+Write-InstallerStatus "Using source root '$($source.Path)'."
 $buildScriptPath = Join-Path -Path $source.Path -ChildPath 'packaging\build-module.ps1'
 $installScriptPath = Join-Path -Path $source.Path -ChildPath 'packaging\install.ps1'
 $moduleOutputPath = Join-Path -Path $source.Path -ChildPath 'artifacts\module\Dispatch'
@@ -293,6 +349,7 @@ if ($NoRestore) {
     $buildArguments.NoRestore = $true
 }
 
+Write-InstallerStatus "Building self-contained Dispatch executable and module package for runtime '$Runtime' ($Configuration)."
 $buildOutput = & $buildScriptPath @buildArguments
 $buildResult = @(
     $buildOutput |
@@ -302,6 +359,7 @@ $buildResult = @(
 if ($null -eq $buildResult -or [string]::IsNullOrWhiteSpace($buildResult.ModulePath)) {
     throw 'Module build did not return a module output path.'
 }
+Write-InstallerStatus "Built module package at '$($buildResult.ModulePath)'."
 
 $installArguments = @{
     ModulePath = $buildResult.ModulePath
@@ -315,6 +373,7 @@ if ($NoPathUpdate -or -not [string]::IsNullOrWhiteSpace($DestinationRoot)) {
     $installArguments.NoPathUpdate = $true
 }
 
+Write-InstallerStatus "Installing Dispatch module for scope '$Scope'."
 $installResult = & $installScriptPath @installArguments
 
 $manifestPath = $installResult.ManifestPath
@@ -326,7 +385,9 @@ if ([string]::IsNullOrWhiteSpace($manifestPath) -or -not (Test-Path -LiteralPath
 if ([string]::IsNullOrWhiteSpace($dispatchPath) -or -not (Test-Path -LiteralPath $dispatchPath -PathType Leaf)) {
     throw 'Installed bundled dispatch.exe was not found after installation.'
 }
+Write-InstallerStatus "Installed module at '$($installResult.InstallPath)'."
 
+Write-InstallerStatus 'Validating installed PowerShell module exports.'
 Remove-Module -Name Dispatch -Force -ErrorAction SilentlyContinue
 $module = Import-Module -Name $manifestPath -Force -PassThru
 $actualCommands = @($module.ExportedCommands.Keys | Sort-Object)
@@ -334,6 +395,7 @@ if (($actualCommands -join '|') -ne ($expectedCommands -join '|')) {
     throw "Unexpected installed Dispatch module exports: $($actualCommands -join ', ')."
 }
 
+Write-InstallerStatus 'Validating bundled dispatch executable.'
 $version = Get-DispatchVersion -DispatchPath $dispatchPath
 if ($version.DispatchPath -ne (Resolve-FullPath -Path $dispatchPath)) {
     throw "Installed Get-DispatchVersion resolved '$($version.DispatchPath)' instead of '$dispatchPath'."
@@ -352,6 +414,7 @@ if ($source.IsTemporary -and -not $NoCleanup) {
             $safeLocation = [System.IO.Path]::GetTempPath()
         }
 
+        Write-InstallerStatus "Scheduling cleanup for temporary source checkout '$($source.Path)'."
         Set-Location -Path $safeLocation
         $cleanupResult = Start-SourceCleanup -Path $source.Path
     }
@@ -359,6 +422,14 @@ if ($source.IsTemporary -and -not $NoCleanup) {
         $cleanupResult = New-SourceCleanupResult -Status 'scheduleFailed' -ErrorMessage $_.Exception.Message
     }
 }
+elseif ($source.IsTemporary) {
+    Write-InstallerStatus 'Temporary source cleanup skipped because -NoCleanup was supplied.'
+}
+else {
+    Write-InstallerStatus 'Source cleanup skipped because the installer used an existing checkout.'
+}
+
+Write-InstallerStatus "Install complete. Dispatch version $($version.Version)."
 
 [pscustomobject]@{
     SourceRoot = $source.Path

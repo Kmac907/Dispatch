@@ -25,7 +25,7 @@ Lower-level package installation and direct source execution remain available fo
 
 - Windows 10/11 or Windows Server.
 - PowerShell 7 or Windows PowerShell 5.1.
-- .NET SDK matching `global.json`.
+- .NET 8 SDK matching `global.json`. The GitHub `irm` source installer builds Dispatch from source; the .NET runtime alone is not enough.
 - Git available on `PATH`.
 - Network access to `https://github.com/Kmac907/Dispatch`.
 - Administrator shell for `-Scope AllUsers` installation.
@@ -40,17 +40,21 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 
 The installer is responsible for:
 
-1. Creating a temporary source checkout when it is not run from an existing source tree.
-2. Building the self-contained `win-x64` `dispatch.exe`.
-3. Assembling the PowerShell module folder.
-4. Installing or replacing the module and bundled executable for the selected version.
-5. Adding the bundled executable folder to PATH unless `-NoPathUpdate` is supplied or `-DestinationRoot` is used for validation.
-6. Validating direct `dispatch --help`, `dispatch version`, module import, and exported wrapper commands.
-7. Scheduling an external cleanup helper from the temp folder after validation unless `-NoCleanup` is supplied.
+1. Printing each install phase to the terminal so the operator can see what is happening.
+2. Checking prerequisites, including Git when a temporary checkout is needed and the .NET 8 SDK for source builds.
+3. Creating a temporary source checkout when it is not run from an existing source tree.
+4. Building the self-contained `win-x64` `dispatch.exe`.
+5. Assembling the PowerShell module folder.
+6. Installing or replacing the module and bundled executable for the selected version.
+7. Adding the bundled executable folder to PATH unless `-NoPathUpdate` is supplied or `-DestinationRoot` is used for validation.
+8. Validating direct `dispatch --help`, `dispatch version`, module import, and exported wrapper commands.
+9. Scheduling an external cleanup helper from the temp folder after validation unless `-NoCleanup` is supplied.
 
 The source installer reports `DispatchPathEntry`, `PathUpdate`, `PathTarget`, `Cleanup`, `CleanupHelperPath`, `CleanupStatusPath`, and `CleanupError` in its final output. Cleanup scheduling failures are reported there without uninstalling the already validated module or converting the installation itself into a failure.
 
 The primary `irm` command is rerunnable. If the same Dispatch module version is already installed, the source installer replaces it, validates the replacement, and only reports success after validation passes.
+
+If the .NET 8 SDK is missing, the source installer fails before cloning/building with a message that explains the SDK requirement. Install the .NET 8 SDK, open a new PowerShell session so PATH is refreshed, and rerun the same install command.
 
 Use script parameters instead of editing the command inline. Current parameters include `-Scope CurrentUser|AllUsers`, `-RepositoryUrl`, `-Ref`, `-SourceRoot`, `-WorkRoot`, `-Configuration`, `-Runtime`, `-DestinationRoot`, `-Force`, `-NoCleanup`, `-NoRestore`, and `-NoPathUpdate`.
 

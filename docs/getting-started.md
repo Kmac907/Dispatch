@@ -6,7 +6,7 @@ This guide is the shortest path from install to a verified Dispatch run.
 
 - Windows 10/11 or Windows Server.
 - PowerShell 7 or Windows PowerShell 5.1.
-- .NET SDK matching `global.json`.
+- .NET 8 SDK matching `global.json`.
 - Git on `PATH`.
 - At least one approved Windows endpoint for live validation when running remote commands.
 - PSRP or WinRM enabled on the endpoint when using those transports, or SMB/admin-share access when using PsExec.
@@ -18,6 +18,8 @@ The primary v1 install path downloads the source installer from GitHub, clones t
 ```powershell
 irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex
 ```
+
+Source install requires Git and the .NET 8 SDK because it builds Dispatch before installing it. If the SDK is missing, the installer fails early with a prerequisite message.
 
 After install, both entry points are available:
 
