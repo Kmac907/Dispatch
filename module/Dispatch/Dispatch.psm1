@@ -254,6 +254,124 @@ function Invoke-DispatchPowerShell {
     Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
 }
 
+function Invoke-DispatchCommand {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Command,
+
+        [string] $Target,
+
+        [string] $Inventory,
+
+        [string] $Config,
+
+        [string] $Exclude,
+
+        [string] $CredentialName,
+
+        [ValidateSet('auto', 'psrp', 'winrm')]
+        [string] $Transport,
+
+        [int[]] $ExpectedExitCode,
+
+        [int] $Throttle,
+
+        [string[]] $ArtifactPath,
+
+        [string] $OutputRoot,
+
+        [string] $RemoteRoot,
+
+        [string] $TargetFile,
+
+        [string[]] $ArgumentList,
+
+        [switch] $Plan,
+
+        [switch] $RunAsSystem,
+
+        [switch] $NoColor,
+
+        [switch] $Quiet,
+
+        [switch] $Trace,
+
+        [string] $DispatchPath,
+
+        [switch] $Raw
+    )
+
+    $arguments = [System.Collections.Generic.List[string]]::new()
+    $arguments.Add('run')
+    $arguments.Add('cmd')
+    $arguments.Add($Command)
+    Add-DispatchRunCommonArguments -Arguments $arguments -Target $Target -Inventory $Inventory -Config $Config -Exclude $Exclude -CredentialName $CredentialName -Transport $Transport -ExpectedExitCode $ExpectedExitCode -Throttle $Throttle -ArtifactPath $ArtifactPath -OutputRoot $OutputRoot -RemoteRoot $RemoteRoot -TargetFile $TargetFile -Plan:$Plan -RunAsSystem:$RunAsSystem -NoColor:$NoColor -Quiet:$Quiet -VerboseEnabled:($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']) -Trace:$Trace
+    Add-DispatchStructuredOutputArguments -Arguments $arguments
+    Add-DispatchRemainingArguments -Arguments $arguments -Value $ArgumentList
+
+    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+}
+
+function Invoke-DispatchExecutable {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path,
+
+        [string] $Target,
+
+        [string] $Inventory,
+
+        [string] $Config,
+
+        [string] $Exclude,
+
+        [string] $CredentialName,
+
+        [ValidateSet('auto', 'psrp', 'winrm')]
+        [string] $Transport,
+
+        [int[]] $ExpectedExitCode,
+
+        [int] $Throttle,
+
+        [string[]] $ArtifactPath,
+
+        [string] $OutputRoot,
+
+        [string] $RemoteRoot,
+
+        [string] $TargetFile,
+
+        [string[]] $ArgumentList,
+
+        [switch] $Plan,
+
+        [switch] $RunAsSystem,
+
+        [switch] $NoColor,
+
+        [switch] $Quiet,
+
+        [switch] $Trace,
+
+        [string] $DispatchPath,
+
+        [switch] $Raw
+    )
+
+    $arguments = [System.Collections.Generic.List[string]]::new()
+    $arguments.Add('run')
+    $arguments.Add('exe')
+    $arguments.Add($Path)
+    Add-DispatchRunCommonArguments -Arguments $arguments -Target $Target -Inventory $Inventory -Config $Config -Exclude $Exclude -CredentialName $CredentialName -Transport $Transport -ExpectedExitCode $ExpectedExitCode -Throttle $Throttle -ArtifactPath $ArtifactPath -OutputRoot $OutputRoot -RemoteRoot $RemoteRoot -TargetFile $TargetFile -Plan:$Plan -RunAsSystem:$RunAsSystem -NoColor:$NoColor -Quiet:$Quiet -VerboseEnabled:($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']) -Trace:$Trace
+    Add-DispatchStructuredOutputArguments -Arguments $arguments
+    Add-DispatchRemainingArguments -Arguments $arguments -Value $ArgumentList
+
+    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+}
+
 function Invoke-DispatchStructuredRun {
     [CmdletBinding()]
     param(
@@ -454,4 +572,4 @@ function ConvertFrom-DispatchJson {
     $Json | ConvertFrom-Json
 }
 
-Export-ModuleMember -Function Get-DispatchVersion, Invoke-DispatchPowerShell, Test-Dispatch
+Export-ModuleMember -Function Get-DispatchVersion, Invoke-DispatchCommand, Invoke-DispatchExecutable, Invoke-DispatchPowerShell, Test-Dispatch

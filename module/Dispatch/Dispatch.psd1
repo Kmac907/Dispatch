@@ -10,6 +10,8 @@
     CompatiblePSEditions = @('Desktop', 'Core')
     FunctionsToExport = @(
         'Get-DispatchVersion',
+        'Invoke-DispatchCommand',
+        'Invoke-DispatchExecutable',
         'Invoke-DispatchPowerShell',
         'Test-Dispatch'
     )

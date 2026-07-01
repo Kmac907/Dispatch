@@ -642,7 +642,7 @@ Invoke-DispatchPowerShell `
 
 Invoke-DispatchCommand `
   -Target PC001,PC002 `
-  -CommandLine whoami `
+  -Command whoami `
   -Transport Psrp
 
 Invoke-DispatchJob -JobPath .\Patch.yml

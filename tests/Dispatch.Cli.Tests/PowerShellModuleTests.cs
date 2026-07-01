@@ -45,6 +45,8 @@ public sealed class PowerShellModuleTests
                 Sort-Object
             $expected = @(
                 'Get-DispatchVersion',
+                'Invoke-DispatchCommand',
+                'Invoke-DispatchExecutable',
                 'Invoke-DispatchPowerShell',
                 'Test-Dispatch'
             )
@@ -93,9 +95,43 @@ public sealed class PowerShellModuleTests
                 throw "Unexpected PowerShell wrapper exit code: $($psResult.ExitCode)"
             }
 
+            $cmdResult = Invoke-DispatchCommand `
+                -Command 'whoami' `
+                -Target PC001 `
+                -Transport winrm `
+                -CredentialName admin-session `
+                -Plan `
+                -ArgumentList '/all'
+            if (-not $cmdResult.succeeded -or $cmdResult.targets[0].name -ne 'PC001') {
+                throw 'Command wrapper did not parse structured run output.'
+            }
+            if ($cmdResult.ExitCode -ne 0) {
+                throw "Unexpected command wrapper exit code: $($cmdResult.ExitCode)"
+            }
+
+            $exeResult = Invoke-DispatchExecutable `
+                -Path 'C:\Tools\tool.exe' `
+                -Target PC001 `
+                -Transport psrp `
+                -CredentialName admin-session `
+                -Plan `
+                -ArgumentList '-Mode', 'Audit'
+            if (-not $exeResult.succeeded -or $exeResult.targets[0].name -ne 'PC001') {
+                throw 'Executable wrapper did not parse structured run output.'
+            }
+            if ($exeResult.ExitCode -ne 0) {
+                throw "Unexpected executable wrapper exit code: $($exeResult.ExitCode)"
+            }
+
             $argumentLines = Get-Content -LiteralPath '{{EscapePowerShellSingleQuotedString(argumentLog)}}'
             if (-not ($argumentLines | Where-Object { $_ -like '*run ps*--target PC001*--credential admin-session*--transport psrp*--expected-exit-code 0,3010*--plan*--secret packageSas=prod-package-sas*--output json*--no-progress*-- -Mode Audit*' })) {
                 throw "PowerShell wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*run cmd whoami*--target PC001*--credential admin-session*--transport winrm*--plan*--output json*--no-progress*-- /all*' })) {
+                throw "Command wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*run exe C:\Tools\tool.exe*--target PC001*--credential admin-session*--transport psrp*--plan*--output json*--no-progress*-- -Mode Audit*' })) {
+                throw "Executable wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
             }
             """);
 
