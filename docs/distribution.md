@@ -2,7 +2,7 @@
 
 Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.
 
-Status: partial Roadmap `7`.
+Status: partial Roadmap `8`.
 
 Current support: `packaging/build-module.ps1` assembles a local PowerShell module folder with a bundled self-contained `win-x64` `dispatch.exe` at `bin\win-x64\dispatch.exe`, validates the module manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable. `install-from-source.ps1`, `install.ps1`, and ZIP packaging are not implemented yet.
 

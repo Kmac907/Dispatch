@@ -22,7 +22,7 @@ Project site: https://kmac907.github.io/Dispatch/
 - Current credential references through prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault providers on implemented PSRP and raw WinRM paths.
 - Script secret handoff is separate from endpoint credentials: `--credential <name>` selects the remoting credential, while `dispatch run ps ... --secret name=reference` describes a script input secret. Current support validates the option shape and renders only the redacted script parameter binding in plan/dry-run output. Runtime provider resolution and safe transport parameter binding are planned Roadmap 10 work.
 - Machine-wide YAML config at `C:\ProgramData\Dispatch\config.yml`.
-- Current PowerShell module diagnostic/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` over the same `dispatch.exe` command surface; `packaging/build-module.ps1` assembles a module folder with bundled `bin\win-x64\dispatch.exe`. Protected credential handoff remains planned Roadmap 7 work.
+- Current PowerShell module diagnostic/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` over the same `dispatch.exe` command surface; `packaging/build-module.ps1` assembles a module folder with bundled `bin\win-x64\dispatch.exe`. Module wrappers support protected PSCredential handoff for configured `provider: pscredential` references.
 
 ## Choosing Commands
 

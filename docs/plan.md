@@ -1282,7 +1282,7 @@ Current implementation boundary:
 - YAML inventories in the current supported subset accept `credential: <name>` reference names on defaults, group vars, host vars, and hosts, and reject plaintext secret-like inventory fields before endpoint work.
 - YAML config loading rejects direct plaintext secret keys such as `password`, `secret`, `token`, and `sas`.
 - The target model is the global YAML `C:\ProgramData\Dispatch\config.yml` credential catalog described in `docs/credential-store-plan.md`; the current `references.json` catalog is not the long-term canonical credential catalog.
-- PSCredential PowerShell-wrapper handoff remains tied to Roadmap `7` because the protected module handoff, supplied `-Credential <PSCredential>` path, and module-side `Get-Credential` prompt path are not implemented yet.
+- PSCredential PowerShell-wrapper handoff is implemented under Roadmap `7`: module wrappers accept optional `-Credential <PSCredential>` for configured `provider: pscredential` references, prompt with `Get-Credential` when omitted, and hand the credential to Dispatch through a protected DPAPI CurrentUser handoff while direct CLI use without wrapper handoff remains rejected.
 - PsExec explicit credential handoff remains intentionally blocked by the current no-plaintext `psexec -u/-p` boundary and is not the next valid `6.4` slice.
 - Job-file credential validation depends on Roadmap `6.5` introducing the YAML job parser.
 
@@ -1476,7 +1476,7 @@ Dependencies:
 Current implementation notes:
 - `Dispatch.psd1` and `Dispatch.psm1` exist with `Test-Dispatch`, `Get-DispatchVersion`, `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` wrappers over the canonical CLI.
 - `packaging/build-module.ps1` publishes `Dispatch.Cli` as a self-contained single-file `win-x64` executable, assembles the PowerShell module folder, places the executable at `bin\win-x64\dispatch.exe`, validates the manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable.
-- Protected `PSCredential` wrapper handoff is not implemented yet.
+- Protected `PSCredential` wrapper handoff is implemented for the execution wrappers. The module accepts optional `-Credential <PSCredential>` for configured `provider: pscredential` references, prompts with `Get-Credential` when omitted, validates configured username mismatch, delegates `provider: prompt` prompting to Dispatch, and passes the credential through a short-lived DPAPI CurrentUser-protected handoff file referenced through child-process environment.
 
 Definition of done:
 - Importing the module exposes the documented commands.

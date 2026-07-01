@@ -25,7 +25,7 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `dispatch hosts graph` local inventory group/child relationship inspection.
 - `dispatch hosts vars` local effective host metadata inspection.
 - `dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml` local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, host inventory schema availability, credential provider availability, run-history layout checks, and PsExec local policy/EULA diagnostics.
-- PowerShell module import with `Test-Dispatch`, `Get-DispatchVersion`, `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` wrappers over the canonical CLI.
+- PowerShell module import with `Test-Dispatch`, `Get-DispatchVersion`, `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` wrappers over the canonical CLI, including `-CredentialName` reference selection and protected `PSCredential` handoff for `provider: pscredential`.
 - `packaging/build-module.ps1` assembles a local module folder with bundled self-contained `bin\win-x64\dispatch.exe` and validates module import/version resolution through that bundled executable.
 - `dispatch init config|hosts|job|all` starter YAML scaffolding.
 - Logs commands over local run history.
@@ -41,14 +41,12 @@ This page is a human-readable status summary. The detailed roadmap remains in `d
 - `hosts` command group has current `list`, `validate`, `graph`, `vars`, and transport-probe `test` over the supported v1 inventory subset.
 - Inventory support covers the v1 subset needed by current run paths.
 - YAML task execution beyond `ps`/`cmd`/`exe`, including real `copy` transfer execution, remains planned.
-- Credential handoff is not complete for every entry point; PSCredential wrapper handoff remains planned. PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
+- Credential handoff is not complete for every entry point; PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.
 - Script secret handoff is separate from endpoint `--credential`. The approved initial boundary is current `dispatch run ps ... --secret name=reference` plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.
 - Raw `stdout.txt`, raw `stderr.txt`, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.
-- PowerShell module execution wrappers are partial. Current module support includes diagnostics/version wrappers plus `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, `Invoke-DispatchExecutable`, and `Invoke-DispatchJob` over `dispatch run ps|cmd|exe` and `dispatch apply`, including `-CredentialName` passthrough to CLI `--credential`, and local bundled-exe module assembly through `packaging/build-module.ps1`. Protected `PSCredential` handoff remains in Roadmap `7`.
 
 ## Planned Next
 
-- Continue PowerShell module wrapper work with protected credential handoff.
 - Implement source install and local packaging.
 - Implement script secret handoff in staged slices: plan/dry-run validation first, then safe transport-specific parameter binding.
 

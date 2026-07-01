@@ -147,7 +147,7 @@ internal static class DpapiCredentialFileStore
         }
     }
 
-    private static byte[] Protect(byte[] plaintext, string description)
+    internal static byte[] Protect(byte[] plaintext, string description)
     {
         using var input = DataBlob.FromBytes(plaintext);
         if (!CryptProtectData(
@@ -165,7 +165,7 @@ internal static class DpapiCredentialFileStore
         return CopyAndFree(output);
     }
 
-    private static byte[] Unprotect(byte[] protectedBytes, string description)
+    internal static byte[] Unprotect(byte[] protectedBytes, string description)
     {
         using var input = DataBlob.FromBytes(protectedBytes);
         var dataDescription = IntPtr.Zero;
@@ -217,7 +217,7 @@ internal static class DpapiCredentialFileStore
         }
     }
 
-    private static SecureString Utf8BytesToSecureString(byte[] bytes)
+    internal static SecureString Utf8BytesToSecureString(byte[] bytes)
     {
         var chars = Encoding.UTF8.GetChars(bytes);
         try
@@ -282,7 +282,7 @@ internal static class DpapiCredentialFileStore
         return difference == 0;
     }
 
-    private static void CryptographicOperationsZeroMemory(byte[] bytes)
+    internal static void CryptographicOperationsZeroMemory(byte[] bytes)
     {
         Array.Clear(bytes, 0, bytes.Length);
     }

@@ -13,6 +13,7 @@ public sealed class PowerShellModuleTests
         var fakeDispatch = Path.Combine(root, "dispatch.cmd");
         var argumentLog = Path.Combine(root, "dispatch-args.txt");
         var scriptPath = Path.Combine(root, "module-test.ps1");
+        var configPath = Path.Combine(root, "config.yml");
         var moduleManifest = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "module", "Dispatch", "Dispatch.psd1"));
 
         await File.WriteAllTextAsync(fakeDispatch, """
@@ -29,6 +30,10 @@ public sealed class PowerShellModuleTests
               exit /b 0
             )
             if "%1"=="run" (
+              if not "%DISPATCH_PSCREDENTIAL_HANDOFF%"=="" (
+                echo handoff=%DISPATCH_PSCREDENTIAL_HANDOFF%>> "%DISPATCH_TEST_ARGUMENT_LOG%"
+                type "%DISPATCH_PSCREDENTIAL_HANDOFF%">> "%DISPATCH_TEST_ARGUMENT_LOG%"
+              )
               echo {"succeeded":true,"targets":[{"name":"PC001","state":"succeeded"}]}
               exit /b 0
             )
@@ -38,6 +43,17 @@ public sealed class PowerShellModuleTests
             )
             echo unexpected arguments: %*
             exit /b 9
+            """);
+        await File.WriteAllTextAsync(configPath, """
+            dispatch:
+              default_credential_provider: prompt
+            credentials:
+              admin-session:
+                provider: pscredential
+                username: SCF\prod.admin
+              prompt-session:
+                provider: prompt
+                username: SCF\prompt.admin
             """);
 
         await File.WriteAllTextAsync(scriptPath, $$"""
@@ -114,6 +130,70 @@ public sealed class PowerShellModuleTests
                 throw "Unexpected command wrapper exit code: $($cmdResult.ExitCode)"
             }
 
+            $securePassword = [Security.SecureString]::new()
+            foreach ($character in 'top-secret-value'.ToCharArray()) {
+                $securePassword.AppendChar($character)
+            }
+            $securePassword.MakeReadOnly()
+            $credential = [pscredential]::new('SCF\prod.admin', $securePassword)
+            $credentialResult = Invoke-DispatchCommand `
+                -Command 'hostname' `
+                -Target PC001 `
+                -Transport psrp `
+                -Config '{{EscapePowerShellSingleQuotedString(configPath)}}' `
+                -CredentialName admin-session `
+                -Credential $credential `
+                -Plan
+            if (-not $credentialResult.succeeded) {
+                throw 'Credential wrapper did not parse structured run output.'
+            }
+
+            $script:GetCredentialCallCount = 0
+            $script:GetCredentialUserName = $null
+            function Get-Credential {
+                param(
+                    [string] $UserName,
+                    [string] $Message
+                )
+
+                $script:GetCredentialCallCount += 1
+                $script:GetCredentialUserName = $UserName
+                $promptPassword = [Security.SecureString]::new()
+                foreach ($character in 'prompt-secret-value'.ToCharArray()) {
+                    $promptPassword.AppendChar($character)
+                }
+                $promptPassword.MakeReadOnly()
+                [pscredential]::new($UserName, $promptPassword)
+            }
+
+            $promptedCredentialResult = Invoke-DispatchCommand `
+                -Command 'hostname' `
+                -Target PC001 `
+                -Transport psrp `
+                -Config '{{EscapePowerShellSingleQuotedString(configPath)}}' `
+                -CredentialName admin-session `
+                -Plan
+            if (-not $promptedCredentialResult.succeeded) {
+                throw 'Prompted credential wrapper did not parse structured run output.'
+            }
+            if ($script:GetCredentialCallCount -ne 1 -or $script:GetCredentialUserName -ne 'SCF\prod.admin') {
+                throw "PSCredential prompt was not called with the configured username. Count=$script:GetCredentialCallCount User=$script:GetCredentialUserName"
+            }
+
+            $promptProviderResult = Invoke-DispatchCommand `
+                -Command 'hostname' `
+                -Target PC001 `
+                -Transport psrp `
+                -Config '{{EscapePowerShellSingleQuotedString(configPath)}}' `
+                -CredentialName prompt-session `
+                -Plan
+            if (-not $promptProviderResult.succeeded) {
+                throw 'Prompt-provider wrapper did not parse structured run output.'
+            }
+            if ($script:GetCredentialCallCount -ne 1) {
+                throw 'Prompt provider should delegate prompting to Dispatch instead of calling Get-Credential in the module.'
+            }
+
             $exeResult = Invoke-DispatchExecutable `
                 -Path 'C:\Tools\tool.exe' `
                 -Target PC001 `
@@ -151,6 +231,32 @@ public sealed class PowerShellModuleTests
             }
             if (-not ($argumentLines | Where-Object { $_ -like '*run cmd whoami*--target PC001*--credential admin-session*--transport winrm*--plan*--output json*--no-progress*-- /all*' })) {
                 throw "Command wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
+            }
+            $handoffLine = $argumentLines | Where-Object { $_ -like 'handoff=*' } | Select-Object -First 1
+            if ([string]::IsNullOrWhiteSpace($handoffLine)) {
+                throw "Credential wrapper did not create a protected handoff: $($argumentLines -join ' | ')"
+            }
+            $handoffPath = $handoffLine.Substring('handoff='.Length)
+            if (Test-Path -LiteralPath $handoffPath) {
+                throw "Credential handoff file was not cleaned up: $handoffPath"
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*"provider":"pscredential"*' })) {
+                throw "Credential handoff did not record provider metadata: $($argumentLines -join ' | ')"
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*"referenceName":"admin-session"*' })) {
+                throw "Credential handoff did not record credential reference metadata: $($argumentLines -join ' | ')"
+            }
+            if ($argumentLines -join '|' -like '*top-secret-value*') {
+                throw "Credential secret leaked into argument log or handoff metadata."
+            }
+            if ($argumentLines -join '|' -like '*prompt-secret-value*') {
+                throw "Prompted credential secret leaked into argument log or handoff metadata."
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*run cmd hostname*--config {{EscapePowerShellSingleQuotedString(configPath)}}*--credential admin-session*--transport psrp*--plan*--output json*--no-progress*' })) {
+                throw "Credential wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
+            }
+            if (-not ($argumentLines | Where-Object { $_ -like '*run cmd hostname*--config {{EscapePowerShellSingleQuotedString(configPath)}}*--credential prompt-session*--transport psrp*--plan*--output json*--no-progress*' })) {
+                throw "Prompt-provider credential wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"
             }
             if (-not ($argumentLines | Where-Object { $_ -like '*run exe C:\Tools\tool.exe*--target PC001*--credential admin-session*--transport psrp*--plan*--output json*--no-progress*-- -Mode Audit*' })) {
                 throw "Executable wrapper arguments were not mapped as expected: $($argumentLines -join ' | ')"

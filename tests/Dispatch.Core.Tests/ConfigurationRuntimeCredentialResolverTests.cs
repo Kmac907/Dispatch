@@ -2,6 +2,8 @@ using Dispatch.Core.Configuration;
 using Dispatch.Core.Credentials;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
+using System.Text;
+using System.Text.Json;
 using System.Security;
 
 namespace Dispatch.Core.Tests;
@@ -49,6 +51,63 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
         Assert.False(result.Succeeded);
         Assert.Contains("only valid through the PowerShell wrapper", result.FailureMessage);
         Assert.Empty(result.Credentials);
+    }
+
+    [Fact]
+    public async Task ResolveAsyncConsumesProtectedPowerShellCredentialHandoff()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var root = Directory.CreateTempSubdirectory("dispatch-pscredential-handoff-test-");
+        var handoffPath = Path.Combine(root.FullName, "handoff.json");
+        var plaintext = Encoding.UTF8.GetBytes("secret-value");
+        var protectedBytes = DpapiCredentialFileStore.Protect(plaintext, "Dispatch:pscredential:prod-admin");
+        try
+        {
+            var handoff = new
+            {
+                version = 1,
+                provider = "pscredential",
+                referenceName = "prod-admin",
+                userName = @"SCF\prod.admin",
+                protection = "dpapi_current_user",
+                protectedValue = Convert.ToBase64String(protectedBytes),
+                createdAt = DateTimeOffset.UtcNow
+            };
+            await File.WriteAllTextAsync(handoffPath, JsonSerializer.Serialize(handoff));
+            Environment.SetEnvironmentVariable(PowerShellCredentialHandoffStore.EnvironmentVariableName, handoffPath);
+
+            var resolver = CreateResolver(
+                new Dictionary<string, string?>
+                {
+                    ["Credentials:prod-admin:Provider"] = "pscredential",
+                    ["Credentials:prod-admin:Username"] = @"SCF\prod.admin"
+                },
+                new RecordingRuntimeCredentialPrompt("unused"));
+
+            var result = await resolver.ResolveAsync(["prod-admin"], CancellationToken.None);
+
+            Assert.True(result.Succeeded, result.FailureMessage);
+            Assert.False(File.Exists(handoffPath));
+            var credential = Assert.Single(result.Credentials.Values);
+            Assert.Equal("prod-admin", credential.ReferenceName);
+            Assert.Equal(@"SCF\prod.admin", credential.UserName);
+            Assert.Equal("pscredential", credential.ProviderName);
+            Assert.Equal("secret-value", ToPlainText(credential.Password));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(PowerShellCredentialHandoffStore.EnvironmentVariableName, null);
+            DpapiCredentialFileStore.CryptographicOperationsZeroMemory(plaintext);
+            DpapiCredentialFileStore.CryptographicOperationsZeroMemory(protectedBytes);
+            if (Directory.Exists(root.FullName))
+            {
+                Directory.Delete(root.FullName, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -113,6 +172,23 @@ public sealed class ConfigurationRuntimeCredentialResolverTests
             }
 
             return Task.FromResult(secureString);
+        }
+    }
+
+    private static string ToPlainText(SecureString secureString)
+    {
+        var pointer = IntPtr.Zero;
+        try
+        {
+            pointer = System.Runtime.InteropServices.Marshal.SecureStringToBSTR(secureString);
+            return System.Runtime.InteropServices.Marshal.PtrToStringBSTR(pointer) ?? string.Empty;
+        }
+        finally
+        {
+            if (pointer != IntPtr.Zero)
+            {
+                System.Runtime.InteropServices.Marshal.ZeroFreeBSTR(pointer);
+            }
         }
     }
 

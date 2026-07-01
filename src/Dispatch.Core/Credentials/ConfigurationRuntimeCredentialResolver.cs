@@ -53,9 +53,31 @@ public sealed class ConfigurationRuntimeCredentialResolver(
                 var providerName = ResolveProvider(credential);
                 if (providerName.Equals(PsCredentialProviderName, StringComparison.OrdinalIgnoreCase))
                 {
+                    var psCredentialUsername = NormalizeOptionalValue(credential["Username"]);
+                    if (string.IsNullOrWhiteSpace(psCredentialUsername))
+                    {
+                        return FailAndDispose(
+                            resolved,
+                            $"Credential reference '{reference}' is missing required field 'username'.");
+                    }
+
+                    var handoff = PowerShellCredentialHandoffStore.ReadFromEnvironment(reference, psCredentialUsername);
+                    if (handoff is { IsPresent: true, Succeeded: true, Credential: not null })
+                    {
+                        resolved[reference] = handoff.Credential;
+                        continue;
+                    }
+
+                    if (handoff.IsPresent)
+                    {
+                        return FailAndDispose(
+                            resolved,
+                            handoff.FailureMessage ?? $"PowerShell PSCredential handoff for '{reference}' failed.");
+                    }
+
                     return FailAndDispose(
                         resolved,
-                        $"Credential reference '{reference}' uses provider 'pscredential', which is only valid through the PowerShell wrapper.");
+                        $"Credential reference '{reference}' uses provider 'pscredential', which is only valid through the PowerShell wrapper with protected credential handoff.");
                 }
 
                 if (providerName.Equals(DpapiFileProviderName, StringComparison.OrdinalIgnoreCase))

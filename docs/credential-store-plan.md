@@ -1,6 +1,6 @@
 # Credential Store Plan
 
-This document is the canonical credential store and credential resolution design for Dispatch. It applies to the direct `dispatch.exe` command surface and to the PowerShell module wrapper. Module credential handoff for `provider: pscredential` remains planned under Roadmap `7`.
+This document is the canonical credential store and credential resolution design for Dispatch. It applies to the direct `dispatch.exe` command surface and to the PowerShell module wrapper.
 
 ## Scope Distinction
 
@@ -377,7 +377,7 @@ Current implementation:
 - `--plan` / dry-run paths validate and carry the reference name but do not prompt.
 - The resolved password is converted to an in-memory PSRP `PSCredential` for PSRP command, script, and artifact sessions.
 - For raw WinRM, the resolved password is passed into WSMan connection options for upload, execution, and artifact-download shells.
-- PsExec, YAML `apply`, and PowerShell-wrapper `pscredential` handoff remain separate boundaries.
+- PsExec explicit credential handoff remains a separate boundary.
 
 ## PSCredential Provider
 
@@ -392,7 +392,7 @@ credentials:
     username: CONTOSO\prod.admin
 ```
 
-Planned Roadmap `7` PowerShell wrapper contract:
+PowerShell wrapper contract:
 
 ```powershell
 Invoke-DispatchPowerShell `
@@ -402,7 +402,7 @@ Invoke-DispatchPowerShell `
   -Credential $cred
 ```
 
-When the protected handoff slice is implemented, the `-Credential` parameter will be optional. If it is omitted and `prod-admin` resolves to `provider: pscredential`, the module will prompt with `Get-Credential`, using the configured username when present:
+The `-Credential` parameter is optional. If it is omitted and `prod-admin` resolves to `provider: pscredential`, the module prompts with `Get-Credential`, using the configured username when present:
 
 ```powershell
 Invoke-DispatchPowerShell `
@@ -414,20 +414,23 @@ Invoke-DispatchPowerShell `
 Current implementation:
 
 - Direct `dispatch.exe` validates `provider: pscredential` metadata but rejects runtime use unless a compatible protected wrapper handoff is present.
-- Current PowerShell module execution wrappers accept `-CredentialName <name>` and pass it through to Dispatch as `--credential <name>`.
-- Current PowerShell module execution wrappers do not yet accept `-Credential <PSCredential>`, do not call `Get-Credential`, and do not perform protected PSCredential handoff.
+- PowerShell module execution wrappers accept `-CredentialName <name>` and pass it through to Dispatch as `--credential <name>`.
+- PowerShell module execution wrappers accept optional `-Credential <PSCredential>` for configured `provider: pscredential` references.
+- When `-Credential` is omitted for a `pscredential` reference, the module calls `Get-Credential`, using the configured username when available.
+- When `-Credential` is supplied and the config has `username`, the module rejects username mismatch before launching Dispatch.
+- The module writes a short-lived DPAPI CurrentUser-protected handoff file with restrictive ACLs, passes only the handoff path through child-process environment, and deletes the handoff file after Dispatch consumes it.
 
-Planned Roadmap `7` rules:
+Rules:
 
-- Only valid through the PowerShell wrapper.
-- Direct `dispatch.exe` must reject `provider: pscredential` unless a compatible protected wrapper handoff is present.
+- Only valid through the PowerShell wrapper or a compatible protected wrapper handoff.
+- Direct `dispatch.exe` rejects `provider: pscredential` unless a compatible protected wrapper handoff is present.
 - `-CredentialName <name>` selects the configured credential reference.
 - `-Credential <PSCredential>` supplies a live credential object, but is not required.
 - If `-CredentialName` resolves to `provider: pscredential` and `-Credential` is omitted, the module calls `Get-Credential`, using the configured username when available.
-- If `-CredentialName` resolves to `provider: pscredential` and `-Credential` is supplied, the module uses the supplied object and must validate or explicitly document username mismatch behavior when the config also has `username`.
+- If `-CredentialName` resolves to `provider: pscredential` and `-Credential` is supplied, the module uses the supplied object and validates username mismatch when the config also has `username`.
 - If `-CredentialName` resolves to `provider: prompt`, the module does not call `Get-Credential`; Dispatch performs its normal runtime prompt.
 - If `-CredentialName` resolves to `dpapi_file`, `windows_credential_manager`, or `azure_keyvault`, the module does not prompt; Dispatch resolves the provider normally.
-- Nothing is stored.
+- No long-lived secret is stored by the `pscredential` provider.
 - Password never becomes a command-line argument.
 
 ## DPAPI File Provider
@@ -466,7 +469,7 @@ Current implementation:
 - `dispatch creds remove <name>` deletes the configured protected file but leaves the reference in `C:\ProgramData\Dispatch\config.yml`.
 - Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured DPAPI file into an in-memory PSRP `PSCredential`.
 - Real `dispatch run ps|cmd|exe ... --transport winrm` execution can resolve the configured DPAPI file and pass it into WSMan connection options.
-- PsExec, YAML `apply`, and PowerShell-wrapper `pscredential` handoff remain separate boundaries.
+- PsExec explicit credential handoff remains a separate boundary.
 
 ## Windows Credential Manager Provider
 
@@ -497,7 +500,7 @@ Current implementation:
 - `dispatch creds remove <name>` deletes the configured Windows Credential Manager target but leaves the reference in `C:\ProgramData\Dispatch\config.yml`.
 - Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured Windows Credential Manager target into an in-memory PSRP `PSCredential`.
 - Real `dispatch run ps|cmd|exe ... --transport winrm` execution can resolve the configured Windows Credential Manager target and pass it into WSMan connection options.
-- PsExec, YAML `apply`, and PowerShell-wrapper `pscredential` handoff remain separate boundaries.
+- PsExec explicit credential handoff remains a separate boundary.
 
 ## Azure Key Vault Provider
 
@@ -535,7 +538,7 @@ Current implementation:
 - `dispatch creds remove <name>` does not remove Azure Key Vault secrets; the config reference must be removed from `C:\ProgramData\Dispatch\config.yml`, and any vault secret changes must be made through Azure tooling or a future explicit command.
 - Real `dispatch run ps|cmd|exe ... --transport psrp` execution can resolve the configured Key Vault secret into an in-memory PSRP `PSCredential`.
 - Real `dispatch run ps|cmd|exe ... --transport winrm` execution can resolve the configured Key Vault secret and pass it into WSMan connection options.
-- PsExec, YAML `apply`, PowerShell-wrapper `pscredential` handoff, and creating/updating Key Vault secrets through Dispatch remain separate boundaries.
+- PsExec explicit credential handoff and creating/updating Key Vault secrets through Dispatch remain separate boundaries.
 
 ## dispatch creds Behavior
 
@@ -812,7 +815,7 @@ These are references, locations, auth mode names, or usernames, not secret value
 8. Implement `prompt` provider.
 9. Add `--credential` to `run` and `apply`.
 10. Wire resolved credentials into PSRP first. Current implementation covers prompt-provider, DPAPI-file, Windows Credential Manager, and Azure Key Vault runtime resolution for `run ps|cmd|exe --transport psrp`.
-11. Add PowerShell wrapper `pscredential` handoff under Roadmap 7: execution wrappers accept `-CredentialName`, accept optional `-Credential <PSCredential>`, prompt with `Get-Credential` when a `pscredential` reference is selected without `-Credential`, delegate `prompt` references to Dispatch's existing runtime prompt, and pass wrapper-supplied credentials through a protected handoff without exposing plaintext.
+11. Add PowerShell wrapper `pscredential` handoff under Roadmap 7. Current implementation covers execution wrappers accepting `-CredentialName`, optional `-Credential <PSCredential>`, module-side `Get-Credential` when a `pscredential` reference is selected without `-Credential`, `prompt` reference delegation to Dispatch's existing runtime prompt, and protected DPAPI CurrentUser wrapper handoff without exposing plaintext.
 12. Add `dpapi_file`. Current implementation covers enrollment, restrictive file ACL hardening, test, remove, and PSRP plus raw WinRM runtime resolution.
 13. Add `windows_credential_manager`. Current implementation covers enrollment, test, remove, and PSRP plus raw WinRM runtime resolution.
 14. Add `azure_keyvault`. Current implementation covers `creds add` / `creds test` reference validation and PSRP plus raw WinRM runtime resolution; creating or updating Key Vault secrets through Dispatch remains out of scope for the first Key Vault slice.

@@ -40,8 +40,7 @@ Current PSRP credential resolution supports:
 - `dpapi_file`
 - `windows_credential_manager`
 - `azure_keyvault`
-
-PowerShell-wrapper `pscredential` handoff is planned with the module wrapper.
+- `pscredential` when launched through the PowerShell module's protected PSCredential handoff.
 
 ## Common Failures
 

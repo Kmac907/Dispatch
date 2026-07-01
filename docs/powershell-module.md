@@ -2,7 +2,7 @@
 
 The PowerShell module is a wrapper over the bundled `dispatch.exe`. The direct `dispatch` command remains the canonical engine and command surface.
 
-Status: partial Roadmap `7`.
+Status: Roadmap `7` complete.
 
 ## Commands
 
@@ -40,15 +40,13 @@ Invoke-DispatchJob -JobPath .\job.yml -Target PC001 -Plan
 
 ## Automation Rule
 
-Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. `Test-Dispatch` calls `dispatch.exe doctor --output json` and returns the parsed diagnostics object with `ExitCode` and `DispatchPath` attached. `Get-DispatchVersion` calls `dispatch.exe version` and returns a small object with the product, version, command service, resolved dispatch path, and raw output. `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, and `Invoke-DispatchExecutable` call `dispatch.exe run ps|cmd|exe ... --output json --no-progress`, return the parsed run result with `ExitCode` and `DispatchPath` attached, and pass `-CredentialName <name>` through to the existing CLI `--credential <name>` endpoint credential reference. `Invoke-DispatchJob` calls `dispatch.exe apply <job.yml> --output json --no-progress`, returns the parsed apply result with `ExitCode` and `DispatchPath` attached, and maps job options such as `-Target`, `-Inventory`, `-CredentialName`, `-Transport`, `-Tags`, `-SkipTags`, `-Serial`, `-Plan`, `-Check`, and `-Diff` onto the matching CLI options.
+Wrapper commands rely on structured output or result files. They do not parse rich terminal rendering. `Test-Dispatch` calls `dispatch.exe doctor --output json` and returns the parsed diagnostics object with `ExitCode` and `DispatchPath` attached. `Get-DispatchVersion` calls `dispatch.exe version` and returns a small object with the product, version, command service, resolved dispatch path, and raw output. `Invoke-DispatchPowerShell`, `Invoke-DispatchCommand`, and `Invoke-DispatchExecutable` call `dispatch.exe run ps|cmd|exe ... --output json --no-progress`, return the parsed run result with `ExitCode` and `DispatchPath` attached, and pass `-CredentialName <name>` through to the existing CLI `--credential <name>` endpoint credential reference. `Invoke-DispatchJob` calls `dispatch.exe apply <job.yml> --output json --no-progress`, returns the parsed apply result with `ExitCode` and `DispatchPath` attached, and maps job options such as `-Target`, `-Inventory`, `-CredentialName`, `-Credential`, `-Transport`, `-Tags`, `-SkipTags`, `-Serial`, `-Plan`, `-Check`, and `-Diff` onto the matching CLI options.
 
 ## PSCredential Handoff
 
-`provider: pscredential` is only valid through the PowerShell module wrapper.
+`provider: pscredential` is only valid through the PowerShell module wrapper. Direct `dispatch.exe --credential <name>` rejects `pscredential` unless a compatible protected wrapper handoff is present.
 
-The current execution wrappers accept `-CredentialName <name>` and pass it through to Dispatch as `--credential <name>`. For the later `provider: pscredential` handoff slice, `-Credential <PSCredential>` is optional.
-
-Current execution wrappers do not yet accept `-Credential <PSCredential>`. When the later protected handoff slice lands, supplied credentials will look like this:
+The execution wrappers accept `-CredentialName <name>` and pass it through to Dispatch as `--credential <name>`. When that configured reference uses `provider: pscredential`, `-Credential <PSCredential>` is optional. If supplied, the module uses that live credential object:
 
 ```powershell
 $cred = Get-Credential CONTOSO\AdminUser
@@ -60,7 +58,7 @@ Invoke-DispatchPowerShell `
   -Credential $cred
 ```
 
-When that later handoff slice lands and `-Credential` is omitted for a `pscredential` reference, the module will prompt with `Get-Credential`, using the configured username when present:
+When `-Credential` is omitted for a `pscredential` reference, the module prompts with `Get-Credential`, using the configured username when present:
 
 ```powershell
 Invoke-DispatchPowerShell `
@@ -69,9 +67,9 @@ Invoke-DispatchPowerShell `
   -CredentialName admin-session
 ```
 
-That future wrapper handoff must pass the credential to Dispatch without putting the password on a command line or writing it to config, job files, inventory files, logs, traces, results, or artifacts. Direct `dispatch.exe` must reject `pscredential` unless a compatible protected wrapper handoff is present.
+The wrapper creates a short-lived DPAPI CurrentUser-protected handoff file, passes only a local handoff path to `dispatch.exe` through process environment, and deletes the handoff file after Dispatch consumes it. The password is not placed on a command line and is not written to config, job files, inventory files, logs, traces, results, or artifacts. If the supplied credential username does not match the configured username, the wrapper fails before launching Dispatch.
 
-`provider: prompt` remains different: Dispatch owns that secure runtime prompt. When the module selects a `prompt` reference, the module should not call `Get-Credential`; it should let Dispatch prompt normally.
+`provider: prompt` remains different: Dispatch owns that secure runtime prompt. When the module selects a `prompt` reference, the module does not call `Get-Credential`; it lets Dispatch prompt normally.
 
 ## No Separate Shell
 

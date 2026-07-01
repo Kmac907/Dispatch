@@ -43,7 +43,9 @@ function Invoke-DispatchNative {
         [Parameter(Mandatory)]
         [string[]] $ArgumentList,
 
-        [string] $DispatchPath
+        [string] $DispatchPath,
+
+        [string] $CredentialHandoffPath
     )
 
     $resolvedPath = Resolve-DispatchExecutable -DispatchPath $DispatchPath
@@ -52,6 +54,9 @@ function Invoke-DispatchNative {
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
+    if (-not [string]::IsNullOrWhiteSpace($CredentialHandoffPath)) {
+        $startInfo.Environment['DISPATCH_PSCREDENTIAL_HANDOFF'] = $CredentialHandoffPath
+    }
 
     if ($resolvedPath -match '\.(bat|cmd)$') {
         $commandProcessor = $env:ComSpec
@@ -227,6 +232,8 @@ function Invoke-DispatchPowerShell {
 
         [string] $CredentialName,
 
+        [System.Management.Automation.PSCredential] $Credential,
+
         [ValidateSet('auto', 'psexec', 'psrp', 'winrm')]
         [string] $Transport,
 
@@ -270,7 +277,13 @@ function Invoke-DispatchPowerShell {
     Add-DispatchStructuredOutputArguments -Arguments $arguments
     Add-DispatchRemainingArguments -Arguments $arguments -Value $ArgumentList
 
-    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+    $handoffPath = New-DispatchPSCredentialHandoff -CredentialName $CredentialName -Credential $Credential -Config $Config
+    try {
+        Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -CredentialHandoffPath $handoffPath -Raw:$Raw
+    }
+    finally {
+        Remove-DispatchPSCredentialHandoff -Path $handoffPath
+    }
 }
 
 function Invoke-DispatchCommand {
@@ -288,6 +301,8 @@ function Invoke-DispatchCommand {
         [string] $Exclude,
 
         [string] $CredentialName,
+
+        [System.Management.Automation.PSCredential] $Credential,
 
         [ValidateSet('auto', 'psrp', 'winrm')]
         [string] $Transport,
@@ -329,7 +344,13 @@ function Invoke-DispatchCommand {
     Add-DispatchStructuredOutputArguments -Arguments $arguments
     Add-DispatchRemainingArguments -Arguments $arguments -Value $ArgumentList
 
-    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+    $handoffPath = New-DispatchPSCredentialHandoff -CredentialName $CredentialName -Credential $Credential -Config $Config
+    try {
+        Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -CredentialHandoffPath $handoffPath -Raw:$Raw
+    }
+    finally {
+        Remove-DispatchPSCredentialHandoff -Path $handoffPath
+    }
 }
 
 function Invoke-DispatchExecutable {
@@ -347,6 +368,8 @@ function Invoke-DispatchExecutable {
         [string] $Exclude,
 
         [string] $CredentialName,
+
+        [System.Management.Automation.PSCredential] $Credential,
 
         [ValidateSet('auto', 'psrp', 'winrm')]
         [string] $Transport,
@@ -388,7 +411,13 @@ function Invoke-DispatchExecutable {
     Add-DispatchStructuredOutputArguments -Arguments $arguments
     Add-DispatchRemainingArguments -Arguments $arguments -Value $ArgumentList
 
-    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+    $handoffPath = New-DispatchPSCredentialHandoff -CredentialName $CredentialName -Credential $Credential -Config $Config
+    try {
+        Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -CredentialHandoffPath $handoffPath -Raw:$Raw
+    }
+    finally {
+        Remove-DispatchPSCredentialHandoff -Path $handoffPath
+    }
 }
 
 function Invoke-DispatchJob {
@@ -407,6 +436,8 @@ function Invoke-DispatchJob {
         [string] $Exclude,
 
         [string] $CredentialName,
+
+        [System.Management.Automation.PSCredential] $Credential,
 
         [ValidateSet('auto', 'psexec', 'psrp', 'winrm')]
         [string] $Transport,
@@ -440,7 +471,13 @@ function Invoke-DispatchJob {
     Add-DispatchApplyCommonArguments -Arguments $arguments -Target $Target -Inventory $Inventory -Config $Config -Exclude $Exclude -CredentialName $CredentialName -Transport $Transport -Tags $Tags -SkipTags $SkipTags -Serial $Serial -Plan:$Plan -Check:$Check -Diff:$Diff -NoColor:$NoColor -Quiet:$Quiet -VerboseEnabled:($PSBoundParameters.ContainsKey('Verbose') -and $PSBoundParameters['Verbose']) -Trace:$Trace
     Add-DispatchStructuredOutputArguments -Arguments $arguments
 
-    Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -Raw:$Raw
+    $handoffPath = New-DispatchPSCredentialHandoff -CredentialName $CredentialName -Credential $Credential -Config $Config
+    try {
+        Invoke-DispatchStructuredRun -ArgumentList $arguments.ToArray() -DispatchPath $DispatchPath -CredentialHandoffPath $handoffPath -Raw:$Raw
+    }
+    finally {
+        Remove-DispatchPSCredentialHandoff -Path $handoffPath
+    }
 }
 
 function Invoke-DispatchStructuredRun {
@@ -451,10 +488,12 @@ function Invoke-DispatchStructuredRun {
 
         [string] $DispatchPath,
 
+        [string] $CredentialHandoffPath,
+
         [switch] $Raw
     )
 
-    $result = Invoke-DispatchNative -ArgumentList $ArgumentList -DispatchPath $DispatchPath
+    $result = Invoke-DispatchNative -ArgumentList $ArgumentList -DispatchPath $DispatchPath -CredentialHandoffPath $CredentialHandoffPath
     if ($Raw) {
         return $result
     }
@@ -722,6 +761,384 @@ function ConvertFrom-DispatchJson {
     }
 
     $Json | ConvertFrom-Json
+}
+
+function New-DispatchPSCredentialHandoff {
+    [CmdletBinding()]
+    param(
+        [string] $CredentialName,
+
+        [System.Management.Automation.PSCredential] $Credential,
+
+        [string] $Config
+    )
+
+    if ($null -ne $Credential -and [string]::IsNullOrWhiteSpace($CredentialName)) {
+        throw "-Credential requires -CredentialName so Dispatch can bind the protected handoff to a configured credential reference."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($CredentialName)) {
+        return $null
+    }
+
+    $definition = Get-DispatchCredentialReferenceDefinition -CredentialName $CredentialName -Config $Config
+    if ($null -eq $definition -or [string]::IsNullOrWhiteSpace($definition.Provider)) {
+        if ($null -ne $Credential) {
+            throw "-Credential can only be used when -CredentialName resolves to provider: pscredential in Dispatch config."
+        }
+
+        return $null
+    }
+
+    if ($definition.Provider -ine 'pscredential') {
+        if ($null -ne $Credential) {
+            throw "-Credential can only be used with provider: pscredential. Credential '$CredentialName' uses provider: $($definition.Provider)."
+        }
+
+        return $null
+    }
+
+    if ($null -eq $Credential) {
+        if ([string]::IsNullOrWhiteSpace($definition.UserName)) {
+            $Credential = Get-Credential -Message "Dispatch credential '$CredentialName'"
+        }
+        else {
+            $Credential = Get-Credential -UserName $definition.UserName -Message "Dispatch credential '$CredentialName'"
+        }
+    }
+
+    if (-not [string]::IsNullOrWhiteSpace($definition.UserName) -and $Credential.UserName -ine $definition.UserName) {
+        throw "Credential '$CredentialName' username '$($Credential.UserName)' does not match Dispatch config username '$($definition.UserName)'."
+    }
+
+    New-DispatchProtectedHandoffFile -CredentialName $CredentialName -Credential $Credential
+}
+
+function Get-DispatchCredentialReferenceDefinition {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $CredentialName,
+
+        [string] $Config
+    )
+
+    $configPath = Resolve-DispatchConfigPath -Config $Config
+    if ([string]::IsNullOrWhiteSpace($configPath) -or -not (Test-Path -LiteralPath $configPath -PathType Leaf)) {
+        return $null
+    }
+
+    $lines = Get-Content -LiteralPath $configPath
+    $defaultProvider = Get-DispatchDefaultCredentialProvider -Lines $lines
+    $credentialsIndent = -1
+    $credentialIndent = -1
+    $insideCredentials = $false
+    $insideCredential = $false
+    $provider = $null
+    $userName = $null
+    $escapedName = [regex]::Escape($CredentialName)
+
+    foreach ($line in $lines) {
+        if ($line -match '^\s*(#.*)?$') {
+            continue
+        }
+
+        $indent = ($line.Length - $line.TrimStart().Length)
+        if (-not $insideCredentials) {
+            if ($line -match '^(\s*)credentials\s*:\s*(#.*)?$') {
+                $credentialsIndent = $Matches[1].Length
+                $insideCredentials = $true
+            }
+
+            continue
+        }
+
+        if ($indent -le $credentialsIndent) {
+            break
+        }
+
+        if (-not $insideCredential) {
+            if ($line -match "^\s{$($credentialsIndent + 2),}$escapedName\s*:\s*(#.*)?$") {
+                $credentialIndent = $indent
+                $insideCredential = $true
+            }
+
+            continue
+        }
+
+        if ($indent -le $credentialIndent) {
+            break
+        }
+
+        if ($line -match '^\s*provider\s*:\s*(.+?)\s*(#.*)?$') {
+            $provider = ConvertFrom-DispatchYamlScalar -Value $Matches[1]
+        }
+        elseif ($line -match '^\s*username\s*:\s*(.+?)\s*(#.*)?$') {
+            $userName = ConvertFrom-DispatchYamlScalar -Value $Matches[1]
+        }
+    }
+
+    if (-not $insideCredential) {
+        return $null
+    }
+
+    [pscustomobject]@{
+        Provider = if ([string]::IsNullOrWhiteSpace($provider)) { $defaultProvider } else { $provider }
+        UserName = $userName
+    }
+}
+
+function Get-DispatchDefaultCredentialProvider {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string[]] $Lines
+    )
+
+    $insideDispatch = $false
+    $dispatchIndent = -1
+
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*(#.*)?$') {
+            continue
+        }
+
+        $indent = ($line.Length - $line.TrimStart().Length)
+        if ($line -match '^\s*default_credential_provider\s*:\s*(.+?)\s*(#.*)?$') {
+            return ConvertFrom-DispatchYamlScalar -Value $Matches[1]
+        }
+
+        if (-not $insideDispatch) {
+            if ($line -match '^(\s*)dispatch\s*:\s*(#.*)?$') {
+                $dispatchIndent = $Matches[1].Length
+                $insideDispatch = $true
+            }
+
+            continue
+        }
+
+        if ($indent -le $dispatchIndent) {
+            $insideDispatch = $false
+            $dispatchIndent = -1
+            continue
+        }
+
+        if ($line -match '^\s*default_credential_provider\s*:\s*(.+?)\s*(#.*)?$') {
+            return ConvertFrom-DispatchYamlScalar -Value $Matches[1]
+        }
+    }
+
+    $null
+}
+
+function Resolve-DispatchConfigPath {
+    [CmdletBinding()]
+    param(
+        [string] $Config
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Config)) {
+        return $Config
+    }
+
+    $programData = if ([string]::IsNullOrWhiteSpace($env:ProgramData)) { 'C:\ProgramData' } else { $env:ProgramData }
+    Join-Path -Path $programData -ChildPath 'Dispatch\config.yml'
+}
+
+function ConvertFrom-DispatchYamlScalar {
+    [CmdletBinding()]
+    param(
+        [AllowEmptyString()]
+        [string] $Value
+    )
+
+    $trimmed = if ($null -eq $Value) { '' } else { $Value.Trim() }
+    if ($trimmed.Length -ge 2) {
+        if (($trimmed.StartsWith("'") -and $trimmed.EndsWith("'")) -or
+            ($trimmed.StartsWith('"') -and $trimmed.EndsWith('"'))) {
+            return $trimmed.Substring(1, $trimmed.Length - 2)
+        }
+    }
+
+    $trimmed
+}
+
+function New-DispatchProtectedHandoffFile {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $CredentialName,
+
+        [Parameter(Mandatory)]
+        [System.Management.Automation.PSCredential] $Credential
+    )
+
+    if ([System.Environment]::OSVersion.Platform -ne [System.PlatformID]::Win32NT) {
+        throw "PowerShell PSCredential handoff is supported on Windows only."
+    }
+
+    Initialize-DispatchProtectedData
+
+    $plainTextBytes = ConvertFrom-DispatchSecureStringToUtf8Bytes -SecureString $Credential.Password
+    try {
+        $protectedBytes = [System.Security.Cryptography.ProtectedData]::Protect(
+            $plainTextBytes,
+            $null,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+        try {
+            $file = [pscustomobject]@{
+                version = 1
+                provider = 'pscredential'
+                referenceName = $CredentialName
+                userName = $Credential.UserName
+                protection = 'dpapi_current_user'
+                protectedValue = [Convert]::ToBase64String($protectedBytes)
+                createdAt = ([DateTimeOffset]::UtcNow.ToString('O'))
+            }
+
+            $directory = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath 'Dispatch'
+            [System.IO.Directory]::CreateDirectory($directory) | Out-Null
+            $path = Join-Path -Path $directory -ChildPath ("pscredential-{0}.handoff" -f ([Guid]::NewGuid().ToString('N')))
+            $json = $file | ConvertTo-Json -Depth 4 -Compress
+            Set-Content -LiteralPath $path -Value $json -Encoding UTF8 -NoNewline
+            Protect-DispatchHandoffFileAcl -Path $path
+            return $path
+        }
+        finally {
+            [Array]::Clear($protectedBytes, 0, $protectedBytes.Length)
+        }
+    }
+    finally {
+        [Array]::Clear($plainTextBytes, 0, $plainTextBytes.Length)
+    }
+}
+
+function Initialize-DispatchProtectedData {
+    [CmdletBinding()]
+    param()
+
+    if ('System.Security.Cryptography.ProtectedData' -as [type]) {
+        return
+    }
+
+    foreach ($assemblyName in @('System.Security.Cryptography.ProtectedData', 'System.Security')) {
+        try {
+            Add-Type -AssemblyName $assemblyName -ErrorAction Stop
+            if ('System.Security.Cryptography.ProtectedData' -as [type]) {
+                return
+            }
+        }
+        catch {
+        }
+    }
+
+    throw "Unable to load DPAPI support for PowerShell PSCredential handoff."
+}
+
+function ConvertFrom-DispatchSecureStringToUtf8Bytes {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [Security.SecureString] $SecureString
+    )
+
+    $pointer = [IntPtr]::Zero
+    try {
+        $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureString)
+        $plainText = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+        if ($null -eq $plainText) {
+            return [byte[]]::new(0)
+        }
+
+        [Text.Encoding]::UTF8.GetBytes($plainText)
+    }
+    finally {
+        if ($pointer -ne [IntPtr]::Zero) {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+        }
+    }
+}
+
+function Protect-DispatchHandoffFileAcl {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $Path
+    )
+
+    try {
+        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+        $administrators = [System.Security.Principal.SecurityIdentifier]::new([System.Security.Principal.WellKnownSidType]::BuiltinAdministratorsSid, $null)
+        $localSystem = [System.Security.Principal.SecurityIdentifier]::new([System.Security.Principal.WellKnownSidType]::LocalSystemSid, $null)
+        $fileInfo = [System.IO.FileInfo]::new($Path)
+        $security = Get-DispatchFileSecurity -FileInfo $fileInfo
+        $security.SetOwner($currentUser)
+        $security.SetAccessRuleProtection($true, $false)
+        $rights = [System.Security.AccessControl.FileSystemRights]::FullControl
+        $allow = [System.Security.AccessControl.AccessControlType]::Allow
+        $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($currentUser, $rights, $allow))
+        $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($administrators, $rights, $allow))
+        $security.AddAccessRule([System.Security.AccessControl.FileSystemAccessRule]::new($localSystem, $rights, $allow))
+        Set-DispatchFileSecurity -FileInfo $fileInfo -Security $security
+    }
+    catch {
+        Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+        throw
+    }
+}
+
+function Get-DispatchFileSecurity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.IO.FileInfo] $FileInfo
+    )
+
+    if ('System.IO.FileSystemAclExtensions' -as [type]) {
+        return [System.IO.FileSystemAclExtensions]::GetAccessControl($FileInfo)
+    }
+
+    foreach ($assemblyName in @('System.IO.FileSystem.AccessControl', 'System.Security.AccessControl')) {
+        try {
+            Add-Type -AssemblyName $assemblyName -ErrorAction Stop
+            if ('System.IO.FileSystemAclExtensions' -as [type]) {
+                return [System.IO.FileSystemAclExtensions]::GetAccessControl($FileInfo)
+            }
+        }
+        catch {
+        }
+    }
+
+    return $FileInfo.GetAccessControl()
+}
+
+function Set-DispatchFileSecurity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [System.IO.FileInfo] $FileInfo,
+
+        [Parameter(Mandatory)]
+        [System.Security.AccessControl.FileSecurity] $Security
+    )
+
+    if ('System.IO.FileSystemAclExtensions' -as [type]) {
+        [System.IO.FileSystemAclExtensions]::SetAccessControl($FileInfo, $Security)
+        return
+    }
+
+    $FileInfo.SetAccessControl($Security)
+}
+
+function Remove-DispatchPSCredentialHandoff {
+    [CmdletBinding()]
+    param(
+        [string] $Path
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($Path)) {
+        Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Export-ModuleMember -Function Get-DispatchVersion, Invoke-DispatchCommand, Invoke-DispatchExecutable, Invoke-DispatchJob, Invoke-DispatchPowerShell, Test-Dispatch
