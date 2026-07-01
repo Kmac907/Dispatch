@@ -1513,6 +1513,11 @@ Non-goals:
 Dependencies:
 - 7.
 
+Current implementation:
+- `packaging/build-module.ps1` builds the self-contained `win-x64` executable, assembles the module package layout, validates the module manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable.
+- `packaging/install.ps1` installs an already assembled module package into a `CurrentUser` or `AllUsers` PowerShell module scope, supports `-ModulePath`, `-Force`, and CI/local-validation `-DestinationRoot`, and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
+- `install-from-source.ps1`, bootstrap compatibility, external cleanup-helper flow, and optional ZIP artifact creation remain planned Roadmap `8` work.
+
 Definition of done:
 - A clean machine with GitHub access, Git, PowerShell, and the .NET SDK can run `irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-from-source.ps1 | iex`, import the module, and run `dispatch --help` plus `Test-Dispatch`.
 - Source installation builds the project and module, validates the installation, changes out of the temporary source directory, invokes an external cleanup helper, and cleans up the temporary source tree plus downloaded installer copy.

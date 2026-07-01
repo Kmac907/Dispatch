@@ -48,7 +48,9 @@
 <h1>Distribution</h1>
 <p>Distribution describes how operators will install Dispatch once the v1 package surfaces are implemented.</p>
 <p>Status: partial Roadmap <code>8</code>.</p>
-<p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, validates the module manifest, imports the assembled module, and verifies <code>Get-DispatchVersion</code> through the bundled executable. <code>install-from-source.ps1</code>, <code>install.ps1</code>, and ZIP packaging are not implemented yet.</p>
+<p>Current support: <code>packaging/build-module.ps1</code> assembles a local PowerShell module folder with a bundled self-contained <code>win-x64</code> <code>dispatch.exe</code> at <code>bin\win-x64\dispatch.exe</code>, validates the module manifest, imports the assembled module, and verifies <code>Get-DispatchVersion</code> through the bundled executable.</p>
+<p><code>packaging/install.ps1</code> installs an already assembled package into a <code>CurrentUser</code> or <code>AllUsers</code> PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and <code>Get-DispatchVersion</code>.</p>
+<p>The source installer and ZIP packaging are not implemented yet.</p>
 <h2>Module Assembly</h2>
 <p>Build the current module package from an existing checkout:</p>
 <pre><code>
@@ -82,11 +84,12 @@ irm https://raw.githubusercontent.com/Kmac907/Dispatch/main/packaging/install-fr
 .\packaging\install-from-source.ps1 -NoCleanup
 </code></pre>
 <h2>Packaged Install</h2>
-<p>Planned v1 local package install from an already assembled package:</p>
+<p>Install an already assembled package:</p>
 <pre><code>
 .\packaging\install.ps1 -Scope CurrentUser
 .\packaging\install.ps1 -Scope AllUsers
 </code></pre>
+<p><code>CurrentUser</code> installs into the current shell family's per-user module path. <code>AllUsers</code> installs into the current shell family's machine module path and requires an elevated shell. Use <code>-ModulePath &lt;path&gt;</code> to install a package outside the default <code>artifacts\module\Dispatch</code> location, <code>-Force</code> to replace the same installed module version, and <code>-DestinationRoot &lt;path&gt;</code> only for CI or local validation where the real PowerShell module paths should not be touched.</p>
 <h2>Optional ZIP</h2>
 <p>An optional release convenience artifact may be produced:</p>
 <pre><code>

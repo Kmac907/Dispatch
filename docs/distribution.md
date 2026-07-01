@@ -4,7 +4,11 @@ Distribution describes how operators will install Dispatch once the v1 package s
 
 Status: partial Roadmap `8`.
 
-Current support: `packaging/build-module.ps1` assembles a local PowerShell module folder with a bundled self-contained `win-x64` `dispatch.exe` at `bin\win-x64\dispatch.exe`, validates the module manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable. `install-from-source.ps1`, `install.ps1`, and ZIP packaging are not implemented yet.
+Current support: `packaging/build-module.ps1` assembles a local PowerShell module folder with a bundled self-contained `win-x64` `dispatch.exe` at `bin\win-x64\dispatch.exe`, validates the module manifest, imports the assembled module, and verifies `Get-DispatchVersion` through the bundled executable.
+
+`packaging/install.ps1` installs an already assembled package into a `CurrentUser` or `AllUsers` PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
+
+The source installer and ZIP packaging are not implemented yet.
 
 ## Module Assembly
 
@@ -52,12 +56,14 @@ Planned developer/troubleshooting mode:
 
 ## Packaged Install
 
-Planned v1 local package install from an already assembled package:
+Install an already assembled package:
 
 ```powershell
 .\packaging\install.ps1 -Scope CurrentUser
 .\packaging\install.ps1 -Scope AllUsers
 ```
+
+`CurrentUser` installs into the current shell family's per-user module path. `AllUsers` installs into the current shell family's machine module path and requires an elevated shell. Use `-ModulePath <path>` to install a package outside the default `artifacts\module\Dispatch` location, `-Force` to replace the same installed module version, and `-DestinationRoot <path>` only for CI or local validation where the real PowerShell module paths should not be touched.
 
 ## Optional ZIP
 

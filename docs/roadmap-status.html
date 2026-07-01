@@ -72,6 +72,7 @@
 <li><code>dispatch doctor --transport auto|psexec|psrp|winrm --output rich|table|json|ndjson|yaml</code> local prerequisite scoping, stable structured output, runtime/context/policy diagnostics, global Dispatch config parseability, host inventory schema availability, credential provider availability, run-history layout checks, and PsExec local policy/EULA diagnostics.</li>
 <li>PowerShell module import with <code>Test-Dispatch</code>, <code>Get-DispatchVersion</code>, <code>Invoke-DispatchPowerShell</code>, <code>Invoke-DispatchCommand</code>, <code>Invoke-DispatchExecutable</code>, and <code>Invoke-DispatchJob</code> wrappers over the canonical CLI, including <code>-CredentialName</code> reference selection and protected <code>PSCredential</code> handoff for <code>provider: pscredential</code>.</li>
 <li><code>packaging/build-module.ps1</code> assembles a local module folder with bundled self-contained <code>bin\win-x64\dispatch.exe</code> and validates module import/version resolution through that bundled executable.</li>
+<li><code>packaging/install.ps1</code> installs an already assembled module package into <code>CurrentUser</code> or <code>AllUsers</code> PowerShell module scope and validates the installed manifest, bundled executable, module import, exported commands, and version resolution.</li>
 <li><code>dispatch init config|hosts|job|all</code> starter YAML scaffolding.</li>
 <li>Logs commands over local run history.</li>
 <li>Credential references with prompt, DPAPI file, Windows Credential Manager, and Azure Key Vault behavior for PSRP and raw WinRM.</li>
@@ -89,10 +90,11 @@
 <li>Credential handoff is not complete for every entry point; PsExec explicit password handoff remains intentionally unsupported under the current no-plaintext PsExec boundary.</li>
 <li>Script secret handoff is separate from endpoint <code>--credential</code>. The approved initial boundary is current <code>dispatch run ps ... --secret name=reference</code> plan/dry-run validation and redacted rendering of script-parameter bindings; real execution is blocked until the later safe provider-resolution and transport-parameter-binding slice.</li>
 <li>Raw <code>stdout.txt</code>, raw <code>stderr.txt</code>, and copied artifact content are script-authored output. Dispatch records and points to them, but scripts must avoid printing or writing secrets there unless a later roadmap item explicitly adds content rewriting for script-owned output.</li>
+<li>Roadmap <code>8</code> packaging is partial: local assembled-package install exists, while GitHub <code>irm</code> source install, bootstrap compatibility, cleanup-helper flow, and optional ZIP artifact creation remain planned.</li>
 </ul>
 <h2>Planned Next</h2>
 <ul>
-<li>Implement source install and local packaging.</li>
+<li>Finish source install and local packaging.</li>
 <li>Implement script secret handoff in staged slices: plan/dry-run validation first, then safe transport-specific parameter binding.</li>
 </ul>
 <h2>Deferred Or Out Of Scope For V1</h2>

@@ -1,16 +1,17 @@
 # Installation
 
-Dispatch can currently be built and run from the repository source. The v1 source installer and package installer are planned under roadmap item `8` and are not implemented yet.
+Dispatch can currently be built and run from the repository source. Roadmap item `8` now includes local package installation for an already assembled module package; the GitHub `irm` source installer is still planned.
 
-Roadmap `7` includes current local module assembly:
+Current local module assembly and install:
 
 ```powershell
 .\packaging\build-module.ps1
-Import-Module .\artifacts\module\Dispatch\Dispatch.psd1 -Force
+.\packaging\install.ps1 -Scope CurrentUser -Force
+Import-Module Dispatch -Force
 Get-DispatchVersion
 ```
 
-This produces an assembled module under `artifacts\module\Dispatch` with the bundled executable at `bin\win-x64\dispatch.exe`. It does not install the module into a PowerShell module path; Roadmap `8` owns installation.
+This produces an assembled module under `artifacts\module\Dispatch` with the bundled executable at `bin\win-x64\dispatch.exe`, copies it into a versioned `Dispatch\<version>` folder under the selected PowerShell module root, and validates the installed manifest, bundled executable, module import, exported commands, and `Get-DispatchVersion`.
 
 ## Prerequisites
 
@@ -19,7 +20,7 @@ This produces an assembled module under `artifacts\module\Dispatch` with the bun
 - .NET SDK matching `global.json`.
 - Git available on `PATH`.
 - Network access to `https://github.com/Kmac907/Dispatch`.
-- Administrator shell for future all-users installation.
+- Administrator shell for `-Scope AllUsers` installation.
 
 ## Current Source Workflow
 
@@ -60,6 +61,22 @@ The installer is responsible for:
 
 Use script parameters instead of editing the command inline once the installer exposes install scope and cleanup options.
 
+## Current Package Install
+
+After `.\packaging\build-module.ps1` assembles the package, install it locally:
+
+```powershell
+.\packaging\install.ps1 -Scope CurrentUser
+```
+
+Use an elevated shell for machine-wide install:
+
+```powershell
+.\packaging\install.ps1 -Scope AllUsers
+```
+
+Use `-Force` to replace the same installed module version. Use `-ModulePath <path>` when installing an assembled package outside the default `artifacts\module\Dispatch` folder. `-DestinationRoot <path>` is available for CI or local validation when the real PowerShell module paths should not be touched.
+
 Security notes:
 
 - Review the installer source before running an `irm | iex` command in controlled environments.
@@ -91,7 +108,7 @@ Expected result:
 
 ## Upgrade
 
-After the source installer is implemented, run the same source-install command again. The installer should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.
+For the current local package installer, run `.\packaging\build-module.ps1` and then `.\packaging\install.ps1 -Scope CurrentUser -Force` again. After the source installer is implemented, run the same source-install command again; it should rebuild from the current GitHub source, replace the installed module files, validate the new executable, and leave the previous installation untouched only if validation fails.
 
 ## Uninstall
 
