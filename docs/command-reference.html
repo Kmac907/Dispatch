@@ -114,6 +114,7 @@ dispatch run exe &lt;path&gt; --target &lt;selector&gt; [--transport psrp|winrm]
 <li><code>--transport</code></li>
 <li><code>--credential</code></li>
 <li><code>--secret name=reference</code> for script secret handoff on <code>run ps</code></li>
+<li><code>--artifact-path &lt;path&gt;</code> to collect a relative folder under the remote Dispatch run folder or a drive-qualified absolute folder such as <code>C:\ProgramData\EA\Logs\Fix</code></li>
 <li><code>--expected-exit-code</code></li>
 <li><code>--throttle</code> / concurrency option where implemented</li>
 <li><code>--plan</code></li>
@@ -128,8 +129,10 @@ dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport ps
 dispatch run cmd whoami --target PC001 --transport winrm --output json
 dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin --output json
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path logs,artifacts,C:\ProgramData\EA\Logs\Fix
 </code></pre>
 <p>Use <code>--plan</code> to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.</p>
+<p>Use <code>--artifact-path &lt;path&gt;</code> when scripts write files that Dispatch should copy back after execution. Relative values such as <code>logs</code> or <code>reports\daily</code> are resolved under the remote Dispatch run folder, for example <code>C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\logs</code>. Drive-qualified absolute values such as <code>C:\ProgramData\EA\Logs\Fix</code> are collected from that exact endpoint path. When an absolute path is copied back, Dispatch stores it under the target local output root as <code>external\&lt;drive&gt;\&lt;path&gt;</code>, for example <code>Targets\PC001\external\C\ProgramData\EA\Logs\Fix\log.txt</code>. UNC paths, drive roots, globs, and <code>.</code> / <code>..</code> traversal are rejected.</p>
 <p>Use <code>--system</code> only with <code>--transport psexec</code> when the selected config explicitly allows it with <code>dispatch.allow_run_as_system: true</code>. LocalSystem requests without that policy approval, or LocalSystem requests for WinRM/PSRP, fail before planning or endpoint work and return policy exit code <code>7</code>. <code>--run-as-system</code> remains accepted as a legacy/internal alias, but new automation should use <code>--system</code>.</p>
 <p>Script secret handoff for <code>run ps</code> uses <code>--secret name=reference</code>. It is separate from <code>--credential</code>: credentials authenticate the transport, while secrets are script inputs. <code>name</code> becomes the script parameter name, so <code>--secret packageSas=prod-package-sas</code> renders as <code>-packageSas [redacted]</code> and expects the script to declare a matching parameter such as <code>param([string]$packageSas)</code>.</p>
 <p>Current support validates the option shape, rejects duplicate names and plaintext-looking values, and renders only the redacted parameter binding in plan/dry-run output without resolving <code>reference</code>. Roadmap 10 owns real execution: Dispatch must resolve <code>reference</code> from the configured secret provider on the admin side and bind the resolved value to the script parameter through the selected transport. Secret values must stay out of ordinary command lines, console output, logs, results, traces, artifacts, and structured output.</p>

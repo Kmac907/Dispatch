@@ -6,8 +6,6 @@ internal sealed class DispatchArtifactCollector(
     IEndpointFileSystem endpointFileSystem,
     IEnumerable<ITransportArtifactCollector> transportArtifactCollectors) : IDispatchArtifactCollector
 {
-    private static readonly string[] DefaultArtifactFolders = ["logs", "artifacts"];
-
     public async Task<ArtifactCollectionResult> CollectAsync(
         ExecutionPlan plan,
         TargetExecution target,
@@ -44,12 +42,11 @@ internal sealed class DispatchArtifactCollector(
 
         try
         {
-            foreach (var folder in GetArtifactFolders(plan.Job.ArtifactPolicy))
+            foreach (var artifactPath in ArtifactCollectionPathResolver.ResolveAll(plan.Job.ArtifactPolicy, plan.RemoteRunRoot))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var remoteFolder = CombineWindowsPath(plan.RemoteRunRoot, folder);
-                var adminShareFolder = AdminSharePath.FromRemoteWindowsPath(target.Target.Name, remoteFolder);
+                var adminShareFolder = AdminSharePath.FromRemoteWindowsPath(target.Target.Name, artifactPath.RemoteFolder);
                 if (!adminShareFolder.IsValid)
                 {
                     return new ArtifactCollectionResult("failed", copiedArtifacts, adminShareFolder.Error!.Message);
@@ -60,7 +57,7 @@ internal sealed class DispatchArtifactCollector(
                     continue;
                 }
 
-                var localFolder = Path.Combine(target.PlannedLocalTargetRoot, SanitizeRelativePath(folder));
+                var localFolder = Path.Combine(target.PlannedLocalTargetRoot, artifactPath.LocalRelativeRoot);
                 var copiedFiles = await endpointFileSystem
                     .CopyDirectoryAsync(adminShareFolder.Path!, localFolder, overwrite: true, cancellationToken)
                     .ConfigureAwait(false);
@@ -78,26 +75,4 @@ internal sealed class DispatchArtifactCollector(
             copiedArtifacts);
     }
 
-    internal static IReadOnlyList<string> GetArtifactFolders(ArtifactPolicy policy) =>
-        policy.Paths is { Count: > 0 }
-            ? policy.Paths
-            : DefaultArtifactFolders;
-
-    internal static string CombineWindowsPath(params string[] parts)
-    {
-        var first = parts[0].TrimEnd('\\');
-        var rest = parts
-            .Skip(1)
-            .Where(static part => !string.IsNullOrWhiteSpace(part))
-            .Select(static part => part.Trim('\\'));
-
-        return string.Join('\\', new[] { first }.Concat(rest));
-    }
-
-    internal static string SanitizeRelativePath(string value)
-    {
-        var invalidPathChars = Path.GetInvalidPathChars();
-        var sanitized = string.Concat(value.Select(character => invalidPathChars.Contains(character) ? '_' : character));
-        return sanitized.Trim('\\', '/');
-    }
 }

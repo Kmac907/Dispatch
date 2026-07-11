@@ -1,4 +1,5 @@
 using Dispatch.Core.Models;
+using Dispatch.Core.Execution;
 
 namespace Dispatch.Core.Validation;
 
@@ -164,11 +165,13 @@ public static class DispatchRequestValidator
                 continue;
             }
 
-            if (artifactPath.StartsWith(@"\\", StringComparison.Ordinal)
-                || Path.IsPathRooted(artifactPath)
-                || artifactPath.Length >= 2 && artifactPath[1] == ':')
+            var normalized = ArtifactCollectionPathResolver.NormalizeWindowsPath(artifactPath);
+            var isDriveQualifiedAbsolute = ArtifactCollectionPathResolver.IsDriveQualifiedAbsoluteWindowsPath(normalized);
+            if (normalized.StartsWith(@"\\", StringComparison.Ordinal)
+                || normalized.StartsWith('\\')
+                || normalized.Length >= 2 && normalized[1] == ':' && !isDriveQualifiedAbsolute)
             {
-                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must be relative to the remote Dispatch run folder."));
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must be relative to the remote Dispatch run folder or a drive-qualified absolute remote path."));
                 continue;
             }
 
@@ -178,16 +181,29 @@ public static class DispatchRequestValidator
                 continue;
             }
 
-            if (artifactPath.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
+            var pathToInspect = isDriveQualifiedAbsolute ? normalized[3..] : normalized;
+            if (isDriveQualifiedAbsolute && string.IsNullOrWhiteSpace(pathToInspect))
+            {
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must name a folder below the drive root."));
+                continue;
+            }
+
+            if (pathToInspect.IndexOfAny(Path.GetInvalidPathChars()) >= 0)
             {
                 errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' contains invalid path characters."));
                 continue;
             }
 
-            var segments = artifactPath.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
+            var segments = pathToInspect.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries);
             if (segments.Length == 0 || segments.Any(static segment => segment is "." or ".."))
             {
                 errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' must not contain current-directory or parent-directory segments."));
+                continue;
+            }
+
+            if (segments.Any(static segment => segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+            {
+                errors.Add(new("InvalidArtifactPath", $"Artifact path '{artifactPath}' contains invalid path characters."));
             }
         }
     }

@@ -253,6 +253,24 @@ public sealed class RequestPlanningTests
     }
 
     [Fact]
+    public async Task PlannerAllowsDriveQualifiedAbsoluteArtifactPaths()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var provider = BuildProvider();
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: true,
+            artifactPaths: [@"C:\ProgramData\EA\Logs\Fix"]);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+
+        Assert.Equal([@"C:\ProgramData\EA\Logs\Fix"], plan.Job.ArtifactPolicy.Paths);
+    }
+
+    [Fact]
     public async Task PlannerRejectsRelativeRemoteRunRoot()
     {
         using var script = TemporaryScript.Create("Fix.ps1");
@@ -272,10 +290,13 @@ public sealed class RequestPlanningTests
     }
 
     [Theory]
-    [InlineData(@"C:\Temp\logs")]
+    [InlineData(@"C:\")]
+    [InlineData(@"C:Temp\logs")]
+    [InlineData(@"\Temp\logs")]
     [InlineData(@"\\server\share")]
     [InlineData(@"..\logs")]
     [InlineData(@"logs\..\secret")]
+    [InlineData(@"C:\ProgramData\..\secret")]
     [InlineData(@"logs\*.txt")]
     public async Task PlannerRejectsUnsafeArtifactPaths(string artifactPath)
     {

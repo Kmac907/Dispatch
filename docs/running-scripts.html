@@ -111,17 +111,28 @@ C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\artifacts\
 <li>Avoid writing secrets to stdout, stderr, logs, or artifacts.</li>
 </ul>
 <p>If the script only writes to stdout/stderr and creates no artifact folders, the run can still succeed. Artifact status is usually <code>not-found</code>.</p>
+<p>If an existing script already writes logs somewhere else, use <code>--artifact-path</code> to collect that folder without changing the script:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path C:\ProgramData\EA\Logs\Fix
+</code></pre>
+<p>That copies the endpoint folder back under the local target result folder as:</p>
+<pre><code>
+Targets\&lt;Target&gt;\external\C\ProgramData\EA\Logs\Fix\
+</code></pre>
+<p>To collect the default Dispatch folders and an existing organization log folder in the same run, include all paths:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path logs,artifacts,C:\ProgramData\EA\Logs\Fix
+</code></pre>
 <h2>Safe Example Script</h2>
 <pre><code>
 param([string]$Message = &quot;dispatch-ok&quot;)
 
 Write-Output $Message
 
-$runRoot = $env:DISPATCH_RUN_ROOT
-if ($runRoot) {
-  New-Item -ItemType Directory -Force -Path (Join-Path $runRoot &quot;logs&quot;) | Out-Null
-  &quot;Completed at $(Get-Date -Format o)&quot; | Set-Content -Path (Join-Path $runRoot &quot;logs\script.log&quot;)
-}
+$runRoot = Split-Path -Parent $PSScriptRoot
+$logDir = Join-Path $runRoot &quot;logs&quot;
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+&quot;Completed at $(Get-Date -Format o)&quot; | Set-Content -Path (Join-Path $logDir &quot;script.log&quot;)
 </code></pre>
   </article>
 </main>

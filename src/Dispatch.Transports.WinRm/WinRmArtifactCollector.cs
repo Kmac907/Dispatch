@@ -32,17 +32,16 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
         }
 
         var copiedArtifacts = new List<string>();
-        var artifactFolders = GetArtifactFolders(plan.Job.ArtifactPolicy);
+        var artifactFolders = ArtifactCollectionPathResolver.ResolveAll(plan.Job.ArtifactPolicy, plan.RemoteRunRoot);
 
-        foreach (var folder in artifactFolders)
+        foreach (var artifactPath in artifactFolders)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var remoteFolder = CombineWindowsPath(plan.RemoteRunRoot, folder);
             var download = await DownloadFolderArchiveAsync(
                 plan,
                 target,
-                remoteFolder,
+                artifactPath.RemoteFolder,
                 cancellationToken,
                 progressReporter).ConfigureAwait(false);
 
@@ -59,12 +58,12 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
                 continue;
             }
 
-            var localFolder = Path.Combine(target.PlannedLocalTargetRoot, SanitizeRelativePath(folder));
+            var localFolder = Path.Combine(target.PlannedLocalTargetRoot, artifactPath.LocalRelativeRoot);
             Directory.CreateDirectory(localFolder);
 
             try
             {
-                copiedArtifacts.AddRange(ExtractArtifacts(download.ZipBytes, localFolder, folder));
+                copiedArtifacts.AddRange(ExtractArtifacts(download.ZipBytes, localFolder, artifactPath.LocalRelativeRoot));
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or NotSupportedException or ArgumentException)
             {
@@ -201,13 +200,16 @@ public sealed class WinRmArtifactCollector(IWinRmShellClient shellClient) : ITra
         using var archive = new ZipArchive(archiveStream, ZipArchiveMode.Read, leaveOpen: false);
         var copiedArtifacts = new List<string>();
         var localFolderFullPath = Path.GetFullPath(localFolder);
+        var localFolderBoundary = localFolderFullPath.EndsWith(Path.DirectorySeparatorChar)
+            ? localFolderFullPath
+            : localFolderFullPath + Path.DirectorySeparatorChar;
         var normalizedRelativeRoot = SanitizeRelativePath(relativeRoot).Replace('/', '\\');
 
         foreach (var entry in archive.Entries.Where(static entry => !string.IsNullOrEmpty(entry.Name)))
         {
             var normalizedEntryPath = entry.FullName.Replace('/', '\\');
             var destinationPath = Path.GetFullPath(Path.Combine(localFolder, normalizedEntryPath));
-            if (!destinationPath.StartsWith(localFolderFullPath, StringComparison.OrdinalIgnoreCase))
+            if (!destinationPath.StartsWith(localFolderBoundary, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidDataException($"Artifact entry '{entry.FullName}' escapes the expected destination root.");
             }
@@ -275,11 +277,6 @@ finally {
         public static ArtifactDownloadResult Failed(string message) => new(false, false, [], message);
     }
 
-    private static IReadOnlyList<string> GetArtifactFolders(ArtifactPolicy policy) =>
-        policy.Paths is { Count: > 0 }
-            ? policy.Paths
-            : ["logs", "artifacts"];
-
     private static DispatchResolvedCredential? ResolveTargetCredential(ExecutionPlan plan, TargetExecution target)
     {
         var reference = target.Target.CredentialReference;
@@ -290,21 +287,8 @@ finally {
                 : null;
     }
 
-    private static string CombineWindowsPath(params string[] parts)
-    {
-        var first = parts[0].TrimEnd('\\');
-        var rest = parts
-            .Skip(1)
-            .Where(static part => !string.IsNullOrWhiteSpace(part))
-            .Select(static part => part.Trim('\\'));
-
-        return string.Join('\\', new[] { first }.Concat(rest));
-    }
-
     private static string SanitizeRelativePath(string value)
     {
-        var invalidPathChars = Path.GetInvalidPathChars();
-        var sanitized = string.Concat(value.Select(character => invalidPathChars.Contains(character) ? '_' : character));
-        return sanitized.Trim('\\', '/');
+        return ArtifactCollectionPathResolver.SanitizeRelativePath(value);
     }
 }

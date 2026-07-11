@@ -1040,7 +1040,7 @@ public sealed class DispatchCliApplicationTests
                     "--throttle",
                     "2",
                     "--artifact-path",
-                    "logs,artifacts",
+                    @"logs,artifacts,C:\ProgramData\EA\Logs\Fix",
                     "--",
                     "--Name",
                     "Dispatch"
@@ -1061,7 +1061,7 @@ public sealed class DispatchCliApplicationTests
             Assert.Equal(TransportKind.PsExec, request.Transport);
             Assert.Equal(2, request.Throttle);
             Assert.Equal([0, 3010], request.ExpectedExitCodes);
-            Assert.Equal(["logs", "artifacts"], request.ArtifactPaths);
+            Assert.Equal(["logs", "artifacts", @"C:\ProgramData\EA\Logs\Fix"], request.ArtifactPaths);
             Assert.Equal(["PC001", "PC002"], request.Targets.Select(static target => target.Name));
             var payload = Assert.IsType<ScriptPayload>(request.Payload);
             Assert.Equal(scriptPath, payload.ScriptPath);

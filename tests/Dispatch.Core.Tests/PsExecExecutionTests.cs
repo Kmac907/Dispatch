@@ -478,6 +478,44 @@ public sealed class PsExecExecutionTests
     }
 
     [Fact]
+    public async Task ExecutorCopiesAbsoluteArtifactFoldersUnderExternalLocalRoot()
+    {
+        using var script = TemporaryScript.Create("Fix.ps1");
+        using var outputRoot = TemporaryDirectory.Create();
+        var runner = new RecordingPsExecProcessRunner(0);
+        var endpointFileSystem = new RecordingEndpointFileSystem();
+        endpointFileSystem.AddRemoteDirectory(
+            @"\\PC001\C$\ProgramData\EA\Logs\Fix",
+            ["log.txt"]);
+        using var provider = BuildProvider(outputRoot.Path, runner, endpointFileSystem: endpointFileSystem);
+        var planner = provider.GetRequiredService<IDispatchPlanner>();
+        var executor = provider.GetRequiredService<IDispatchExecutor>();
+        var request = new DispatchRequest(
+            payload: new ScriptPayload(script.Path, []),
+            targets: [new TargetSpec("PC001")],
+            transport: TransportKind.PsExec,
+            dryRun: false,
+            localRunRoot: outputRoot.Path,
+            artifactPaths: [@"C:\ProgramData\EA\Logs\Fix"]);
+
+        var plan = await planner.CreatePlanAsync(request, CancellationToken.None);
+        var result = await executor.ExecuteAsync(plan, CancellationToken.None);
+
+        var target = Assert.Single(result.Targets);
+        Assert.Equal("collected", target.ArtifactCollectionStatus);
+        Assert.Equal([@"external\C\ProgramData\EA\Logs\Fix\log.txt"], target.Artifacts);
+        Assert.True(File.Exists(Path.Combine(
+            plan.Targets[0].PlannedLocalTargetRoot!,
+            "external",
+            "C",
+            "ProgramData",
+            "EA",
+            "Logs",
+            "Fix",
+            "log.txt")));
+    }
+
+    [Fact]
     public async Task ExecutorTreatsMissingArtifactFoldersAsNonFailure()
     {
         using var script = TemporaryScript.Create("Fix.ps1");

@@ -195,7 +195,7 @@ C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\
 <li><code>logs\</code></li>
 <li><code>artifacts\</code></li>
 </ul>
-<p>or under declared artifact paths for the run.</p>
+<p>or under declared artifact paths for the run. Declared artifact paths may be relative to the remote Dispatch run folder or drive-qualified absolute endpoint folders such as <code>C:\ProgramData\EA\Logs\Fix</code>. Absolute endpoint folders are copied back under <code>Targets\&lt;Target&gt;\external\&lt;drive&gt;\...</code> so they cannot escape the local run directory.</p>
 <h2>Stdout/stderr vs artifacts</h2>
 <p>These are different concerns:</p>
 <ul>
@@ -213,6 +213,10 @@ C:\ProgramData\Dispatch\Runs\&lt;RunId&gt;\
 <li><code>logs</code></li>
 <li><code>artifacts</code></li>
 </ul>
+<p>When <code>--artifact-path</code> is supplied, it replaces the defaults. Include <code>logs,artifacts</code> explicitly if you want the defaults plus additional paths, for example:</p>
+<pre><code>
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path logs,artifacts,C:\ProgramData\EA\Logs\Fix
+</code></pre>
 <p>Artifact collection status values:</p>
 <ul>
 <li><code>collected</code></li>

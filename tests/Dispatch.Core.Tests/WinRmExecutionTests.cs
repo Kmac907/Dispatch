@@ -1086,6 +1086,61 @@ public sealed class WinRmExecutionTests
     }
 
     [Fact]
+    public async Task WinRmArtifactCollectorUsesAbsoluteFoldersAndStoresUnderExternalLocalRoot()
+    {
+        var zipBytes = Convert.FromBase64String(CreateZipBase64(("log.txt", "ok")));
+        var shellClient = new RecordingShellClient(
+            request =>
+            {
+                var encodedCommand = Assert.Single(request.Arguments.Where(static argument => !argument.StartsWith("-", StringComparison.Ordinal)));
+                var decodedCommand = Encoding.Unicode.GetString(Convert.FromBase64String(encodedCommand));
+                Assert.Contains(@"C:\ProgramData\EA\Logs\Fix", decodedCommand);
+            },
+            WinRmShellCommandResult.SucceededResult(stdout: Convert.ToBase64String(zipBytes)));
+        var collector = new WinRmArtifactCollector(shellClient);
+        var targetRoot = Path.Combine(Path.GetTempPath(), $"dispatch-artifacts-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(targetRoot);
+        var target = new TargetExecution(
+            "run-001",
+            new TargetSpec("PC001"),
+            TargetExecutionState.Pending,
+            targetRoot,
+            null,
+            null);
+        var plan = new ExecutionPlan(
+            RunId: "run-001",
+            CreatedAt: DateTimeOffset.Parse("2026-06-13T20:00:00Z"),
+            Job: new DispatchJob(
+                "run-001",
+                [new TargetSpec("PC001")],
+                new ScriptPayload(@"C:\Scripts\Fix.ps1", []),
+                TransportKind.WinRm,
+                new ExecutionContextOptions(),
+                new ScriptTransferPolicy(@"C:\ProgramData\Dispatch\Runs\run-001", true),
+                new TimeoutPolicy(),
+                new RetryPolicy(),
+                [0],
+                new ArtifactPolicy([@"C:\ProgramData\EA\Logs\Fix"]),
+                new ResultPolicy(targetRoot)),
+            Targets: [target],
+            DryRun: false,
+            RemoteRunRoot: @"C:\ProgramData\Dispatch\Runs\run-001");
+
+        try
+        {
+            var result = await collector.CollectAsync(plan, target, CancellationToken.None);
+
+            Assert.Equal("collected", result.Status);
+            Assert.Equal([Path.Combine("external", "C", "ProgramData", "EA", "Logs", "Fix", "log.txt")], result.Artifacts);
+            Assert.True(File.Exists(Path.Combine(targetRoot, "external", "C", "ProgramData", "EA", "Logs", "Fix", "log.txt")));
+        }
+        finally
+        {
+            Directory.Delete(targetRoot, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task WinRmArtifactCollectorReportsMeasuredDownloadProgressWhenArchiveSizeIsKnown()
     {
         var remoteFolder = @"C:\ProgramData\Dispatch\Runs\run-001\logs";

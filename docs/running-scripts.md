@@ -101,6 +101,24 @@ Recommended:
 
 If the script only writes to stdout/stderr and creates no artifact folders, the run can still succeed. Artifact status is usually `not-found`.
 
+If an existing script already writes logs somewhere else, use `--artifact-path` to collect that folder without changing the script:
+
+```powershell
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path C:\ProgramData\EA\Logs\Fix
+```
+
+That copies the endpoint folder back under the local target result folder as:
+
+```text
+Targets\<Target>\external\C\ProgramData\EA\Logs\Fix\
+```
+
+To collect the default Dispatch folders and an existing organization log folder in the same run, include all paths:
+
+```powershell
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path logs,artifacts,C:\ProgramData\EA\Logs\Fix
+```
+
 ## Safe Example Script
 
 ```powershell
@@ -108,9 +126,8 @@ param([string]$Message = "dispatch-ok")
 
 Write-Output $Message
 
-$runRoot = $env:DISPATCH_RUN_ROOT
-if ($runRoot) {
-  New-Item -ItemType Directory -Force -Path (Join-Path $runRoot "logs") | Out-Null
-  "Completed at $(Get-Date -Format o)" | Set-Content -Path (Join-Path $runRoot "logs\script.log")
-}
+$runRoot = Split-Path -Parent $PSScriptRoot
+$logDir = Join-Path $runRoot "logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+"Completed at $(Get-Date -Format o)" | Set-Content -Path (Join-Path $logDir "script.log")
 ```

@@ -153,7 +153,7 @@ Scripts may write retrievable files under:
 - `logs\`
 - `artifacts\`
 
-or under declared artifact paths for the run.
+or under declared artifact paths for the run. Declared artifact paths may be relative to the remote Dispatch run folder or drive-qualified absolute endpoint folders such as `C:\ProgramData\EA\Logs\Fix`. Absolute endpoint folders are copied back under `Targets\<Target>\external\<drive>\...` so they cannot escape the local run directory.
 
 ## Stdout/stderr vs artifacts
 
@@ -172,6 +172,12 @@ Default artifact folders:
 
 - `logs`
 - `artifacts`
+
+When `--artifact-path` is supplied, it replaces the defaults. Include `logs,artifacts` explicitly if you want the defaults plus additional paths, for example:
+
+```powershell
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path logs,artifacts,C:\ProgramData\EA\Logs\Fix
+```
 
 Artifact collection status values:
 

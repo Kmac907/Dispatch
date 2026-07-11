@@ -418,6 +418,26 @@ public sealed class PsrpExecutionTests
     }
 
     [Fact]
+    public async Task PsrpArtifactCollectorUsesAbsoluteFoldersAndStoresUnderExternalLocalRoot()
+    {
+        using var targetRoot = TemporaryDirectory.Create();
+        var client = new RecordingArtifactClient(request =>
+            request.RemoteFolder.Equals(@"C:\ProgramData\EA\Logs\Fix", StringComparison.OrdinalIgnoreCase)
+                ? PsrpArtifactDownloadResult.Success(Convert.FromBase64String(CreateZipBase64(("log.txt", "ok"))))
+                : PsrpArtifactDownloadResult.Missing());
+        var collector = new PsrpArtifactCollector(client);
+        var target = CreateArtifactTargetExecution(targetRoot.Path);
+        var plan = CreateArtifactPlan(targetRoot.Path, target, new ArtifactPolicy([@"C:\ProgramData\EA\Logs\Fix"]));
+
+        var result = await collector.CollectAsync(plan, target, CancellationToken.None);
+
+        Assert.Equal("collected", result.Status);
+        Assert.Equal([Path.Combine("external", "C", "ProgramData", "EA", "Logs", "Fix", "log.txt")], result.Artifacts);
+        Assert.Equal([@"C:\ProgramData\EA\Logs\Fix"], client.Requests.Select(static request => request.RemoteFolder));
+        Assert.True(File.Exists(Path.Combine(targetRoot.Path, "external", "C", "ProgramData", "EA", "Logs", "Fix", "log.txt")));
+    }
+
+    [Fact]
     public async Task PsrpArtifactCollectorUsesDeclaredFoldersAndReturnsNotFound()
     {
         using var targetRoot = TemporaryDirectory.Create();

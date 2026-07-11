@@ -91,6 +91,7 @@ Common options:
 - `--transport`
 - `--credential`
 - `--secret name=reference` for script secret handoff on `run ps`
+- `--artifact-path <path>` to collect a relative folder under the remote Dispatch run folder or a drive-qualified absolute folder such as `C:\ProgramData\EA\Logs\Fix`
 - `--expected-exit-code`
 - `--throttle` / concurrency option where implemented
 - `--plan`
@@ -106,9 +107,12 @@ dispatch run ps .\Fix.ps1 --inventory .\hosts.yml --target kiosks --transport ps
 dispatch run cmd whoami --target PC001 --transport winrm --output json
 dispatch run cmd whoami --target PC001 --transport winrm --credential prod-admin --output json
 dispatch run ps .\Fix.ps1 --target PC001 --plan --output json
+dispatch run ps .\Fix.ps1 --target PC001 --artifact-path logs,artifacts,C:\ProgramData\EA\Logs\Fix
 ```
 
 Use `--plan` to validate inputs and inspect the selected targets, payload, transport, credential reference, and run paths before endpoint work starts.
+
+Use `--artifact-path <path>` when scripts write files that Dispatch should copy back after execution. Relative values such as `logs` or `reports\daily` are resolved under the remote Dispatch run folder, for example `C:\ProgramData\Dispatch\Runs\<RunId>\logs`. Drive-qualified absolute values such as `C:\ProgramData\EA\Logs\Fix` are collected from that exact endpoint path. When an absolute path is copied back, Dispatch stores it under the target local output root as `external\<drive>\<path>`, for example `Targets\PC001\external\C\ProgramData\EA\Logs\Fix\log.txt`. UNC paths, drive roots, globs, and `.` / `..` traversal are rejected.
 
 Use `--system` only with `--transport psexec` when the selected config explicitly allows it with `dispatch.allow_run_as_system: true`. LocalSystem requests without that policy approval, or LocalSystem requests for WinRM/PSRP, fail before planning or endpoint work and return policy exit code `7`. `--run-as-system` remains accepted as a legacy/internal alias, but new automation should use `--system`.
 
